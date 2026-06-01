@@ -8,6 +8,7 @@ import {
   createUserWithEmailAndPassword,
   deleteUser,
   GoogleAuthProvider,
+  linkWithPopup,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -479,6 +480,9 @@ export default function App() {
   const currentProfile = user ? profiles[user.uid] : null;
   const isCurrentUserAdmin =
     currentProfile?.isAdmin || isAdminEmail(user?.email || "");
+  const hasGoogleProvider = user?.providerData?.some(
+    (provider) => provider.providerId === "google.com"
+  );
   const muteLabel = getMuteLabel(currentProfile);
   const encryptedProfiles = useMemo(
     () => Object.values(profiles).filter((profile) => profile.publicKey),
@@ -748,6 +752,27 @@ export default function App() {
       setPassword("");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
+    }
+  }
+
+  async function linkGoogleAccount() {
+    if (!user) {
+      return;
+    }
+
+    setIsSavingSettings(true);
+    setSettingsMessage("");
+
+    try {
+      const credential = await linkWithPopup(user, googleProvider);
+      await saveUserProfile(credential.user);
+      await credential.user.reload();
+      setUser(auth.currentUser);
+      setSettingsMessage("Google account connected.");
+    } catch (firebaseError) {
+      setSettingsMessage(getAuthErrorMessage(firebaseError));
+    } finally {
+      setIsSavingSettings(false);
     }
   }
 
@@ -1396,6 +1421,31 @@ export default function App() {
                   {settingsMessage}
                 </div>
               ) : null}
+
+              {!hasGoogleProvider ? (
+                <section className="admin-settings">
+                  <div>
+                    <h3>Google account</h3>
+                    <p>Connect Google as another way to sign in.</p>
+                  </div>
+                  <button
+                    className="google-button"
+                    disabled={isSavingSettings}
+                    onClick={linkGoogleAccount}
+                    type="button"
+                  >
+                    <Chrome size={18} />
+                    <span>Connect Google</span>
+                  </button>
+                </section>
+              ) : (
+                <section className="admin-settings">
+                  <div>
+                    <h3>Google account</h3>
+                    <p>Google sign-in is connected.</p>
+                  </div>
+                </section>
+              )}
 
               {isCurrentUserAdmin ? (
                 <section className="admin-settings">
