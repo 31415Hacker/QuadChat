@@ -13,11 +13,14 @@ import {
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   limit,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp
+  serverTimestamp,
+  setDoc
 } from "firebase/firestore";
 import {
   Chrome,
@@ -34,6 +37,7 @@ import {
 import { auth, db } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
+const usersRef = collection(db, "users");
 const authMode = import.meta.env.VITE_AUTH_MODE || "production";
 const googleProvider = new GoogleAuthProvider();
 
@@ -84,6 +88,31 @@ function getInitials(name) {
     .join("") || "?";
 }
 
+function getProfileName(profile, fallback = "Anonymous") {
+  return profile?.displayName?.trim() || profile?.email || fallback;
+}
+
+async function saveUserProfile(firebaseUser, displayNameOverride) {
+  if (!firebaseUser) {
+    return;
+  }
+
+  const displayName =
+    displayNameOverride || firebaseUser.displayName || firebaseUser.email || "User";
+
+  await setDoc(
+    doc(db, "users", firebaseUser.uid),
+    {
+      id: firebaseUser.uid,
+      displayName,
+      email: firebaseUser.email || "",
+      photoURL: firebaseUser.photoURL || "",
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -93,6 +122,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [profiles, setProfiles] = useState({});
   const [isSending, setIsSending] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -103,15 +133,23 @@ export default function App() {
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
 
+  const currentProfile = user ? profiles[user.uid] : null;
+
   const activeName = useMemo(
-    () => user?.displayName?.trim() || user?.email || "",
-    [user]
+    () => getProfileName(currentProfile, user?.displayName || user?.email || ""),
+    [currentProfile, user]
   );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setIsAuthReady(true);
+
+      if (firebaseUser) {
+        saveUserProfile(firebaseUser).catch((firebaseError) => {
+          setError(firebaseError.message);
+        });
+      }
     });
 
     return unsubscribe;
@@ -119,8 +157,35 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
-      setSettingsName(user.displayName || "");
+      setSettingsName(activeName || "");
     }
+  }, [activeName, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setProfiles({});
+      return undefined;
+    }
+
+    const unsubscribe = onSnapshot(
+      usersRef,
+      (snapshot) => {
+        setProfiles(
+          snapshot.docs.reduce((nextProfiles, profileDoc) => {
+            nextProfiles[profileDoc.id] = {
+              id: profileDoc.id,
+              ...profileDoc.data()
+            };
+            return nextProfiles;
+          }, {})
+        );
+      },
+      (firebaseError) => {
+        setError(firebaseError.message);
+      }
+    );
+
+    return unsubscribe;
   }, [user]);
 
   useEffect(() => {
@@ -182,6 +247,7 @@ export default function App() {
         await updateProfile(credential.user, {
           displayName: cleanName
         });
+        await saveUserProfile(credential.user, cleanName);
 
         setUser({
           ...credential.user,
@@ -203,7 +269,8 @@ export default function App() {
     setError("");
 
     try {
-      await signInWithPopup(auth, googleProvider);
+      const credential = await signInWithPopup(auth, googleProvider);
+      await saveUserProfile(credential.user);
       setDraftName("");
       setEmail("");
       setPassword("");
@@ -223,7 +290,7 @@ export default function App() {
   }
 
   function openSettings() {
-    setSettingsName(user?.displayName || "");
+    setSettingsName(activeName || "");
     setSettingsPassword("");
     setSettingsMessage("");
     setError("");
@@ -247,6 +314,9 @@ export default function App() {
     try {
       if (cleanName && cleanName !== user.displayName) {
         await updateProfile(user, { displayName: cleanName });
+      }
+      if (cleanName) {
+        await saveUserProfile(user, cleanName);
       }
 
       if (cleanPassword) {
@@ -281,6 +351,7 @@ export default function App() {
     setSettingsMessage("");
 
     try {
+      await deleteDoc(doc(db, "users", user.uid));
       await deleteUser(user);
       setIsSettingsOpen(false);
       setMessage("");
@@ -306,7 +377,6 @@ export default function App() {
     try {
       await addDoc(messagesRef, {
         text: cleanMessage,
-        name: activeName,
         userId: user.uid,
         createdAt: serverTimestamp()
       });
@@ -507,9 +577,9 @@ export default function App() {
             </div>
           ) : (
             messages.map((item) => {
-              const isMine = item.userId
-                ? item.userId === user.uid
-                : item.name === activeName;
+              const senderProfile = profiles[item.userId];
+              const senderName = getProfileName(senderProfile, item.name);
+              const isMine = item.userId === user.uid;
 
               return (
                 <article
@@ -517,7 +587,7 @@ export default function App() {
                   key={item.id}
                 >
                   <div className="message-meta">
-                    <strong>{item.name || "Anonymous"}</strong>
+                    <strong>{senderName}</strong>
                     <span>{formatTime(item.createdAt)}</span>
                   </div>
                   <p>{item.text}</p>
@@ -559,6 +629,7 @@ export default function App() {
               <div>
                 <h2>Settings</h2>
                 <p>{user.email}</p>
+                <p>ID: {user.uid}</p>
               </div>
               <button
                 className="modal-close"
