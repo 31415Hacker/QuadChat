@@ -564,12 +564,12 @@ button:disabled {
 }
 
 .highlight-input input {
-  background: transparent;
+  background: white;
   caret-color: #1e293b;
-  color: transparent;
+  color: #1e293b;
   position: relative;
   width: 100%;
-  z-index: 2;
+  z-index: 1;
 }
 
 .highlight-input input::placeholder {
@@ -578,10 +578,10 @@ button:disabled {
 
 .highlight-layer {
   align-items: center;
-  background: white;
-  border: 1px solid #cbd7cf;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 8px;
-  color: #1e293b;
+  color: transparent;
   display: flex;
   inset: 0;
   overflow: hidden;
@@ -589,7 +589,7 @@ button:disabled {
   pointer-events: none;
   position: absolute;
   white-space: pre-wrap;
-  z-index: 1;
+  z-index: 2;
 }
 
 .composer-row {
