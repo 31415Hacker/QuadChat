@@ -290,8 +290,90 @@ function getProfileName(profile, fallback = "Anonymous") {
   return profile?.displayName?.trim() || profile?.email || fallback;
 }
 
+function normalizeName(value) {
+  return (value || "").trim().replace(/^@/, "").toLowerCase();
+}
+
 function isAdminEmail(email) {
   return adminEmails.includes((email || "").toLowerCase());
+}
+
+function parseDuration(value) {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/^(\d+)(s|m|h|d)?$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+  const unit = (match[2] || "m").toLowerCase();
+  const multipliers = {
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000
+  };
+
+  return amount * multipliers[unit];
+}
+
+function isProfileMuted(profile) {
+  if (!profile?.muted) {
+    return false;
+  }
+
+  if (!profile.mutedUntil) {
+    return true;
+  }
+
+  return profile.mutedUntil > Date.now();
+}
+
+function getMuteLabel(profile) {
+  if (!isProfileMuted(profile)) {
+    return "";
+  }
+
+  if (!profile.mutedUntil) {
+    return "You are muted.";
+  }
+
+  return `You are muted until ${new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(profile.mutedUntil))}.`;
+}
+
+function renderMessageText(text, profiles) {
+  if (!text) {
+    return null;
+  }
+
+  const knownNames = Object.values(profiles).map((profile) =>
+    normalizeName(getProfileName(profile, ""))
+  );
+
+  return text.split(/(\s+)/).map((part, index) => {
+    if (!part.startsWith("@")) {
+      return part;
+    }
+
+    const mention = normalizeName(part);
+    const isMention =
+      mention === "everyone" || knownNames.some((name) => name === mention);
+
+    return isMention ? (
+      <span className="mention" key={`${part}-${index}`}>
+        {part}
+      </span>
+    ) : (
+      part
+    );
+  });
 }
 
 async function saveUserProfile(firebaseUser, displayNameOverride) {
@@ -356,6 +438,7 @@ export default function App() {
   const currentProfile = user ? profiles[user.uid] : null;
   const isCurrentUserAdmin =
     currentProfile?.isAdmin || isAdminEmail(user?.email || "");
+  const muteLabel = getMuteLabel(currentProfile);
   const encryptedProfiles = useMemo(
     () => Object.values(profiles).filter((profile) => profile.publicKey),
     [profiles]
@@ -683,6 +766,101 @@ export default function App() {
     }
   }
 
+  function findCommandTargets(targetName) {
+    const normalizedTarget = normalizeName(targetName);
+    const allProfiles = Object.values(profiles);
+
+    if (normalizedTarget === "everyone") {
+      return allProfiles.filter((profile) => profile.id !== user.uid);
+    }
+
+    return allProfiles.filter((profile) => {
+      const displayName = normalizeName(profile.displayName);
+      const emailName = normalizeName(profile.email);
+      const idName = normalizeName(profile.id);
+
+      return (
+        displayName === normalizedTarget ||
+        emailName === normalizedTarget ||
+        idName === normalizedTarget
+      );
+    });
+  }
+
+  async function runAdminCommand(cleanMessage) {
+    const parts = cleanMessage.trim().split(/\s+/);
+    const command = parts[0]?.toLowerCase();
+
+    if (!["?mute", "?unmute"].includes(command)) {
+      return false;
+    }
+
+    if (!isCurrentUserAdmin) {
+      setError("Only admins can use moderation commands.");
+      return true;
+    }
+
+    const targetName = parts[1];
+
+    if (!targetName) {
+      setError("Use ?mute username, ?mute username -t 10m, or ?unmute username.");
+      return true;
+    }
+
+    const targets = findCommandTargets(targetName);
+
+    if (targets.length === 0) {
+      setError(`Could not find ${targetName}.`);
+      return true;
+    }
+
+    if (command === "?unmute") {
+      await Promise.all(
+        targets.map((target) =>
+          setDoc(
+            doc(db, "users", target.id),
+            {
+              muted: false,
+              mutedUntil: null,
+              mutedBy: user.uid,
+              mutedUpdatedAt: serverTimestamp()
+            },
+            { merge: true }
+          )
+        )
+      );
+      setError("");
+      setMessage("");
+      return true;
+    }
+
+    const timeFlagIndex = parts.findIndex((part) => part === "-t");
+    const duration = timeFlagIndex >= 0 ? parseDuration(parts[timeFlagIndex + 1]) : null;
+
+    if (timeFlagIndex >= 0 && !duration) {
+      setError("Use durations like 30s, 10m, 2h, or 1d.");
+      return true;
+    }
+
+    await Promise.all(
+      targets.map((target) =>
+        setDoc(
+          doc(db, "users", target.id),
+          {
+            muted: true,
+            mutedUntil: duration ? Date.now() + duration : null,
+            mutedBy: user.uid,
+            mutedUpdatedAt: serverTimestamp()
+          },
+          { merge: true }
+        )
+      )
+    );
+    setError("");
+    setMessage("");
+    return true;
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
     const cleanMessage = message.trim();
@@ -695,6 +873,17 @@ export default function App() {
     setError("");
 
     try {
+      const didRunCommand = await runAdminCommand(cleanMessage);
+
+      if (didRunCommand) {
+        return;
+      }
+
+      if (!isCurrentUserAdmin && isProfileMuted(currentProfile)) {
+        setError(muteLabel || "You are muted.");
+        return;
+      }
+
       const recipients = encryptedProfiles;
 
       if (!keyData || recipients.length === 0) {
@@ -966,6 +1155,7 @@ export default function App() {
             Preparing secure message keys.
           </div>
         ) : null}
+        {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
 
         <div className="messages" role="log" aria-live="polite">
           {messages.length === 0 ? (
@@ -992,7 +1182,9 @@ export default function App() {
                   <p>
                     {messageText === null
                       ? "Encrypted message unavailable on this device."
-                      : messageText || "Decrypting..."}
+                      : messageText
+                        ? renderMessageText(messageText, profiles)
+                        : "Decrypting..."}
                   </p>
                 </article>
               );
@@ -1013,7 +1205,13 @@ export default function App() {
             type="submit"
             aria-label="Send message"
             title="Send message"
-            disabled={!message.trim() || !activeName || isSending || !keyData}
+            disabled={
+              !message.trim() ||
+              !activeName ||
+              isSending ||
+              !keyData ||
+              (!isCurrentUserAdmin && isProfileMuted(currentProfile))
+            }
           >
             <Send size={20} />
           </button>

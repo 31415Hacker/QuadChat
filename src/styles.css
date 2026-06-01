@@ -543,6 +543,14 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.mention {
+  background: #f6c85f;
+  border-radius: 6px;
+  color: #173f4f;
+  font-weight: 800;
+  padding: 1px 5px;
+}
+
 .composer {
   background: #fbfcfa;
   border-top: 1px solid #dfe7dc;
