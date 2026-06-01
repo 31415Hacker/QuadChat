@@ -405,6 +405,43 @@ button:disabled {
   color: #52615b;
 }
 
+.secure-banner {
+  background: #eef5f1;
+  border-bottom-color: #d9e5df;
+  color: #52615b;
+}
+
+.key-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.secondary-button,
+.upload-button {
+  align-items: center;
+  background: #eef5f1;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  color: #173f4f;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.secondary-button:hover:not(:disabled),
+.upload-button:hover {
+  background: #dfeae4;
+}
+
+.file-input {
+  display: none;
+}
+
 .settings-actions {
   display: grid;
   gap: 10px;
@@ -539,6 +576,10 @@ button:disabled {
   }
 
   .settings-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .key-actions {
     grid-template-columns: 1fr;
   }
 
