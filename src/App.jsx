@@ -96,6 +96,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) {
+      setMessages([]);
+      return undefined;
+    }
+
     const recentMessagesQuery = query(
       messagesRef,
       orderBy("createdAt", "asc"),
@@ -119,7 +124,7 @@ export default function App() {
     );
 
     return unsubscribe;
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
