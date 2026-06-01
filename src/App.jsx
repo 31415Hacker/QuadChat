@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut as signOutOfFirebase,
   updateProfile
 } from "firebase/auth";
@@ -16,6 +18,7 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 import {
+  Chrome,
   KeyRound,
   LogOut,
   MessageCircle,
@@ -27,6 +30,7 @@ import { auth, db } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
 const authMode = import.meta.env.VITE_AUTH_MODE || "production";
+const googleProvider = new GoogleAuthProvider();
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -52,7 +56,13 @@ function getAuthErrorMessage(firebaseError) {
     case "auth/weak-password":
       return "Password must be at least 6 characters.";
     case "auth/operation-not-allowed":
-      return "Email/password auth is not enabled in Firebase.";
+      return "This sign-in method is not enabled in Firebase.";
+    case "auth/popup-closed-by-user":
+      return "The Google sign-in popup was closed before finishing.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in popup.";
+    case "auth/unauthorized-domain":
+      return "This domain is not authorized in Firebase Authentication settings.";
     default:
       return firebaseError.message;
   }
@@ -148,6 +158,19 @@ export default function App() {
         await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
       }
 
+      setDraftName("");
+      setEmail("");
+      setPassword("");
+    } catch (firebaseError) {
+      setError(getAuthErrorMessage(firebaseError));
+    }
+  }
+
+  async function signInWithGoogle() {
+    setError("");
+
+    try {
+      await signInWithPopup(auth, googleProvider);
       setDraftName("");
       setEmail("");
       setPassword("");
@@ -301,6 +324,19 @@ export default function App() {
               {authView === "signup" ? "Create account" : "Sign in"}
             </button>
           </form>
+
+          <div className="auth-divider">
+            <span>or</span>
+          </div>
+
+          <button
+            className="google-button"
+            type="button"
+            onClick={signInWithGoogle}
+          >
+            <Chrome size={18} />
+            <span>Continue with Google</span>
+          </button>
 
           <div className="mode-note">
             <ShieldCheck size={18} />
