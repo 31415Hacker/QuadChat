@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as signOutOfFirebase,
+  updatePassword,
   updateProfile
 } from "firebase/auth";
 import {
@@ -19,6 +21,9 @@ import {
 } from "firebase/firestore";
 import {
   Chrome,
+  CircleUserRound,
+  Settings,
+  Trash2,
   KeyRound,
   LogOut,
   MessageCircle,
@@ -63,9 +68,20 @@ function getAuthErrorMessage(firebaseError) {
       return "Your browser blocked the Google sign-in popup.";
     case "auth/unauthorized-domain":
       return "This domain is not authorized in Firebase Authentication settings.";
+    case "auth/requires-recent-login":
+      return "Please sign out, sign back in, and try again.";
     default:
       return firebaseError.message;
   }
+}
+
+function getInitials(name) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "?";
 }
 
 export default function App() {
@@ -78,7 +94,13 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsPassword, setSettingsPassword] = useState("");
   const [error, setError] = useState("");
+  const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
 
   const activeName = useMemo(
@@ -94,6 +116,12 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setSettingsName(user.displayName || "");
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -191,6 +219,76 @@ export default function App() {
       setError("");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
+    }
+  }
+
+  function openSettings() {
+    setSettingsName(user?.displayName || "");
+    setSettingsPassword("");
+    setSettingsMessage("");
+    setError("");
+    setIsProfileMenuOpen(false);
+    setIsSettingsOpen(true);
+  }
+
+  async function saveSettings(event) {
+    event.preventDefault();
+    const cleanName = settingsName.trim();
+    const cleanPassword = settingsPassword.trim();
+
+    if (!user || (!cleanName && !cleanPassword)) {
+      return;
+    }
+
+    setIsSavingSettings(true);
+    setSettingsMessage("");
+    setError("");
+
+    try {
+      if (cleanName && cleanName !== user.displayName) {
+        await updateProfile(user, { displayName: cleanName });
+      }
+
+      if (cleanPassword) {
+        await updatePassword(user, cleanPassword);
+      }
+
+      await user.reload();
+      setUser(auth.currentUser);
+      setSettingsPassword("");
+      setSettingsMessage("Settings saved.");
+    } catch (firebaseError) {
+      setSettingsMessage(getAuthErrorMessage(firebaseError));
+    } finally {
+      setIsSavingSettings(false);
+    }
+  }
+
+  async function removeAccount() {
+    if (!user) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Remove this account? This cannot be undone."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSavingSettings(true);
+    setSettingsMessage("");
+
+    try {
+      await deleteUser(user);
+      setIsSettingsOpen(false);
+      setMessage("");
+      setError("");
+    } catch (firebaseError) {
+      setSettingsMessage(getAuthErrorMessage(firebaseError));
+    } finally {
+      setIsSavingSettings(false);
     }
   }
 
@@ -371,6 +469,32 @@ export default function App() {
             <LogOut size={18} />
             <span>Sign out</span>
           </button>
+          <div className="profile-actions">
+            <button
+              className="avatar-button"
+              type="button"
+              onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)}
+              title="Profile options"
+            >
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="" />
+              ) : (
+                <span>{getInitials(activeName)}</span>
+              )}
+            </button>
+            {isProfileMenuOpen ? (
+              <div className="profile-menu">
+                <button type="button" onClick={openSettings}>
+                  <Settings size={17} />
+                  <span>Settings</span>
+                </button>
+                <button type="button" onClick={signOut}>
+                  <LogOut size={17} />
+                  <span>Sign out</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </header>
 
         {error ? <div className="error-banner">{error}</div> : null}
@@ -423,6 +547,82 @@ export default function App() {
         </form>
       </section>
       )}
+      {isSettingsOpen && user ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="settings-modal"
+            aria-label="Account settings"
+            role="dialog"
+            aria-modal="true"
+          >
+            <header className="settings-header">
+              <div>
+                <h2>Settings</h2>
+                <p>{user.email}</p>
+              </div>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                title="Close settings"
+              >
+                X
+              </button>
+            </header>
+
+            <form className="settings-form" onSubmit={saveSettings}>
+              <label htmlFor="settings-name">
+                <CircleUserRound size={18} />
+                <span>Username</span>
+              </label>
+              <input
+                id="settings-name"
+                type="text"
+                value={settingsName}
+                onChange={(event) => setSettingsName(event.target.value)}
+                maxLength={32}
+                placeholder="Your display name"
+              />
+
+              <label htmlFor="settings-password">
+                <KeyRound size={18} />
+                <span>New password</span>
+              </label>
+              <input
+                id="settings-password"
+                type="password"
+                value={settingsPassword}
+                onChange={(event) => setSettingsPassword(event.target.value)}
+                minLength={6}
+                maxLength={64}
+                placeholder="Leave blank to keep current password"
+                autoComplete="new-password"
+              />
+
+              {settingsMessage ? (
+                <div className="error-banner inline-error settings-note">
+                  {settingsMessage}
+                </div>
+              ) : null}
+
+              <div className="settings-actions">
+                <button type="submit" disabled={isSavingSettings}>
+                  Save changes
+                </button>
+                <button
+                  className="danger-button"
+                  type="button"
+                  onClick={removeAccount}
+                  disabled={isSavingSettings}
+                >
+                  <Trash2 size={17} />
+                  <span>Remove account</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
