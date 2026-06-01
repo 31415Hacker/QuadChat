@@ -306,6 +306,10 @@ function normalizeDisplayName(displayName, email) {
   return firstName;
 }
 
+function hasUsernameSpaces(value) {
+  return /\s/.test(value.trim());
+}
+
 function normalizeName(value) {
   return (value || "").trim().replace(/^@/, "").toLowerCase();
 }
@@ -666,6 +670,11 @@ export default function App() {
       return;
     }
 
+    if (isSigningUp && hasUsernameSpaces(cleanName)) {
+      setError("Usernames cannot contain spaces.");
+      return;
+    }
+
     setError("");
 
     try {
@@ -736,6 +745,11 @@ export default function App() {
     const cleanPassword = settingsPassword.trim();
 
     if (!user || (!cleanName && !cleanPassword)) {
+      return;
+    }
+
+    if (cleanName && hasUsernameSpaces(cleanName)) {
+      setSettingsMessage("Usernames cannot contain spaces.");
       return;
     }
 
@@ -1078,8 +1092,8 @@ export default function App() {
                   type="text"
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
-                  placeholder="Enter your name"
-                  autoComplete="name"
+                  placeholder="Username without spaces"
+                  autoComplete="username"
                   maxLength={32}
                 />
               </>
@@ -1302,7 +1316,7 @@ export default function App() {
                 value={settingsName}
                 onChange={(event) => setSettingsName(event.target.value)}
                 maxLength={32}
-                placeholder="Your display name"
+                placeholder="Username without spaces"
               />
 
               <label htmlFor="settings-password">
