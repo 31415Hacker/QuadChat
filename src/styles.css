@@ -559,16 +559,37 @@ button:disabled {
   grid-template-columns: 1fr;
 }
 
-.composer-preview {
+.highlight-input {
+  position: relative;
+}
+
+.highlight-input input {
+  background: transparent;
+  caret-color: #1e293b;
+  color: transparent;
+  position: relative;
+  width: 100%;
+  z-index: 2;
+}
+
+.highlight-input input::placeholder {
+  color: #63756a;
+}
+
+.highlight-layer {
+  align-items: center;
   background: white;
-  border: 1px solid #d9e5df;
+  border: 1px solid #cbd7cf;
   border-radius: 8px;
-  color: #52615b;
-  line-height: 1.4;
-  min-height: 38px;
-  overflow-wrap: anywhere;
-  padding: 9px 12px;
+  color: #1e293b;
+  display: flex;
+  inset: 0;
+  overflow: hidden;
+  padding: 12px 13px;
+  pointer-events: none;
+  position: absolute;
   white-space: pre-wrap;
+  z-index: 1;
 }
 
 .composer-row {
