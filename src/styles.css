@@ -144,6 +144,10 @@ input {
   padding: 4px;
 }
 
+.auth-tabs:has(button:only-child) {
+  grid-template-columns: 1fr;
+}
+
 .auth-tabs button {
   background: transparent;
   color: #52615b;
@@ -414,6 +418,42 @@ button:disabled {
   background: #eef5f1;
   border-color: #d9e5df;
   color: #52615b;
+}
+
+.admin-settings {
+  background: #f8fbf9;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.admin-settings h3,
+.admin-settings p {
+  margin: 0;
+}
+
+.admin-settings h3 {
+  color: #173f4f;
+  font-size: 1rem;
+}
+
+.admin-settings p {
+  color: #63756a;
+  font-size: 0.9rem;
+  margin-top: 2px;
+}
+
+.toggle-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.toggle-row input {
+  height: 18px;
+  width: 18px;
 }
 
 .secure-banner {

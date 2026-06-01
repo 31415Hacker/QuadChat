@@ -46,6 +46,7 @@ import { auth, db } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
+const appSettingsRef = doc(db, "settings", "app");
 const authMode = import.meta.env.VITE_AUTH_MODE || "production";
 const googleProvider = new GoogleAuthProvider();
 const adminEmails = ["ariqipraditya@gmail.com"];
@@ -470,6 +471,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsName, setSettingsName] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
+  const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
@@ -502,6 +504,30 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      appSettingsRef,
+      (snapshot) => {
+        setAppSettings({
+          signupEnabled: snapshot.exists()
+            ? snapshot.data().signupEnabled !== false
+            : true
+        });
+      },
+      (firebaseError) => {
+        setError(firebaseError.message);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!appSettings.signupEnabled && authView === "signup") {
+      setAuthView("signin");
+    }
+  }, [appSettings.signupEnabled, authView]);
 
   useEffect(() => {
     if (!user) {
@@ -782,6 +808,28 @@ export default function App() {
       setSettingsMessage(getAuthErrorMessage(firebaseError));
     } finally {
       setIsSavingSettings(false);
+    }
+  }
+
+  async function toggleSignup() {
+    if (!isCurrentUserAdmin) {
+      return;
+    }
+
+    setSettingsMessage("");
+
+    try {
+      await setDoc(
+        appSettingsRef,
+        {
+          signupEnabled: !appSettings.signupEnabled,
+          updatedAt: serverTimestamp(),
+          updatedBy: user.uid
+        },
+        { merge: true }
+      );
+    } catch (firebaseError) {
+      setSettingsMessage(firebaseError.message);
     }
   }
 
@@ -1073,16 +1121,18 @@ export default function App() {
             >
               Sign in
             </button>
-            <button
-              className={authView === "signup" ? "active" : ""}
-              type="button"
-              onClick={() => {
-                setAuthView("signup");
-                setError("");
-              }}
-            >
-              Sign up
-            </button>
+            {appSettings.signupEnabled ? (
+              <button
+                className={authView === "signup" ? "active" : ""}
+                type="button"
+                onClick={() => {
+                  setAuthView("signup");
+                  setError("");
+                }}
+              >
+                Sign up
+              </button>
+            ) : null}
           </div>
 
           <form className="signin-form" onSubmit={handleAuth}>
@@ -1345,6 +1395,23 @@ export default function App() {
                 <div className="error-banner inline-error settings-note">
                   {settingsMessage}
                 </div>
+              ) : null}
+
+              {isCurrentUserAdmin ? (
+                <section className="admin-settings">
+                  <div>
+                    <h3>Admin settings</h3>
+                    <p>Control app-wide access.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      checked={appSettings.signupEnabled}
+                      onChange={toggleSignup}
+                      type="checkbox"
+                    />
+                    <span>Allow sign up</span>
+                  </label>
+                </section>
               ) : null}
 
               <div className="key-actions">
