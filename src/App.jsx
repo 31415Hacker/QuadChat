@@ -20,7 +20,8 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc
+  setDoc,
+  Timestamp
 } from "firebase/firestore";
 import {
   Chrome,
@@ -330,7 +331,11 @@ function isProfileMuted(profile) {
     return true;
   }
 
-  return profile.mutedUntil > Date.now();
+  const mutedUntilDate = profile.mutedUntil?.toDate
+    ? profile.mutedUntil.toDate()
+    : new Date(profile.mutedUntil);
+
+  return mutedUntilDate.getTime() > Date.now();
 }
 
 function getMuteLabel(profile) {
@@ -342,10 +347,14 @@ function getMuteLabel(profile) {
     return "You are muted.";
   }
 
+  const mutedUntilDate = profile.mutedUntil?.toDate
+    ? profile.mutedUntil.toDate()
+    : new Date(profile.mutedUntil);
+
   return `You are muted until ${new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit"
-  }).format(new Date(profile.mutedUntil))}.`;
+  }).format(mutedUntilDate)}.`;
 }
 
 function renderMessageText(text, profiles) {
@@ -846,12 +855,14 @@ export default function App() {
       targets.map((target) =>
         setDoc(
           doc(db, "users", target.id),
-          {
-            muted: true,
-            mutedUntil: duration ? Date.now() + duration : null,
-            mutedBy: user.uid,
-            mutedUpdatedAt: serverTimestamp()
-          },
+            {
+              muted: true,
+              mutedUntil: duration
+                ? Timestamp.fromDate(new Date(Date.now() + duration))
+                : null,
+              mutedBy: user.uid,
+              mutedUpdatedAt: serverTimestamp()
+            },
           { merge: true }
         )
       )
