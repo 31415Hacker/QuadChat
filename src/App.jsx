@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -408,6 +414,60 @@ function renderMessageText(text, profiles, isAdminCommand = false) {
   });
 }
 
+function getCaretOffset(element) {
+  const selection = window.getSelection();
+
+  if (!selection || selection.rangeCount === 0) {
+    return 0;
+  }
+
+  const range = selection.getRangeAt(0);
+
+  if (!element.contains(range.endContainer)) {
+    return 0;
+  }
+
+  const prefixRange = range.cloneRange();
+  prefixRange.selectNodeContents(element);
+  prefixRange.setEnd(range.endContainer, range.endOffset);
+
+  return prefixRange.toString().length;
+}
+
+function setCaretOffset(element, offset) {
+  const selection = window.getSelection();
+
+  if (!selection) {
+    return;
+  }
+
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  let currentNode = walker.nextNode();
+
+  while (currentNode) {
+    const length = currentNode.textContent.length;
+
+    if (remaining <= length) {
+      const range = document.createRange();
+      range.setStart(currentNode, remaining);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+
+    remaining -= length;
+    currentNode = walker.nextNode();
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 async function saveUserProfile(firebaseUser, displayNameOverride) {
   if (!firebaseUser) {
     return;
@@ -468,6 +528,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
+  const composerRef = useRef(null);
+  const caretOffsetRef = useRef(0);
 
   const currentProfile = user ? profiles[user.uid] : null;
   const isCurrentUserAdmin =
@@ -617,6 +679,16 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  useLayoutEffect(() => {
+    const composer = composerRef.current;
+
+    if (!composer || document.activeElement !== composer) {
+      return;
+    }
+
+    setCaretOffset(composer, caretOffsetRef.current);
+  }, [message, profiles, isCurrentUserAdmin]);
+
   useEffect(() => {
     if (!user || keyring.length === 0) {
       setDecryptedMessages({});
@@ -724,6 +796,9 @@ export default function App() {
     try {
       await signOutOfFirebase(auth);
       setMessage("");
+      if (composerRef.current) {
+        composerRef.current.textContent = "";
+      }
       setError("");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
@@ -966,6 +1041,21 @@ export default function App() {
     } finally {
       setIsSending(false);
     }
+  }
+
+  function handleComposerInput(event) {
+    const nextMessage = event.currentTarget.textContent.slice(0, 500);
+    caretOffsetRef.current = getCaretOffset(event.currentTarget);
+    setMessage(nextMessage);
+  }
+
+  function handleComposerKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.closest("form")?.requestSubmit();
   }
 
   function downloadRecoveryKey() {
@@ -1257,26 +1347,28 @@ export default function App() {
 
         <form className="composer" onSubmit={sendMessage}>
           <div className="composer-row">
-            <div className="highlight-input">
-              <div className="highlight-layer" aria-hidden="true">
-                {message
-                  ? renderMessageText(
-                      message,
-                      profiles,
-                      isCurrentUserAdmin &&
-                        ["?mute", "?unmute"].includes(
-                          message.trim().split(/\s+/)[0]?.toLowerCase()
-                        )
+            <div className="editable-shell">
+              {!message ? (
+                <span className="editable-placeholder">Type a message</span>
+              ) : null}
+              <div
+                className="editable-composer"
+                contentEditable
+                onInput={handleComposerInput}
+                onKeyDown={handleComposerKeyDown}
+                ref={composerRef}
+                role="textbox"
+                suppressContentEditableWarning
+              >
+                {renderMessageText(
+                  message,
+                  profiles,
+                  isCurrentUserAdmin &&
+                    ["?mute", "?unmute"].includes(
+                      message.trim().split(/\s+/)[0]?.toLowerCase()
                     )
-                  : null}
+                )}
               </div>
-              <input
-                type="text"
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Type a message"
-                maxLength={500}
-              />
             </div>
             <button
               type="submit"
