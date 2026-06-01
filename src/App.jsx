@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut as signOutOfFirebase,
+  updateProfile
+} from "firebase/auth";
+import {
   addDoc,
   collection,
   limit,
@@ -16,41 +23,10 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import { db } from "../firebase.js";
+import { auth, db } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
-const authMode = import.meta.env.VITE_AUTH_MODE || "browser";
-const usersStorageKey = "quadchat:users";
-const sessionStorageKey = "quadchat:current-user";
-
-function readJson(key, fallback) {
-  try {
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function getStoredUser() {
-  return readJson(sessionStorageKey, null);
-}
-
-function getStoredUsers() {
-  return readJson(usersStorageKey, {});
-}
-
-function saveStoredUsers(users) {
-  localStorage.setItem(usersStorageKey, JSON.stringify(users));
-}
-
-function saveSession(user) {
-  localStorage.setItem(sessionStorageKey, JSON.stringify(user));
-}
-
-function clearSession() {
-  localStorage.removeItem(sessionStorageKey);
-}
+const authMode = import.meta.env.VITE_AUTH_MODE || "production";
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -63,9 +39,31 @@ function formatTime(timestamp) {
   }).format(timestamp.toDate());
 }
 
+function getAuthErrorMessage(firebaseError) {
+  switch (firebaseError.code) {
+    case "auth/email-already-in-use":
+      return "That email already has an account. Sign in instead.";
+    case "auth/invalid-email":
+      return "Enter a valid email address.";
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "The email or password is incorrect.";
+    case "auth/weak-password":
+      return "Password must be at least 6 characters.";
+    case "auth/operation-not-allowed":
+      return "Email/password auth is not enabled in Firebase.";
+    default:
+      return firebaseError.message;
+  }
+}
+
 export default function App() {
-  const [user, setUser] = useState(getStoredUser);
+  const [user, setUser] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authView, setAuthView] = useState("signin");
   const [draftName, setDraftName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
@@ -73,7 +71,19 @@ export default function App() {
   const [error, setError] = useState("");
   const endRef = useRef(null);
 
-  const activeName = useMemo(() => user?.name?.trim() || "", [user]);
+  const activeName = useMemo(
+    () => user?.displayName?.trim() || user?.email || "",
+    [user]
+  );
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setIsAuthReady(true);
+    });
+
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const recentMessagesQuery = query(
@@ -105,48 +115,55 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
-  function signIn(event) {
+  async function handleAuth(event) {
     event.preventDefault();
     const cleanName = draftName.trim();
+    const cleanEmail = email.trim();
     const cleanPassword = password.trim();
+    const isSigningUp = authView === "signup";
 
-    if (!cleanName || !cleanPassword) {
+    if (!cleanEmail || !cleanPassword || (isSigningUp && !cleanName)) {
       return;
     }
 
-    const userKey = cleanName.toLowerCase();
-    const storedUsers = getStoredUsers();
-    const existingUser = storedUsers[userKey];
-
-    if (existingUser && existingUser.password !== cleanPassword) {
-      setError("That password does not match this test user.");
-      return;
-    }
-
-    const nextUser = existingUser || {
-      id: crypto.randomUUID(),
-      name: cleanName,
-      password: cleanPassword,
-      mode: authMode
-    };
-
-    storedUsers[userKey] = nextUser;
-    saveStoredUsers(storedUsers);
-    saveSession(nextUser);
-
-    setUser(nextUser);
-    setDraftName("");
-    setPassword("");
     setError("");
+
+    try {
+      if (isSigningUp) {
+        const credential = await createUserWithEmailAndPassword(
+          auth,
+          cleanEmail,
+          cleanPassword
+        );
+
+        await updateProfile(credential.user, {
+          displayName: cleanName
+        });
+
+        setUser({
+          ...credential.user,
+          displayName: cleanName
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      }
+
+      setDraftName("");
+      setEmail("");
+      setPassword("");
+    } catch (firebaseError) {
+      setError(getAuthErrorMessage(firebaseError));
+    }
   }
 
-  function signOut() {
-    clearSession();
-    setUser(null);
-    setDraftName("");
-    setPassword("");
-    setMessage("");
-    setError("");
+  async function signOut() {
+    try {
+      await signOutOfFirebase(auth);
+      setMessage("");
+      setError("");
+    } catch (firebaseError) {
+      setError(getAuthErrorMessage(firebaseError));
+    }
   }
 
   async function sendMessage(event) {
@@ -164,7 +181,7 @@ export default function App() {
       await addDoc(messagesRef, {
         text: cleanMessage,
         name: activeName,
-        userId: user.id,
+        userId: user.uid,
         createdAt: serverTimestamp()
       });
       setMessage("");
@@ -177,7 +194,19 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      {!user ? (
+      {!isAuthReady ? (
+        <section className="signin-panel" aria-label="Loading QuadChat">
+          <div className="signin-brand">
+            <div className="brand-mark" aria-hidden="true">
+              <MessageCircle size={28} strokeWidth={2.3} />
+            </div>
+            <div>
+              <h1>QuadChat</h1>
+              <p>Checking your session.</p>
+            </div>
+          </div>
+        </section>
+      ) : !user ? (
         <section className="signin-panel" aria-label="Sign in to QuadChat">
           <div className="signin-brand">
             <div className="brand-mark" aria-hidden="true">
@@ -185,23 +214,67 @@ export default function App() {
             </div>
             <div>
               <h1>QuadChat</h1>
-              <p>Sign in with a browser-stored test account to start chatting.</p>
+              <p>
+                {authView === "signup"
+                  ? "Create an account to start chatting."
+                  : "Sign in to continue chatting."}
+              </p>
             </div>
           </div>
 
-          <form className="signin-form" onSubmit={signIn}>
-            <label htmlFor="signin-name">
+          <div className="auth-tabs" role="tablist" aria-label="Authentication view">
+            <button
+              className={authView === "signin" ? "active" : ""}
+              type="button"
+              onClick={() => {
+                setAuthView("signin");
+                setError("");
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              className={authView === "signup" ? "active" : ""}
+              type="button"
+              onClick={() => {
+                setAuthView("signup");
+                setError("");
+              }}
+            >
+              Sign up
+            </button>
+          </div>
+
+          <form className="signin-form" onSubmit={handleAuth}>
+            {authView === "signup" ? (
+              <>
+                <label htmlFor="signin-name">
+                  <UserRound size={18} />
+                  <span>Display name</span>
+                </label>
+                <input
+                  id="signin-name"
+                  type="text"
+                  value={draftName}
+                  onChange={(event) => setDraftName(event.target.value)}
+                  placeholder="Enter your name"
+                  autoComplete="name"
+                  maxLength={32}
+                />
+              </>
+            ) : null}
+            <label htmlFor="signin-email">
               <UserRound size={18} />
-              <span>Display name</span>
+              <span>Email</span>
             </label>
             <input
-              id="signin-name"
-              type="text"
-              value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
-              placeholder="Enter your name"
-              autoComplete="off"
-              maxLength={32}
+              id="signin-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              maxLength={120}
             />
             <label htmlFor="signin-password">
               <KeyRound size={18} />
@@ -212,21 +285,26 @@ export default function App() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter a test password"
+              placeholder="Enter your password"
               autoComplete="current-password"
               maxLength={64}
             />
             {error ? <div className="error-banner inline-error">{error}</div> : null}
-            <button type="submit" disabled={!draftName.trim() || !password.trim()}>
-              Sign in
+            <button
+              type="submit"
+              disabled={
+                !email.trim() ||
+                !password.trim() ||
+                (authView === "signup" && !draftName.trim())
+              }
+            >
+              {authView === "signup" ? "Create account" : "Sign in"}
             </button>
           </form>
 
           <div className="mode-note">
             <ShieldCheck size={18} />
-            <span>
-              Testing mode: accounts are stored in this browser only.
-            </span>
+            <span>Production mode: Firebase Authentication manages accounts.</span>
           </div>
         </section>
       ) : (
@@ -265,7 +343,7 @@ export default function App() {
           ) : (
             messages.map((item) => {
               const isMine = item.userId
-                ? item.userId === user.id
+                ? item.userId === user.uid
                 : item.name === activeName;
 
               return (

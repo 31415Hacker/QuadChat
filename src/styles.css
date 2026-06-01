@@ -122,6 +122,36 @@ input {
   gap: 12px;
 }
 
+.auth-tabs {
+  background: #eef5f1;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+}
+
+.auth-tabs button {
+  background: transparent;
+  color: #52615b;
+  min-height: 40px;
+}
+
+.auth-tabs button.active {
+  background: #173f4f;
+  color: white;
+}
+
+.auth-tabs button:hover:not(:disabled) {
+  background: #dfeae4;
+  transform: none;
+}
+
+.auth-tabs button.active:hover:not(:disabled) {
+  background: #173f4f;
+}
+
 .signin-form {
   grid-template-columns: 1fr;
 }
