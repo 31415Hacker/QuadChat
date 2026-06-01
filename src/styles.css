@@ -110,6 +110,17 @@ input {
   margin-top: 3px;
 }
 
+.admin-badge {
+  background: #f6c85f;
+  border-radius: 999px;
+  color: #173f4f;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  margin-top: 7px;
+  padding: 4px 9px;
+}
+
 .signin-brand p {
   color: #52615b;
   line-height: 1.45;

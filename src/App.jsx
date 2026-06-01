@@ -42,6 +42,7 @@ const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
 const authMode = import.meta.env.VITE_AUTH_MODE || "production";
 const googleProvider = new GoogleAuthProvider();
+const adminEmails = ["ariqipraditya@gmail.com"];
 const keyRotationMs = 60 * 60 * 1000;
 const keyDbName = "quadchat-keys";
 const keyStoreName = "keys";
@@ -289,6 +290,10 @@ function getProfileName(profile, fallback = "Anonymous") {
   return profile?.displayName?.trim() || profile?.email || fallback;
 }
 
+function isAdminEmail(email) {
+  return adminEmails.includes((email || "").toLowerCase());
+}
+
 async function saveUserProfile(firebaseUser, displayNameOverride) {
   if (!firebaseUser) {
     return;
@@ -303,7 +308,9 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
       id: firebaseUser.uid,
       displayName,
       email: firebaseUser.email || "",
+      isAdmin: isAdminEmail(firebaseUser.email),
       photoURL: firebaseUser.photoURL || "",
+      role: isAdminEmail(firebaseUser.email) ? "admin" : "member",
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -347,6 +354,8 @@ export default function App() {
   const endRef = useRef(null);
 
   const currentProfile = user ? profiles[user.uid] : null;
+  const isCurrentUserAdmin =
+    currentProfile?.isAdmin || isAdminEmail(user?.email || "");
   const encryptedProfiles = useMemo(
     () => Object.values(profiles).filter((profile) => profile.publicKey),
     [profiles]
@@ -911,6 +920,7 @@ export default function App() {
               <p>
                 Signed in as {activeName} · {messages.length} messages
               </p>
+              {isCurrentUserAdmin ? <span className="admin-badge">Admin</span> : null}
             </div>
           </div>
           <button
@@ -1023,6 +1033,7 @@ export default function App() {
                 <h2>Settings</h2>
                 <p>{user.email}</p>
                 <p>ID: {user.uid}</p>
+                {isCurrentUserAdmin ? <p>Role: admin</p> : null}
               </div>
               <button
                 className="modal-close"
