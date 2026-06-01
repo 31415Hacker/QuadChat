@@ -220,6 +220,12 @@ button:disabled {
   padding: 12px 20px;
 }
 
+.inline-error {
+  border: 1px solid #f2b6aa;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
 .messages {
   display: flex;
   flex-direction: column;

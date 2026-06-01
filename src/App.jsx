@@ -9,6 +9,7 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 import {
+  KeyRound,
   LogOut,
   MessageCircle,
   Send,
@@ -18,7 +19,38 @@ import {
 import { db } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
-const authMode = import.meta.env.VITE_AUTH_MODE || "memory";
+const authMode = import.meta.env.VITE_AUTH_MODE || "browser";
+const usersStorageKey = "quadchat:users";
+const sessionStorageKey = "quadchat:current-user";
+
+function readJson(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStoredUser() {
+  return readJson(sessionStorageKey, null);
+}
+
+function getStoredUsers() {
+  return readJson(usersStorageKey, {});
+}
+
+function saveStoredUsers(users) {
+  localStorage.setItem(usersStorageKey, JSON.stringify(users));
+}
+
+function saveSession(user) {
+  localStorage.setItem(sessionStorageKey, JSON.stringify(user));
+}
+
+function clearSession() {
+  localStorage.removeItem(sessionStorageKey);
+}
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -32,8 +64,9 @@ function formatTime(timestamp) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(getStoredUser);
   const [draftName, setDraftName] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
@@ -75,23 +108,43 @@ export default function App() {
   function signIn(event) {
     event.preventDefault();
     const cleanName = draftName.trim();
+    const cleanPassword = password.trim();
 
-    if (!cleanName) {
+    if (!cleanName || !cleanPassword) {
       return;
     }
 
-    setUser({
+    const userKey = cleanName.toLowerCase();
+    const storedUsers = getStoredUsers();
+    const existingUser = storedUsers[userKey];
+
+    if (existingUser && existingUser.password !== cleanPassword) {
+      setError("That password does not match this test user.");
+      return;
+    }
+
+    const nextUser = existingUser || {
       id: crypto.randomUUID(),
       name: cleanName,
+      password: cleanPassword,
       mode: authMode
-    });
+    };
+
+    storedUsers[userKey] = nextUser;
+    saveStoredUsers(storedUsers);
+    saveSession(nextUser);
+
+    setUser(nextUser);
     setDraftName("");
+    setPassword("");
     setError("");
   }
 
   function signOut() {
+    clearSession();
     setUser(null);
     setDraftName("");
+    setPassword("");
     setMessage("");
     setError("");
   }
@@ -111,6 +164,7 @@ export default function App() {
       await addDoc(messagesRef, {
         text: cleanMessage,
         name: activeName,
+        userId: user.id,
         createdAt: serverTimestamp()
       });
       setMessage("");
@@ -131,7 +185,7 @@ export default function App() {
             </div>
             <div>
               <h1>QuadChat</h1>
-              <p>Sign in with a test display name to start chatting.</p>
+              <p>Sign in with a browser-stored test account to start chatting.</p>
             </div>
           </div>
 
@@ -149,7 +203,21 @@ export default function App() {
               autoComplete="off"
               maxLength={32}
             />
-            <button type="submit" disabled={!draftName.trim()}>
+            <label htmlFor="signin-password">
+              <KeyRound size={18} />
+              <span>Password</span>
+            </label>
+            <input
+              id="signin-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter a test password"
+              autoComplete="current-password"
+              maxLength={64}
+            />
+            {error ? <div className="error-banner inline-error">{error}</div> : null}
+            <button type="submit" disabled={!draftName.trim() || !password.trim()}>
               Sign in
             </button>
           </form>
@@ -157,7 +225,7 @@ export default function App() {
           <div className="mode-note">
             <ShieldCheck size={18} />
             <span>
-              Testing mode: username is stored in memory and clears on refresh.
+              Testing mode: accounts are stored in this browser only.
             </span>
           </div>
         </section>
@@ -196,7 +264,9 @@ export default function App() {
             </div>
           ) : (
             messages.map((item) => {
-              const isMine = item.name === activeName;
+              const isMine = item.userId
+                ? item.userId === user.id
+                : item.name === activeName;
 
               return (
                 <article
