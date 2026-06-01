@@ -556,10 +556,28 @@ button:disabled {
 .composer {
   background: #fbfcfa;
   border-top: 1px solid #dfe7dc;
+  grid-template-columns: 1fr;
+}
+
+.composer-preview {
+  background: white;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  color: #52615b;
+  line-height: 1.4;
+  min-height: 38px;
+  overflow-wrap: anywhere;
+  padding: 9px 12px;
+  white-space: pre-wrap;
+}
+
+.composer-row {
+  display: grid;
+  gap: 12px;
   grid-template-columns: minmax(0, 1fr) 50px;
 }
 
-.composer button {
+.composer-row button {
   height: 48px;
   padding: 0;
   width: 50px;

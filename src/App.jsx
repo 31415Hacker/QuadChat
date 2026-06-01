@@ -1256,27 +1256,41 @@ export default function App() {
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
-          <input
-            type="text"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Type a message"
-            maxLength={500}
-          />
-          <button
-            type="submit"
-            aria-label="Send message"
-            title="Send message"
-            disabled={
-              !message.trim() ||
-              !activeName ||
-              isSending ||
-              !keyData ||
-              (!isCurrentUserAdmin && isProfileMuted(currentProfile))
-            }
-          >
-            <Send size={20} />
-          </button>
+          {message.trim() ? (
+            <div className="composer-preview" aria-live="polite">
+              {renderMessageText(
+                message,
+                profiles,
+                isCurrentUserAdmin &&
+                  ["?mute", "?unmute"].includes(
+                    message.trim().split(/\s+/)[0]?.toLowerCase()
+                  )
+              )}
+            </div>
+          ) : null}
+          <div className="composer-row">
+            <input
+              type="text"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Type a message"
+              maxLength={500}
+            />
+            <button
+              type="submit"
+              aria-label="Send message"
+              title="Send message"
+              disabled={
+                !message.trim() ||
+                !activeName ||
+                isSending ||
+                !keyData ||
+                (!isCurrentUserAdmin && isProfileMuted(currentProfile))
+              }
+            >
+              <Send size={20} />
+            </button>
+          </div>
         </form>
       </section>
       )}
