@@ -544,11 +544,8 @@ button:disabled {
 }
 
 .mention {
-  background: #f6c85f;
-  border-radius: 6px;
-  color: #173f4f;
+  color: #c32222;
   font-weight: 800;
-  padding: 1px 5px;
 }
 
 .composer {

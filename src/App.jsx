@@ -291,6 +291,20 @@ function getProfileName(profile, fallback = "Anonymous") {
   return profile?.displayName?.trim() || profile?.email || fallback;
 }
 
+function normalizeDisplayName(displayName, email) {
+  const fallbackName = displayName || email || "User";
+
+  if ((email || "").toLowerCase().includes("lorenzo")) {
+    return "Lorenzo";
+  }
+
+  if (normalizeName(fallbackName).includes("lorenzo")) {
+    return "Lorenzo";
+  }
+
+  return fallbackName;
+}
+
 function normalizeName(value) {
   return (value || "").trim().replace(/^@/, "").toLowerCase();
 }
@@ -390,8 +404,10 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
     return;
   }
 
-  const displayName =
-    displayNameOverride || firebaseUser.displayName || firebaseUser.email || "User";
+  const displayName = normalizeDisplayName(
+    displayNameOverride || firebaseUser.displayName,
+    firebaseUser.email
+  );
 
   await setDoc(
     doc(db, "users", firebaseUser.uid),
