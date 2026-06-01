@@ -565,40 +565,6 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) 50px;
 }
 
-.editable-shell {
-  position: relative;
-}
-
-.editable-composer {
-  align-items: center;
-  background: white;
-  border: 1px solid #cbd7cf;
-  border-radius: 8px;
-  color: #1e293b;
-  display: flex;
-  line-height: 1.4;
-  min-height: 48px;
-  outline: none;
-  overflow: hidden;
-  padding: 12px 13px;
-  white-space: pre-wrap;
-}
-
-.editable-composer:focus {
-  border-color: #2b5876;
-  box-shadow: 0 0 0 3px rgba(43, 88, 118, 0.16);
-}
-
-.editable-placeholder {
-  color: #63756a;
-  left: 13px;
-  pointer-events: none;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1;
-}
-
 .composer-row button {
   height: 48px;
   padding: 0;
