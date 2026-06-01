@@ -293,6 +293,7 @@ function getProfileName(profile, fallback = "Anonymous") {
 
 function normalizeDisplayName(displayName, email) {
   const fallbackName = displayName || email || "User";
+  const firstName = fallbackName.split("@")[0].trim().split(/\s+/)[0] || "User";
 
   if ((email || "").toLowerCase().includes("lorenzo")) {
     return "Lorenzo";
@@ -302,7 +303,7 @@ function normalizeDisplayName(displayName, email) {
     return "Lorenzo";
   }
 
-  return fallbackName;
+  return firstName;
 }
 
 function normalizeName(value) {
@@ -371,9 +372,13 @@ function getMuteLabel(profile) {
   }).format(mutedUntilDate)}.`;
 }
 
-function renderMessageText(text, profiles) {
+function renderMessageText(text, profiles, isAdminCommand = false) {
   if (!text) {
     return null;
+  }
+
+  if (isAdminCommand) {
+    return <span className="admin-command-text">{text}</span>;
   }
 
   const knownNames = Object.values(profiles).map((profile) =>
@@ -817,26 +822,25 @@ export default function App() {
     const command = parts[0]?.toLowerCase();
 
     if (!["?mute", "?unmute"].includes(command)) {
-      return false;
+      return null;
     }
 
     if (!isCurrentUserAdmin) {
-      setError("Only admins can use moderation commands.");
-      return true;
+      return null;
     }
 
     const targetName = parts[1];
 
     if (!targetName) {
       setError("Use ?mute username, ?mute username -t 10m, or ?unmute username.");
-      return true;
+      return { handled: true };
     }
 
     const targets = findCommandTargets(targetName);
 
     if (targets.length === 0) {
       setError(`Could not find ${targetName}.`);
-      return true;
+      return { handled: true };
     }
 
     if (command === "?unmute") {
@@ -855,8 +859,14 @@ export default function App() {
         )
       );
       setError("");
-      setMessage("");
-      return true;
+      return {
+        handled: false,
+        metadata: {
+          adminCommand: true,
+          command,
+          commandTarget: targetName
+        }
+      };
     }
 
     const timeFlagIndex = parts.findIndex((part) => part === "-t");
@@ -864,7 +874,7 @@ export default function App() {
 
     if (timeFlagIndex >= 0 && !duration) {
       setError("Use durations like 30s, 10m, 2h, or 1d.");
-      return true;
+      return { handled: true };
     }
 
     await Promise.all(
@@ -884,8 +894,14 @@ export default function App() {
       )
     );
     setError("");
-    setMessage("");
-    return true;
+    return {
+      handled: false,
+      metadata: {
+        adminCommand: true,
+        command,
+        commandTarget: targetName
+      }
+    };
   }
 
   async function sendMessage(event) {
@@ -900,9 +916,9 @@ export default function App() {
     setError("");
 
     try {
-      const didRunCommand = await runAdminCommand(cleanMessage);
+      const commandResult = await runAdminCommand(cleanMessage);
 
-      if (didRunCommand) {
+      if (commandResult?.handled) {
         return;
       }
 
@@ -925,6 +941,7 @@ export default function App() {
 
       await addDoc(messagesRef, {
         ...encryptedPayload,
+        ...(commandResult?.metadata || {}),
         userId: user.uid,
         encryption: "RSA-OAEP-2048/AES-GCM",
         createdAt: serverTimestamp()
@@ -1210,7 +1227,11 @@ export default function App() {
                     {messageText === null
                       ? "Encrypted message unavailable on this device."
                       : messageText
-                        ? renderMessageText(messageText, profiles)
+                        ? renderMessageText(
+                            messageText,
+                            profiles,
+                            item.adminCommand
+                          )
                         : "Decrypting..."}
                   </p>
                 </article>

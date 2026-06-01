@@ -548,6 +548,11 @@ button:disabled {
   font-weight: 800;
 }
 
+.admin-command-text {
+  color: #1e63d5;
+  font-weight: 900;
+}
+
 .composer {
   background: #fbfcfa;
   border-top: 1px solid #dfe7dc;
