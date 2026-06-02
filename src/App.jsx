@@ -14,7 +14,6 @@ import {
 import {
   addDoc,
   collection,
-  deleteField,
   deleteDoc,
   doc,
   getDoc,
@@ -233,9 +232,6 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
     displayName,
     email: firebaseUser.email || "",
     photoURL: firebaseUser.photoURL || "",
-    keyUpdatedAt: deleteField(),
-    keyVersion: deleteField(),
-    publicKey: deleteField(),
     updatedAt: serverTimestamp()
   };
 
@@ -392,7 +388,6 @@ export default function App() {
             ...messageDoc.data()
           }))
         );
-        setError("");
       },
       (firebaseError) => {
         setError(firebaseError.message);
@@ -752,7 +747,12 @@ export default function App() {
       });
       setMessage("");
     } catch (firebaseError) {
-      setError(firebaseError.message);
+      console.error("QuadChat message write failed:", firebaseError);
+      setError(
+        firebaseError.code === "permission-denied"
+          ? "Firestore rules blocked this message write."
+          : firebaseError.message
+      );
     } finally {
       setIsSending(false);
     }
