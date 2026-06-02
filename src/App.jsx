@@ -670,6 +670,14 @@ export default function App() {
       return { handled: true };
     }
 
+    if (
+      command === "?mute" &&
+      targets.some((target) => target.isAdmin || isAdminEmail(target.email))
+    ) {
+      setError("cannot mute admins");
+      return { handled: true };
+    }
+
     if (command === "?unmute") {
       await Promise.all(
         targets.map((target) =>
