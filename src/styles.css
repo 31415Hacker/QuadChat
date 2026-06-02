@@ -681,6 +681,7 @@ button:disabled {
 .composer {
   background: #fbfcfa;
   border-top: 1px solid #dfe7dc;
+  gap: 0;
   grid-template-columns: 1fr;
 }
 
@@ -689,7 +690,8 @@ button:disabled {
   background: #eef5f1;
   border: 1px solid #d9e5df;
   border-left-width: 3px;
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 34px;
   min-height: 52px;
@@ -697,23 +699,24 @@ button:disabled {
 }
 
 .reply-composer-text {
-  align-items: baseline;
-  display: flex;
+  display: grid;
   gap: 2px;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
 }
 
 .reply-composer-text strong {
-  flex: 0 0 auto;
   font-size: 0.86rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reply-composer-text span {
-  flex: 1 1 auto;
   font-size: 0.93rem;
-  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reply-composer button {
@@ -734,6 +737,14 @@ button:disabled {
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) 50px;
+}
+
+.reply-composer + .composer-row {
+  align-items: stretch;
+}
+
+.reply-composer + .composer-row input {
+  border-top-left-radius: 0;
 }
 
 .composer-row button {
