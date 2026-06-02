@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -32,7 +27,6 @@ import {
 import {
   Chrome,
   CircleUserRound,
-  Download,
   Settings,
   Trash2,
   KeyRound,
@@ -40,7 +34,6 @@ import {
   MessageCircle,
   Send,
   ShieldCheck,
-  Upload,
   UserRound
 } from "lucide-react";
 import { auth, db } from "../firebase.js";
@@ -48,204 +41,9 @@ import { auth, db } from "../firebase.js";
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
 const appSettingsRef = doc(db, "settings", "app");
-const authMode = import.meta.env.VITE_AUTH_MODE || "production";
 const googleProvider = new GoogleAuthProvider();
 const adminEmails = ["ariqipraditya@gmail.com"];
-const keyRotationMs = 60 * 60 * 1000;
-const keyDbName = "quadchat-keys";
-const keyStoreName = "keys";
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
-
-function bytesToBase64(bytes) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
-}
-
-function base64ToBytes(value) {
-  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
-}
-
-function openKeyDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(keyDbName, 1);
-
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(keyStoreName);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function readStoredKey(uid) {
-  const dbInstance = await openKeyDb();
-
-  return new Promise((resolve, reject) => {
-    const transaction = dbInstance.transaction(keyStoreName, "readonly");
-    const request = transaction.objectStore(keyStoreName).get(uid);
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function writeStoredKey(uid, keyData) {
-  const dbInstance = await openKeyDb();
-
-  return new Promise((resolve, reject) => {
-    const transaction = dbInstance.transaction(keyStoreName, "readwrite");
-    const request = transaction.objectStore(keyStoreName).put(keyData, uid);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function deleteStoredKey(uid) {
-  const dbInstance = await openKeyDb();
-
-  return new Promise((resolve, reject) => {
-    const transaction = dbInstance.transaction(keyStoreName, "readwrite");
-    const request = transaction.objectStore(keyStoreName).delete(uid);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function generateKeyData() {
-  const keyPair = await crypto.subtle.generateKey(
-    {
-      name: "RSA-OAEP",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: "SHA-256"
-    },
-    true,
-    ["encrypt", "decrypt"]
-  );
-  const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-  const privateKey = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-
-  return {
-    version: crypto.randomUUID(),
-    publicKey: bytesToBase64(publicKey),
-    privateKey: bytesToBase64(privateKey),
-    createdAt: Date.now()
-  };
-}
-
-async function importPublicKey(publicKey) {
-  return crypto.subtle.importKey(
-    "spki",
-    base64ToBytes(publicKey),
-    { name: "RSA-OAEP", hash: "SHA-256" },
-    false,
-    ["encrypt"]
-  );
-}
-
-async function importPrivateKey(privateKey) {
-  return crypto.subtle.importKey(
-    "pkcs8",
-    base64ToBytes(privateKey),
-    { name: "RSA-OAEP", hash: "SHA-256" },
-    false,
-    ["decrypt"]
-  );
-}
-
-async function encryptMessageForProfiles(text, recipientProfiles) {
-  const aesKey = await crypto.subtle.generateKey(
-    { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"]
-  );
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    aesKey,
-    textEncoder.encode(text)
-  );
-  const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
-  const encryptedKeys = {};
-
-  await Promise.all(
-    recipientProfiles.map(async (profile) => {
-      const publicKey = await importPublicKey(profile.publicKey);
-      const encryptedKey = await crypto.subtle.encrypt(
-        { name: "RSA-OAEP" },
-        publicKey,
-        rawAesKey
-      );
-      encryptedKeys[profile.id] = bytesToBase64(encryptedKey);
-    })
-  );
-
-  return {
-    ciphertext: bytesToBase64(ciphertext),
-    iv: bytesToBase64(iv),
-    encryptedKeys
-  };
-}
-
-async function decryptMessage(messageDoc, keyData, uid) {
-  const encryptedKey = messageDoc.encryptedKeys?.[uid];
-
-  if (!encryptedKey || !keyData?.privateKey) {
-    return null;
-  }
-
-  const privateKey = await importPrivateKey(keyData.privateKey);
-  const rawAesKey = await crypto.subtle.decrypt(
-    { name: "RSA-OAEP" },
-    privateKey,
-    base64ToBytes(encryptedKey)
-  );
-  const aesKey = await crypto.subtle.importKey(
-    "raw",
-    rawAesKey,
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"]
-  );
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64ToBytes(messageDoc.iv) },
-    aesKey,
-    base64ToBytes(messageDoc.ciphertext)
-  );
-
-  return textDecoder.decode(plaintext);
-}
-
-async function decryptMessageWithKeyring(messageDoc, keyring, uid) {
-  for (const candidateKey of keyring) {
-    try {
-      const plaintext = await decryptMessage(messageDoc, candidateKey, uid);
-
-      if (plaintext !== null) {
-        return plaintext;
-      }
-    } catch {
-      // Try the next locally stored private key.
-    }
-  }
-
-  return null;
-}
-
-function normalizeKeyring(storedKey) {
-  if (!storedKey) {
-    return [];
-  }
-
-  if (Array.isArray(storedKey.keys)) {
-    return storedKey.keys;
-  }
-
-  if (storedKey.publicKey && storedKey.privateKey) {
-    return [storedKey];
-  }
-
-  return [];
-}
+const sessionUserIdKey = "quadchat:sessionUserId";
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -294,6 +92,10 @@ function getInitials(name) {
     .join("") || "?";
 }
 
+function normalizeName(value) {
+  return (value || "").trim().replace(/^@/, "").toLowerCase();
+}
+
 function getProfileName(profile, fallback = "Anonymous") {
   return profile?.displayName?.trim() || profile?.email || fallback;
 }
@@ -315,10 +117,6 @@ function normalizeDisplayName(displayName, email) {
 
 function hasUsernameSpaces(value) {
   return /\s/.test(value.trim());
-}
-
-function normalizeName(value) {
-  return (value || "").trim().replace(/^@/, "").toLowerCase();
 }
 
 function isAdminEmail(email) {
@@ -440,21 +238,21 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
   );
 }
 
-async function saveUserKeyProfile(firebaseUser, keyData) {
-  await setDoc(
-    doc(db, "users", firebaseUser.uid),
-    {
-      id: firebaseUser.uid,
-      publicKey: keyData.publicKey,
-      keyVersion: keyData.version,
-      keyUpdatedAt: serverTimestamp()
-    },
-    { merge: true }
-  );
+function readSessionUserId() {
+  return sessionStorage.getItem(sessionUserIdKey) || "";
+}
+
+function writeSessionUserId(uid) {
+  sessionStorage.setItem(sessionUserIdKey, uid);
+}
+
+function clearSessionUserId() {
+  sessionStorage.removeItem(sessionUserIdKey);
 }
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [sessionUserId, setSessionUserId] = useState(readSessionUserId);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authView, setAuthView] = useState("signin");
   const [draftName, setDraftName] = useState("");
@@ -462,10 +260,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const [decryptedMessages, setDecryptedMessages] = useState({});
   const [profiles, setProfiles] = useState({});
-  const [keyData, setKeyData] = useState(null);
-  const [keyring, setKeyring] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -477,17 +272,13 @@ export default function App() {
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
 
-  const currentProfile = user ? profiles[user.uid] : null;
+  const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserAdmin =
     currentProfile?.isAdmin || isAdminEmail(user?.email || "");
   const hasGoogleProvider = user?.providerData?.some(
     (provider) => provider.providerId === "google.com"
   );
   const muteLabel = getMuteLabel(currentProfile);
-  const encryptedProfiles = useMemo(
-    () => Object.values(profiles).filter((profile) => profile.publicKey),
-    [profiles]
-  );
 
   const activeName = useMemo(
     () => getProfileName(currentProfile, user?.displayName || user?.email || ""),
@@ -500,9 +291,14 @@ export default function App() {
       setIsAuthReady(true);
 
       if (firebaseUser) {
+        writeSessionUserId(firebaseUser.uid);
+        setSessionUserId(firebaseUser.uid);
         saveUserProfile(firebaseUser).catch((firebaseError) => {
           setError(firebaseError.message);
         });
+      } else {
+        clearSessionUserId();
+        setSessionUserId("");
       }
     });
 
@@ -532,57 +328,6 @@ export default function App() {
       setAuthView("signin");
     }
   }, [appSettings.signupEnabled, authView]);
-
-  useEffect(() => {
-    if (!user) {
-      setKeyData(null);
-      setKeyring([]);
-      setDecryptedMessages({});
-      return undefined;
-    }
-
-    let isCancelled = false;
-
-    async function ensureKeys() {
-      try {
-        const storedKey = await readStoredKey(user.uid);
-        const existingKeyring = normalizeKeyring(storedKey);
-        const activeKey = existingKeyring[existingKeyring.length - 1];
-        const shouldRotate =
-          !activeKey || Date.now() - activeKey.createdAt >= keyRotationMs;
-        const nextKeyData = shouldRotate ? await generateKeyData() : activeKey;
-        const nextKeyring = shouldRotate
-          ? [...existingKeyring, nextKeyData]
-          : existingKeyring;
-
-        if (shouldRotate) {
-          await writeStoredKey(user.uid, {
-            activeVersion: nextKeyData.version,
-            keys: nextKeyring
-          });
-        }
-
-        await saveUserKeyProfile(user, nextKeyData);
-
-        if (!isCancelled) {
-          setKeyData(nextKeyData);
-          setKeyring(nextKeyring);
-        }
-      } catch (firebaseError) {
-        if (!isCancelled) {
-          setError(firebaseError.message);
-        }
-      }
-    }
-
-    ensureKeys();
-    const rotationTimer = window.setInterval(ensureKeys, keyRotationMs);
-
-    return () => {
-      isCancelled = true;
-      window.clearInterval(rotationTimer);
-    };
-  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -633,9 +378,9 @@ export default function App() {
       recentMessagesQuery,
       (snapshot) => {
         setMessages(
-          snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data()
+          snapshot.docs.map((messageDoc) => ({
+            id: messageDoc.id,
+            ...messageDoc.data()
           }))
         );
         setError("");
@@ -651,48 +396,6 @@ export default function App() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
-
-  useEffect(() => {
-    if (!user || keyring.length === 0) {
-      setDecryptedMessages({});
-      return;
-    }
-
-    let isCancelled = false;
-
-    async function decryptMessages() {
-      const nextMessages = {};
-
-      await Promise.all(
-        messages.map(async (item) => {
-          if (!item.ciphertext) {
-            nextMessages[item.id] = item.text || "";
-            return;
-          }
-
-          try {
-            nextMessages[item.id] = await decryptMessageWithKeyring(
-              item,
-              keyring,
-              user.uid
-            );
-          } catch {
-            nextMessages[item.id] = null;
-          }
-        })
-      );
-
-      if (!isCancelled) {
-        setDecryptedMessages(nextMessages);
-      }
-    }
-
-    decryptMessages();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [keyring, messages, user]);
 
   async function handleAuth(event) {
     event.preventDefault();
@@ -724,13 +427,21 @@ export default function App() {
           displayName: cleanName
         });
         await saveUserProfile(credential.user, cleanName);
+        writeSessionUserId(credential.user.uid);
+        setSessionUserId(credential.user.uid);
 
         setUser({
           ...credential.user,
           displayName: cleanName
         });
       } else {
-        await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        const credential = await signInWithEmailAndPassword(
+          auth,
+          cleanEmail,
+          cleanPassword
+        );
+        writeSessionUserId(credential.user.uid);
+        setSessionUserId(credential.user.uid);
       }
 
       setDraftName("");
@@ -747,6 +458,8 @@ export default function App() {
     try {
       const credential = await signInWithPopup(auth, googleProvider);
       await saveUserProfile(credential.user);
+      writeSessionUserId(credential.user.uid);
+      setSessionUserId(credential.user.uid);
       setDraftName("");
       setEmail("");
       setPassword("");
@@ -779,6 +492,8 @@ export default function App() {
   async function signOut() {
     try {
       await signOutOfFirebase(auth);
+      clearSessionUserId();
+      setSessionUserId("");
       setMessage("");
       setError("");
     } catch (firebaseError) {
@@ -849,7 +564,7 @@ export default function App() {
         {
           signupEnabled: !appSettings.signupEnabled,
           updatedAt: serverTimestamp(),
-          updatedBy: user.uid
+          updatedBy: sessionUserId
         },
         { merge: true }
       );
@@ -875,9 +590,10 @@ export default function App() {
     setSettingsMessage("");
 
     try {
-      await deleteStoredKey(user.uid);
       await deleteDoc(doc(db, "users", user.uid));
       await deleteUser(user);
+      clearSessionUserId();
+      setSessionUserId("");
       setIsSettingsOpen(false);
       setMessage("");
       setError("");
@@ -893,7 +609,7 @@ export default function App() {
     const allProfiles = Object.values(profiles);
 
     if (normalizedTarget === "everyone") {
-      return allProfiles.filter((profile) => profile.id !== user.uid);
+      return allProfiles.filter((profile) => profile.id !== sessionUserId);
     }
 
     return allProfiles.filter((profile) => {
@@ -943,7 +659,7 @@ export default function App() {
             {
               muted: false,
               mutedUntil: null,
-              mutedBy: user.uid,
+              mutedBy: sessionUserId,
               mutedUpdatedAt: serverTimestamp()
             },
             { merge: true }
@@ -973,14 +689,14 @@ export default function App() {
       targets.map((target) =>
         setDoc(
           doc(db, "users", target.id),
-            {
-              muted: true,
-              mutedUntil: duration
-                ? Timestamp.fromDate(new Date(Date.now() + duration))
-                : null,
-              mutedBy: user.uid,
-              mutedUpdatedAt: serverTimestamp()
-            },
+          {
+            muted: true,
+            mutedUntil: duration
+              ? Timestamp.fromDate(new Date(Date.now() + duration))
+              : null,
+            mutedBy: sessionUserId,
+            mutedUpdatedAt: serverTimestamp()
+          },
           { merge: true }
         )
       )
@@ -1000,7 +716,7 @@ export default function App() {
     event.preventDefault();
     const cleanMessage = message.trim();
 
-    if (!cleanMessage || !activeName || isSending) {
+    if (!cleanMessage || !activeName || isSending || !sessionUserId) {
       return;
     }
 
@@ -1019,23 +735,10 @@ export default function App() {
         return;
       }
 
-      const recipients = encryptedProfiles;
-
-      if (!keyData || recipients.length === 0) {
-        setError("Secure keys are still being prepared. Try again in a moment.");
-        return;
-      }
-
-      const encryptedPayload = await encryptMessageForProfiles(
-        cleanMessage,
-        recipients
-      );
-
       await addDoc(messagesRef, {
-        ...encryptedPayload,
+        text: cleanMessage,
         ...(commandResult?.metadata || {}),
-        userId: user.uid,
-        encryption: "RSA-OAEP-2048/AES-GCM",
+        userId: sessionUserId,
         createdAt: serverTimestamp()
       });
       setMessage("");
@@ -1043,65 +746,6 @@ export default function App() {
       setError(firebaseError.message);
     } finally {
       setIsSending(false);
-    }
-  }
-
-  function downloadRecoveryKey() {
-    if (!user || !keyData) {
-      return;
-    }
-
-    const recoveryData = {
-      app: "QuadChat",
-      uid: user.uid,
-      activeVersion: keyData.version,
-      keys: keyring
-    };
-    const blob = new Blob([JSON.stringify(recoveryData, null, 2)], {
-      type: "application/json"
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `quadchat-recovery-${user.uid}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function uploadRecoveryKey(event) {
-    const file = event.target.files?.[0];
-
-    if (!user || !file) {
-      return;
-    }
-
-    try {
-      const recoveryData = JSON.parse(await file.text());
-      const importedKeyring = normalizeKeyring(recoveryData);
-      const nextKeyData = importedKeyring[importedKeyring.length - 1];
-
-      if (
-        recoveryData.uid !== user.uid ||
-        !nextKeyData?.publicKey ||
-        !nextKeyData?.privateKey ||
-        !nextKeyData?.version
-      ) {
-        setSettingsMessage("That recovery key does not match this account.");
-        return;
-      }
-
-      await writeStoredKey(user.uid, {
-        activeVersion: nextKeyData.version,
-        keys: importedKeyring
-      });
-      await saveUserKeyProfile(user, nextKeyData);
-      setKeyData(nextKeyData);
-      setKeyring(importedKeyring);
-      setSettingsMessage("Recovery key uploaded.");
-    } catch {
-      setSettingsMessage("Could not read that recovery key file.");
-    } finally {
-      event.target.value = "";
     }
   }
 
@@ -1288,11 +932,6 @@ export default function App() {
         </header>
 
         {error ? <div className="error-banner">{error}</div> : null}
-        {!keyData ? (
-          <div className="error-banner secure-banner">
-            Preparing secure message keys.
-          </div>
-        ) : null}
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
 
         <div className="messages" role="log" aria-live="polite">
@@ -1305,8 +944,7 @@ export default function App() {
             messages.map((item) => {
               const senderProfile = profiles[item.userId];
               const senderName = getProfileName(senderProfile, item.name);
-              const isMine = item.userId === user.uid;
-              const messageText = decryptedMessages[item.id];
+              const isMine = item.userId === sessionUserId;
 
               return (
                 <article
@@ -1317,17 +955,7 @@ export default function App() {
                     <strong>{senderName}</strong>
                     <span>{formatTime(item.createdAt)}</span>
                   </div>
-                  <p>
-                    {messageText === null
-                      ? "Encrypted message unavailable on this device."
-                      : messageText
-                        ? renderMessageText(
-                            messageText,
-                            profiles,
-                            item.adminCommand
-                          )
-                        : "Decrypting..."}
-                  </p>
+                  <p>{renderMessageText(item.text, profiles, item.adminCommand)}</p>
                 </article>
               );
             })
@@ -1352,7 +980,7 @@ export default function App() {
                 !message.trim() ||
                 !activeName ||
                 isSending ||
-                !keyData ||
+                !sessionUserId ||
                 (!isCurrentUserAdmin && isProfileMuted(currentProfile))
               }
             >
@@ -1374,7 +1002,7 @@ export default function App() {
               <div>
                 <h2>Settings</h2>
                 <p>{user.email}</p>
-                <p>ID: {user.uid}</p>
+                <p>ID: {sessionUserId}</p>
                 {isCurrentUserAdmin ? <p>Role: admin</p> : null}
               </div>
               <button
@@ -1463,29 +1091,6 @@ export default function App() {
                   </label>
                 </section>
               ) : null}
-
-              <div className="key-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={downloadRecoveryKey}
-                  disabled={!keyData}
-                >
-                  <Download size={17} />
-                  <span>Download recovery key</span>
-                </button>
-                <label className="upload-button" htmlFor="recovery-key-upload">
-                  <Upload size={17} />
-                  <span>Upload recovery key</span>
-                </label>
-                <input
-                  id="recovery-key-upload"
-                  className="file-input"
-                  type="file"
-                  accept="application/json"
-                  onChange={uploadRecoveryKey}
-                />
-              </div>
 
               <div className="settings-actions">
                 <button type="submit" disabled={isSavingSettings}>
