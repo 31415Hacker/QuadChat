@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
+  EmailAuthProvider,
   GoogleAuthProvider,
   linkWithPopup,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as signOutOfFirebase,
@@ -271,6 +273,7 @@ export default function App() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsName, setSettingsName] = useState("");
+  const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [error, setError] = useState("");
@@ -507,6 +510,7 @@ export default function App() {
 
   function openSettings() {
     setSettingsName(activeName || "");
+    setSettingsCurrentPassword("");
     setSettingsPassword("");
     setSettingsMessage("");
     setError("");
@@ -517,6 +521,7 @@ export default function App() {
   async function saveSettings(event) {
     event.preventDefault();
     const cleanName = settingsName.trim();
+    const cleanCurrentPassword = settingsCurrentPassword.trim();
     const cleanPassword = settingsPassword.trim();
 
     if (!user || (!cleanName && !cleanPassword)) {
@@ -525,6 +530,11 @@ export default function App() {
 
     if (cleanName && hasUsernameSpaces(cleanName)) {
       setSettingsMessage("Usernames cannot contain spaces.");
+      return;
+    }
+
+    if (cleanPassword && !cleanCurrentPassword) {
+      setSettingsMessage("Enter your current password to set a new password.");
       return;
     }
 
@@ -541,11 +551,18 @@ export default function App() {
       }
 
       if (cleanPassword) {
+        const credential = EmailAuthProvider.credential(
+          user.email,
+          cleanCurrentPassword
+        );
+
+        await reauthenticateWithCredential(user, credential);
         await updatePassword(user, cleanPassword);
       }
 
       await user.reload();
       setUser(auth.currentUser);
+      setSettingsCurrentPassword("");
       setSettingsPassword("");
       setSettingsMessage("Settings saved.");
     } catch (firebaseError) {
@@ -1036,6 +1053,22 @@ export default function App() {
                 onChange={(event) => setSettingsName(event.target.value)}
                 maxLength={32}
                 placeholder="Username without spaces"
+              />
+
+              <label htmlFor="settings-current-password">
+                <KeyRound size={18} />
+                <span>Current password</span>
+              </label>
+              <input
+                id="settings-current-password"
+                type="password"
+                value={settingsCurrentPassword}
+                onChange={(event) =>
+                  setSettingsCurrentPassword(event.target.value)
+                }
+                maxLength={64}
+                placeholder="Required to change password"
+                autoComplete="current-password"
               />
 
               <label htmlFor="settings-password">
