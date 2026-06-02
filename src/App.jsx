@@ -17,6 +17,7 @@ import {
   deleteField,
   deleteDoc,
   doc,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
@@ -224,22 +225,26 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
     firebaseUser.email
   );
 
-  await setDoc(
-    doc(db, "users", firebaseUser.uid),
-    {
-      id: firebaseUser.uid,
-      displayName,
-      email: firebaseUser.email || "",
-      isAdmin: isAdminEmail(firebaseUser.email),
-      photoURL: firebaseUser.photoURL || "",
-      role: isAdminEmail(firebaseUser.email) ? "admin" : "member",
-      keyUpdatedAt: deleteField(),
-      keyVersion: deleteField(),
-      publicKey: deleteField(),
-      updatedAt: serverTimestamp()
-    },
-    { merge: true }
-  );
+  const profileRef = doc(db, "users", firebaseUser.uid);
+  const profileSnapshot = await getDoc(profileRef);
+  const userIsAdmin = isAdminEmail(firebaseUser.email);
+  const profileData = {
+    id: firebaseUser.uid,
+    displayName,
+    email: firebaseUser.email || "",
+    photoURL: firebaseUser.photoURL || "",
+    keyUpdatedAt: deleteField(),
+    keyVersion: deleteField(),
+    publicKey: deleteField(),
+    updatedAt: serverTimestamp()
+  };
+
+  if (!profileSnapshot.exists() || userIsAdmin) {
+    profileData.isAdmin = userIsAdmin;
+    profileData.role = userIsAdmin ? "admin" : "member";
+  }
+
+  await setDoc(profileRef, profileData, { merge: true });
 }
 
 function readSessionUserId() {
