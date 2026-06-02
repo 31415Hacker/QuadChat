@@ -29,6 +29,9 @@ import {
 import {
   Chrome,
   CircleUserRound,
+  CornerDownLeft,
+  MoreVertical,
+  X,
   Settings,
   Trash2,
   KeyRound,
@@ -215,6 +218,16 @@ function renderMessageText(text, profiles, isAdminCommand = false) {
   });
 }
 
+function getReplyPreview(text) {
+  const cleanText = (text || "").replace(/\s+/g, " ").trim();
+
+  if (cleanText.length <= 90) {
+    return cleanText;
+  }
+
+  return `${cleanText.slice(0, 87)}...`;
+}
+
 async function saveUserProfile(firebaseUser, displayNameOverride) {
   if (!firebaseUser) {
     return;
@@ -267,6 +280,8 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [profiles, setProfiles] = useState({});
+  const [replyTo, setReplyTo] = useState(null);
+  const [openMessageMenuId, setOpenMessageMenuId] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -765,10 +780,21 @@ export default function App() {
       await addDoc(messagesRef, {
         text: cleanMessage,
         ...(commandResult?.metadata || {}),
+        ...(replyTo && !commandResult?.metadata
+          ? {
+              replyTo: {
+                id: replyTo.id,
+                text: replyTo.text,
+                userId: replyTo.userId,
+                senderName: replyTo.senderName
+              }
+            }
+          : {}),
         userId: sessionUserId,
         createdAt: serverTimestamp()
       });
       setMessage("");
+      setReplyTo(null);
     } catch (firebaseError) {
       console.error("QuadChat message write failed:", firebaseError);
       setError(
@@ -977,6 +1003,7 @@ export default function App() {
               const senderProfile = profiles[item.userId];
               const senderName = getProfileName(senderProfile, item.name);
               const isMine = item.userId === sessionUserId;
+              const isMenuOpen = openMessageMenuId === item.id;
 
               return (
                 <article
@@ -987,6 +1014,45 @@ export default function App() {
                     <strong>{senderName}</strong>
                     <span>{formatTime(item.createdAt)}</span>
                   </div>
+                  <div className="message-actions">
+                    <button
+                      aria-expanded={isMenuOpen}
+                      aria-label="Message options"
+                      className="message-menu-button"
+                      onClick={() =>
+                        setOpenMessageMenuId(isMenuOpen ? "" : item.id)
+                      }
+                      title="Message options"
+                      type="button"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {isMenuOpen ? (
+                      <div className="message-menu">
+                        <button
+                          onClick={() => {
+                            setReplyTo({
+                              id: item.id,
+                              text: getReplyPreview(item.text),
+                              userId: item.userId,
+                              senderName
+                            });
+                            setOpenMessageMenuId("");
+                          }}
+                          type="button"
+                        >
+                          <CornerDownLeft size={16} />
+                          <span>Reply</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {item.replyTo ? (
+                    <div className="reply-card">
+                      <strong>{item.replyTo.senderName || "Unknown"}</strong>
+                      <span>{item.replyTo.text || "Message unavailable"}</span>
+                    </div>
+                  ) : null}
                   <p>{renderMessageText(item.text, profiles, item.adminCommand)}</p>
                 </article>
               );
@@ -996,6 +1062,22 @@ export default function App() {
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
+          {replyTo ? (
+            <div className="reply-composer">
+              <div>
+                <strong>Replying to {replyTo.senderName}</strong>
+                <span>{replyTo.text}</span>
+              </div>
+              <button
+                aria-label="Cancel reply"
+                onClick={() => setReplyTo(null)}
+                title="Cancel reply"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : null}
           <div className="composer-row">
             <input
               type="text"
