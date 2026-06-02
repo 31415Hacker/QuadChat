@@ -1064,7 +1064,7 @@ export default function App() {
         <form className="composer" onSubmit={sendMessage}>
           {replyTo ? (
             <div className="reply-composer">
-              <div>
+              <div className="reply-composer-text">
                 <strong>Replying to {replyTo.senderName}</strong>
                 <span>{replyTo.text}</span>
               </div>
