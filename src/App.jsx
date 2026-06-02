@@ -14,6 +14,7 @@ import {
 import {
   addDoc,
   collection,
+  deleteField,
   deleteDoc,
   doc,
   limit,
@@ -232,6 +233,9 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
       isAdmin: isAdminEmail(firebaseUser.email),
       photoURL: firebaseUser.photoURL || "",
       role: isAdminEmail(firebaseUser.email) ? "admin" : "member",
+      keyUpdatedAt: deleteField(),
+      keyVersion: deleteField(),
+      publicKey: deleteField(),
       updatedAt: serverTimestamp()
     },
     { merge: true }
