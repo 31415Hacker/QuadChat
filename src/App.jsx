@@ -19,7 +19,6 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  limit,
   onSnapshot,
   orderBy,
   query,
@@ -378,8 +377,7 @@ export default function App() {
 
     const recentMessagesQuery = query(
       messagesRef,
-      orderBy("createdAt", "asc"),
-      limit(100)
+      orderBy("createdAt", "asc")
     );
 
     const unsubscribe = onSnapshot(
