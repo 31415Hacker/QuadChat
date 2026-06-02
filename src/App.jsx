@@ -26,7 +26,6 @@ import {
   setDoc,
   Timestamp
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import {
   Bell,
   BellOff,
@@ -46,7 +45,7 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import { auth, db, functions } from "../firebase.js";
+import { auth, db } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
@@ -58,7 +57,7 @@ const notificationsEnabledKey = "quadchat:notificationsEnabled";
 const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 const maxAttachments = 4;
 const maxAttachmentBytes = 10 * 1024 * 1024;
-const uploadDriveFile = httpsCallable(functions, "uploadDriveFile");
+const uploadUrl = "https://quadchatbackend.onrender.com/upload";
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -846,13 +845,24 @@ export default function App() {
 
     return Promise.all(
       pendingFiles.map(async (pendingFile) => {
-        const result = await uploadDriveFile({
-          dataBase64: await readFileAsBase64(pendingFile.file),
-          name: pendingFile.file.name,
-          type: pendingFile.file.type || "application/octet-stream"
+        const fileBase64 = await readFileAsBase64(pendingFile.file);
+
+        const response = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: pendingFile.file.name,
+            mimeType: pendingFile.file.type || "application/octet-stream",
+            fileBase64
+          })
         });
 
-        return result.data;
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`Upload failed (${response.status}): ${errorBody}`);
+        }
+
+        return response.json();
       })
     );
   }
