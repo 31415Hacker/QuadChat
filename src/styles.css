@@ -321,7 +321,7 @@ button:disabled {
   box-shadow: 0 18px 44px rgba(35, 49, 42, 0.24);
   display: grid;
   gap: 4px;
-  min-width: 160px;
+  min-width: 220px;
   padding: 6px;
   position: absolute;
   right: 0;

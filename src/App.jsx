@@ -27,6 +27,8 @@ import {
   Timestamp
 } from "firebase/firestore";
 import {
+  Bell,
+  BellOff,
   Chrome,
   CircleUserRound,
   CornerDownLeft,
@@ -49,6 +51,8 @@ const appSettingsRef = doc(db, "settings", "app");
 const googleProvider = new GoogleAuthProvider();
 const adminEmails = ["ariqipraditya@gmail.com"];
 const sessionUserIdKey = "quadchat:sessionUserId";
+const notificationsEnabledKey = "quadchat:notificationsEnabled";
+const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -269,6 +273,14 @@ function clearSessionUserId() {
   sessionStorage.removeItem(sessionUserIdKey);
 }
 
+function readNotificationsEnabled() {
+  return localStorage.getItem(notificationsEnabledKey) === "true";
+}
+
+function writeNotificationsEnabled(isEnabled) {
+  localStorage.setItem(notificationsEnabledKey, String(isEnabled));
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [sessionUserId, setSessionUserId] = useState(readSessionUserId);
@@ -282,6 +294,12 @@ export default function App() {
   const [profiles, setProfiles] = useState({});
   const [replyTo, setReplyTo] = useState(null);
   const [openMessageMenuId, setOpenMessageMenuId] = useState("");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    readNotificationsEnabled
+  );
+  const [notificationPermission, setNotificationPermission] = useState(
+    "Notification" in window ? Notification.permission : "unsupported"
+  );
   const [isSending, setIsSending] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -293,6 +311,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
+  const knownMessageIdsRef = useRef(new Set());
+  const hasLoadedMessagesRef = useRef(false);
 
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserAdmin =
@@ -417,6 +437,56 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!user) {
+      knownMessageIdsRef.current = new Set();
+      hasLoadedMessagesRef.current = false;
+      return;
+    }
+
+    const nextKnownIds = new Set(messages.map((item) => item.id));
+
+    if (!hasLoadedMessagesRef.current) {
+      knownMessageIdsRef.current = nextKnownIds;
+      hasLoadedMessagesRef.current = true;
+      return;
+    }
+
+    const shouldNotify =
+      notificationsEnabled &&
+      notificationPermission === "granted" &&
+      (document.hidden || !document.hasFocus());
+
+    if (shouldNotify) {
+      messages
+        .filter(
+          (item) =>
+            !knownMessageIdsRef.current.has(item.id) &&
+            item.userId !== sessionUserId
+        )
+        .forEach((item) => {
+          const senderProfile = profiles[item.userId];
+          const senderName = getProfileName(senderProfile, "Someone");
+          const notification = new Notification(`QuadChat: ${senderName}`, {
+            body: getReplyPreview(item.text || "Sent a message"),
+            icon: notificationIcon,
+            tag: `quadchat-${item.id}`
+          });
+
+          window.setTimeout(() => notification.close(), 7000);
+        });
+    }
+
+    knownMessageIdsRef.current = nextKnownIds;
+  }, [
+    messages,
+    notificationPermission,
+    notificationsEnabled,
+    profiles,
+    sessionUserId,
+    user
+  ]);
+
   async function handleAuth(event) {
     event.preventDefault();
     const cleanName = draftName.trim();
@@ -506,6 +576,39 @@ export default function App() {
       setSettingsMessage(getAuthErrorMessage(firebaseError));
     } finally {
       setIsSavingSettings(false);
+    }
+  }
+
+  async function toggleNotifications() {
+    setError("");
+
+    if (!("Notification" in window)) {
+      setError("This browser does not support notifications.");
+      return;
+    }
+
+    if (notificationsEnabled) {
+      writeNotificationsEnabled(false);
+      setNotificationsEnabled(false);
+      setIsProfileMenuOpen(false);
+      return;
+    }
+
+    const permission =
+      Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+
+    setNotificationPermission(permission);
+
+    if (permission === "granted") {
+      writeNotificationsEnabled(true);
+      setNotificationsEnabled(true);
+      setIsProfileMenuOpen(false);
+    } else {
+      writeNotificationsEnabled(false);
+      setNotificationsEnabled(false);
+      setError("Notifications are blocked in this browser.");
     }
   }
 
@@ -979,6 +1082,18 @@ export default function App() {
                 <button type="button" onClick={openSettings}>
                   <Settings size={17} />
                   <span>Settings</span>
+                </button>
+                <button type="button" onClick={toggleNotifications}>
+                  {notificationsEnabled ? (
+                    <BellOff size={17} />
+                  ) : (
+                    <Bell size={17} />
+                  )}
+                  <span>
+                    {notificationsEnabled
+                      ? "Disable notifications"
+                      : "Enable notifications"}
+                  </span>
                 </button>
                 <button type="button" onClick={signOut}>
                   <LogOut size={17} />
