@@ -26,7 +26,7 @@ import {
   setDoc,
   Timestamp
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import {
   Bell,
   BellOff,
@@ -46,7 +46,7 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import { auth, db, storage } from "../firebase.js";
+import { auth, db, functions } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
@@ -58,6 +58,7 @@ const notificationsEnabledKey = "quadchat:notificationsEnabled";
 const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 const maxAttachments = 4;
 const maxAttachmentBytes = 10 * 1024 * 1024;
+const uploadDriveFile = httpsCallable(functions, "uploadDriveFile");
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -241,9 +242,17 @@ function getFilePreview(file) {
   return file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
 }
 
-function getAttachmentPath(uid, file) {
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  return `chat-uploads/${uid}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      resolve(result.split(",")[1] || "");
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 async function saveUserProfile(firebaseUser, displayNameOverride) {
@@ -837,19 +846,13 @@ export default function App() {
 
     return Promise.all(
       pendingFiles.map(async (pendingFile) => {
-        const uploadPath = getAttachmentPath(sessionUserId, pendingFile.file);
-        const uploadRef = ref(storage, uploadPath);
-        await uploadBytes(uploadRef, pendingFile.file, {
-          contentType: pendingFile.file.type || "application/octet-stream"
+        const result = await uploadDriveFile({
+          dataBase64: await readFileAsBase64(pendingFile.file),
+          name: pendingFile.file.name,
+          type: pendingFile.file.type || "application/octet-stream"
         });
 
-        return {
-          name: pendingFile.file.name,
-          type: pendingFile.file.type || "application/octet-stream",
-          size: pendingFile.file.size,
-          path: uploadPath,
-          url: await getDownloadURL(uploadRef)
-        };
+        return result.data;
       })
     );
   }
@@ -1330,7 +1333,7 @@ export default function App() {
                         ) : (
                           <a
                             className="message-file-link"
-                            href={attachment.url}
+                            href={attachment.viewUrl || attachment.url}
                             key={attachment.path || attachment.url}
                             rel="noreferrer"
                             target="_blank"
