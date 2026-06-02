@@ -26,13 +26,16 @@ import {
   setDoc,
   Timestamp
 } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   Bell,
   BellOff,
   Chrome,
   CircleUserRound,
   CornerDownLeft,
+  FileText,
   MoreVertical,
+  Plus,
   X,
   Settings,
   Trash2,
@@ -43,7 +46,7 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import { auth, db } from "../firebase.js";
+import { auth, db, storage } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
@@ -53,6 +56,8 @@ const adminEmails = ["ariqipraditya@gmail.com"];
 const sessionUserIdKey = "quadchat:sessionUserId";
 const notificationsEnabledKey = "quadchat:notificationsEnabled";
 const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
+const maxAttachments = 4;
+const maxAttachmentBytes = 10 * 1024 * 1024;
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -232,6 +237,15 @@ function getReplyPreview(text) {
   return `${cleanText.slice(0, 87)}...`;
 }
 
+function getFilePreview(file) {
+  return file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
+}
+
+function getAttachmentPath(uid, file) {
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `chat-uploads/${uid}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+}
+
 async function saveUserProfile(firebaseUser, displayNameOverride) {
   if (!firebaseUser) {
     return;
@@ -290,6 +304,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [messages, setMessages] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [replyTo, setReplyTo] = useState(null);
@@ -311,6 +326,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const pendingFilesRef = useRef([]);
   const knownMessageIdsRef = useRef(new Set());
   const hasLoadedMessagesRef = useRef(false);
 
@@ -438,6 +455,21 @@ export default function App() {
   }, [messages]);
 
   useEffect(() => {
+    pendingFilesRef.current = pendingFiles;
+  }, [pendingFiles]);
+
+  useEffect(
+    () => () => {
+      pendingFilesRef.current.forEach((pendingFile) => {
+        if (pendingFile.previewUrl) {
+          URL.revokeObjectURL(pendingFile.previewUrl);
+        }
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
     if (!user) {
       knownMessageIdsRef.current = new Set();
       hasLoadedMessagesRef.current = false;
@@ -468,7 +500,12 @@ export default function App() {
           const senderProfile = profiles[item.userId];
           const senderName = getProfileName(senderProfile, "Someone");
           const notification = new Notification(`QuadChat: ${senderName}`, {
-            body: getReplyPreview(item.text || "Sent a message"),
+            body: getReplyPreview(
+              item.text ||
+                (item.attachments?.length > 0
+                  ? "Sent an attachment"
+                  : "Sent a message")
+            ),
             icon: notificationIcon,
             tag: `quadchat-${item.id}`
           });
@@ -741,6 +778,82 @@ export default function App() {
     }
   }
 
+  function addPendingFiles(files) {
+    const nextFiles = Array.from(files || []);
+
+    if (nextFiles.length === 0) {
+      return;
+    }
+
+    setError("");
+    setPendingFiles((currentFiles) => {
+      const availableSlots = maxAttachments - currentFiles.length;
+      const acceptedFiles = nextFiles.slice(0, availableSlots);
+
+      if (nextFiles.length > availableSlots) {
+        setError(`You can attach up to ${maxAttachments} files at a time.`);
+      }
+
+      const validFiles = acceptedFiles.filter((file) => {
+        if (file.size <= maxAttachmentBytes) {
+          return true;
+        }
+
+        setError("Files must be 10 MB or smaller.");
+        return false;
+      });
+
+      return [
+        ...currentFiles,
+        ...validFiles.map((file) => ({
+          id: crypto.randomUUID(),
+          file,
+          previewUrl: getFilePreview(file)
+        }))
+      ];
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function removePendingFile(fileId) {
+    setPendingFiles((currentFiles) => {
+      const removedFile = currentFiles.find((file) => file.id === fileId);
+
+      if (removedFile?.previewUrl) {
+        URL.revokeObjectURL(removedFile.previewUrl);
+      }
+
+      return currentFiles.filter((file) => file.id !== fileId);
+    });
+  }
+
+  async function uploadPendingFiles() {
+    if (!sessionUserId || pendingFiles.length === 0) {
+      return [];
+    }
+
+    return Promise.all(
+      pendingFiles.map(async (pendingFile) => {
+        const uploadPath = getAttachmentPath(sessionUserId, pendingFile.file);
+        const uploadRef = ref(storage, uploadPath);
+        await uploadBytes(uploadRef, pendingFile.file, {
+          contentType: pendingFile.file.type || "application/octet-stream"
+        });
+
+        return {
+          name: pendingFile.file.name,
+          type: pendingFile.file.type || "application/octet-stream",
+          size: pendingFile.file.size,
+          path: uploadPath,
+          url: await getDownloadURL(uploadRef)
+        };
+      })
+    );
+  }
+
   function findCommandTargets(targetName) {
     const normalizedTarget = normalizeName(targetName);
     const allProfiles = Object.values(profiles);
@@ -860,8 +973,14 @@ export default function App() {
   async function sendMessage(event) {
     event.preventDefault();
     const cleanMessage = message.trim();
+    const hasAttachments = pendingFiles.length > 0;
 
-    if (!cleanMessage || !activeName || isSending || !sessionUserId) {
+    if (
+      (!cleanMessage && !hasAttachments) ||
+      !activeName ||
+      isSending ||
+      !sessionUserId
+    ) {
       return;
     }
 
@@ -880,9 +999,12 @@ export default function App() {
         return;
       }
 
+      const attachments = await uploadPendingFiles();
+
       await addDoc(messagesRef, {
         text: cleanMessage,
         ...(commandResult?.metadata || {}),
+        ...(attachments.length > 0 ? { attachments } : {}),
         ...(replyTo && !commandResult?.metadata
           ? {
               replyTo: {
@@ -898,6 +1020,15 @@ export default function App() {
       });
       setMessage("");
       setReplyTo(null);
+      setPendingFiles((currentFiles) => {
+        currentFiles.forEach((pendingFile) => {
+          if (pendingFile.previewUrl) {
+            URL.revokeObjectURL(pendingFile.previewUrl);
+          }
+        });
+
+        return [];
+      });
     } catch (firebaseError) {
       console.error("QuadChat message write failed:", firebaseError);
       setError(
@@ -907,6 +1038,16 @@ export default function App() {
       );
     } finally {
       setIsSending(false);
+    }
+  }
+
+  function handleComposerPaste(event) {
+    const files = Array.from(event.clipboardData?.files || []);
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+
+    if (imageFiles.length > 0) {
+      event.preventDefault();
+      addPendingFiles(imageFiles);
     }
   }
 
@@ -1168,7 +1309,39 @@ export default function App() {
                       <span>{item.replyTo.text || "Message unavailable"}</span>
                     </div>
                   ) : null}
-                  <p>{renderMessageText(item.text, profiles, item.adminCommand)}</p>
+                  {item.text ? (
+                    <p>
+                      {renderMessageText(item.text, profiles, item.adminCommand)}
+                    </p>
+                  ) : null}
+                  {item.attachments?.length > 0 ? (
+                    <div className="message-attachments">
+                      {item.attachments.map((attachment) =>
+                        attachment.type?.startsWith("image/") ? (
+                          <a
+                            className="message-image-link"
+                            href={attachment.url}
+                            key={attachment.path || attachment.url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <img src={attachment.url} alt={attachment.name} />
+                          </a>
+                        ) : (
+                          <a
+                            className="message-file-link"
+                            href={attachment.url}
+                            key={attachment.path || attachment.url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <FileText size={18} />
+                            <span>{attachment.name}</span>
+                          </a>
+                        )
+                      )}
+                    </div>
+                  ) : null}
                 </article>
               );
             })
@@ -1193,11 +1366,51 @@ export default function App() {
               </button>
             </div>
           ) : null}
+          {pendingFiles.length > 0 ? (
+            <div className="attachment-preview-list">
+              {pendingFiles.map((pendingFile) => (
+                <div className="attachment-preview" key={pendingFile.id}>
+                  {pendingFile.previewUrl ? (
+                    <img src={pendingFile.previewUrl} alt="" />
+                  ) : (
+                    <FileText size={22} />
+                  )}
+                  <span>{pendingFile.file.name}</span>
+                  <button
+                    aria-label={`Remove ${pendingFile.file.name}`}
+                    onClick={() => removePendingFile(pendingFile.id)}
+                    title="Remove file"
+                    type="button"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="composer-row">
+            <button
+              aria-label="Attach files"
+              className="attach-button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach files"
+              type="button"
+              disabled={pendingFiles.length >= maxAttachments || isSending}
+            >
+              <Plus size={22} />
+            </button>
+            <input
+              ref={fileInputRef}
+              className="file-input"
+              type="file"
+              multiple
+              onChange={(event) => addPendingFiles(event.target.files)}
+            />
             <input
               type="text"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
+              onPaste={handleComposerPaste}
               placeholder="Type a message"
               maxLength={500}
             />
@@ -1206,7 +1419,7 @@ export default function App() {
               aria-label="Send message"
               title="Send message"
               disabled={
-                !message.trim() ||
+                (!message.trim() && pendingFiles.length === 0) ||
                 !activeName ||
                 isSending ||
                 !sessionUserId ||
