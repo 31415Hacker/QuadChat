@@ -887,13 +887,14 @@ export default function App() {
     formData.append("reqtype", "fileupload");
     formData.append("fileToUpload", fileToUpload);
 
-    const proxyUrl = "https://api.allorigins.win/raw?url=" +
-      encodeURIComponent("https://catbox.moe/user/api.php");
-
-    const response = await fetch(proxyUrl, {
-      method: "POST",
-      body: formData
-    });
+    const response = await fetch(
+      "https://cors-anywhere.herokuapp.com/https://catbox.moe/user/api.php",
+      {
+        method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body: formData
+      }
+    );
 
     if (!response.ok) {
       const errorBody = await response.text();
