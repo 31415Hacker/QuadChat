@@ -867,7 +867,7 @@ export default function App() {
 
   async function uploadToImgBB(file) {
     const formData = new FormData();
-    formData.append("image", file);
+    formData.append("image", file, file.name);
 
     const response = await fetch(
       `https://api.imgbb.com/1/upload?key=${import.meta.env.VITE_IMGBB_API_KEY}`,
