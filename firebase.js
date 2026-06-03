@@ -4,7 +4,7 @@ import { getFunctions } from "firebase/functions";
 import { initializeFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyB22Y06cUUhfSweTGIhHaziHCJTytUkqLI",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "quadchat-cf697.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "quadchat-cf697",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "quadchat-cf697.firebasestorage.app",
