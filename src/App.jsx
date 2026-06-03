@@ -27,6 +27,13 @@ import {
   Timestamp
 } from "firebase/firestore";
 import {
+  onValue,
+  ref as rtdbRef,
+  set,
+  onDisconnect,
+  remove
+} from "firebase/database";
+import {
   Bell,
   BellOff,
   Chrome,
@@ -43,9 +50,10 @@ import {
   MessageCircle,
   Send,
   ShieldCheck,
-  UserRound
+  UserRound,
+  Users
 } from "lucide-react";
-import { auth, db } from "../firebase.js";
+import { auth, db, rtdb } from "../firebase.js";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
@@ -331,6 +339,7 @@ export default function App() {
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
@@ -371,6 +380,18 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const presenceRef = rtdbRef(rtdb, `presence/${user.uid}`);
+    set(presenceRef, true);
+    onDisconnect(presenceRef).remove();
+
+    return () => {
+      remove(presenceRef);
+    };
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -425,6 +446,24 @@ export default function App() {
         setError(firebaseError.message);
       }
     );
+
+    return unsubscribe;
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setOnlineUsers(new Set());
+      return;
+    }
+
+    const presenceListRef = rtdbRef(rtdb, "presence");
+    const unsubscribe = onValue(presenceListRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setOnlineUsers(new Set(Object.keys(snapshot.val())));
+      } else {
+        setOnlineUsers(new Set());
+      }
+    });
 
     return unsubscribe;
   }, [user]);
@@ -1269,105 +1308,127 @@ export default function App() {
         {error ? <div className="error-banner">{error}</div> : null}
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
 
-        <div className="messages" role="log" aria-live="polite">
-          {messages.length === 0 ? (
-            <div className="empty-state">
-              <MessageCircle size={42} />
-              <p>No messages yet. Say hello when you are ready.</p>
-            </div>
-          ) : (
-            messages.map((item) => {
-              const senderProfile = profiles[item.userId];
-              const senderName = getProfileName(senderProfile, item.name);
-              const isMine = item.userId === sessionUserId;
-              const isMenuOpen = openMessageMenuId === item.id;
+        <div className="chat-body">
+          <div className="messages" role="log" aria-live="polite">
+            {messages.length === 0 ? (
+              <div className="empty-state">
+                <MessageCircle size={42} />
+                <p>No messages yet. Say hello when you are ready.</p>
+              </div>
+            ) : (
+              messages.map((item) => {
+                const senderProfile = profiles[item.userId];
+                const senderName = getProfileName(senderProfile, item.name);
+                const isMine = item.userId === sessionUserId;
+                const isMenuOpen = openMessageMenuId === item.id;
 
-              return (
-                <article
-                  className={`message ${isMine ? "message-mine" : ""}`}
-                  key={item.id}
-                >
-                  <div className="message-meta">
-                    <strong>{senderName}</strong>
-                    <span>{formatTime(item.createdAt)}</span>
-                  </div>
-                  <div className="message-actions">
-                    <button
-                      aria-expanded={isMenuOpen}
-                      aria-label="Message options"
-                      className="message-menu-button"
-                      onClick={() =>
-                        setOpenMessageMenuId(isMenuOpen ? "" : item.id)
-                      }
-                      title="Message options"
-                      type="button"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-                    {isMenuOpen ? (
-                      <div className="message-menu">
-                        <button
-                          onClick={() => {
-                            setReplyTo({
-                              id: item.id,
-                              text: getReplyPreview(item.text),
-                              userId: item.userId,
-                              senderName
-                            });
-                            setOpenMessageMenuId("");
-                          }}
-                          type="button"
-                        >
-                          <CornerDownLeft size={16} />
-                          <span>Reply</span>
-                        </button>
+                return (
+                  <article
+                    className={`message ${isMine ? "message-mine" : ""}`}
+                    key={item.id}
+                  >
+                    <div className="message-meta">
+                      <strong>{senderName}</strong>
+                      <span>{formatTime(item.createdAt)}</span>
+                    </div>
+                    <div className="message-actions">
+                      <button
+                        aria-expanded={isMenuOpen}
+                        aria-label="Message options"
+                        className="message-menu-button"
+                        onClick={() =>
+                          setOpenMessageMenuId(isMenuOpen ? "" : item.id)
+                        }
+                        title="Message options"
+                        type="button"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                      {isMenuOpen ? (
+                        <div className="message-menu">
+                          <button
+                            onClick={() => {
+                              setReplyTo({
+                                id: item.id,
+                                text: getReplyPreview(item.text),
+                                userId: item.userId,
+                                senderName
+                              });
+                              setOpenMessageMenuId("");
+                            }}
+                            type="button"
+                          >
+                            <CornerDownLeft size={16} />
+                            <span>Reply</span>
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    {item.replyTo ? (
+                      <div className="reply-card">
+                        <strong>{item.replyTo.senderName || "Unknown"}</strong>
+                        <span>{item.replyTo.text || "Message unavailable"}</span>
                       </div>
                     ) : null}
+                    {item.text ? (
+                      <p>
+                        {renderMessageText(item.text, profiles, item.adminCommand)}
+                      </p>
+                    ) : null}
+                    {item.attachments?.length > 0 ? (
+                      <div className="message-attachments">
+                        {item.attachments.map((attachment) =>
+                          attachment.type?.startsWith("image/") ? (
+                            <a
+                              className="message-image-link"
+                              href={attachment.url}
+                              key={attachment.path || attachment.url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              <img src={attachment.url} alt={attachment.name} />
+                            </a>
+                          ) : (
+                            <a
+                              className="message-file-link"
+                              href={attachment.viewUrl || attachment.url}
+                              key={attachment.path || attachment.url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              <FileText size={18} />
+                              <span>{attachment.name}</span>
+                            </a>
+                          )
+                        )}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })
+            )}
+            <div ref={endRef} />
+          </div>
+          <aside className="users-sidebar">
+            <div className="users-sidebar-header">
+              <Users size={16} />
+              <span>Users</span>
+            </div>
+            <div className="users-sidebar-list">
+              {Object.values(profiles).map((profile) => {
+                const name = getProfileName(profile, profile.email || "");
+                return (
+                  <div
+                    className={`user-item ${onlineUsers.has(profile.id) ? "online" : ""}`}
+                    key={profile.id}
+                  >
+                    <span className="user-dot" />
+                    <span className="user-name">{name}</span>
                   </div>
-                  {item.replyTo ? (
-                    <div className="reply-card">
-                      <strong>{item.replyTo.senderName || "Unknown"}</strong>
-                      <span>{item.replyTo.text || "Message unavailable"}</span>
-                    </div>
-                  ) : null}
-                  {item.text ? (
-                    <p>
-                      {renderMessageText(item.text, profiles, item.adminCommand)}
-                    </p>
-                  ) : null}
-                  {item.attachments?.length > 0 ? (
-                    <div className="message-attachments">
-                      {item.attachments.map((attachment) =>
-                        attachment.type?.startsWith("image/") ? (
-                          <a
-                            className="message-image-link"
-                            href={attachment.url}
-                            key={attachment.path || attachment.url}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            <img src={attachment.url} alt={attachment.name} />
-                          </a>
-                        ) : (
-                          <a
-                            className="message-file-link"
-                            href={attachment.viewUrl || attachment.url}
-                            key={attachment.path || attachment.url}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            <FileText size={18} />
-                            <span>{attachment.name}</span>
-                          </a>
-                        )
-                      )}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })
-          )}
-          <div ref={endRef} />
+                );
+              })}
+            </div>
+          </aside>
         </div>
 
         <form className="composer" onSubmit={sendMessage}>

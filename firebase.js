@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getDatabase } from "firebase/database";
 import { getFunctions } from "firebase/functions";
 import { initializeFirestore } from "firebase/firestore";
 
@@ -18,5 +19,6 @@ export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true
 });
+export const rtdb = getDatabase(app);
 export const functions = getFunctions(app, "us-central1");
 export default app;

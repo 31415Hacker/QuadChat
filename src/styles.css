@@ -863,6 +863,68 @@ button:disabled {
   width: 50px;
 }
 
+.chat-body {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.users-sidebar {
+  background: #f8fbf9;
+  border-left: 1px solid #d9e5df;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 200px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.users-sidebar-header {
+  align-items: center;
+  color: #52615b;
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 6px;
+  padding: 12px 14px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.users-sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.user-item {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  padding: 6px 14px;
+}
+
+.user-dot {
+  background: #cbd7cf;
+  border-radius: 999px;
+  flex: 0 0 8px;
+  height: 8px;
+  width: 8px;
+}
+
+.user-item.online .user-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+.user-name {
+  color: #1e293b;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: 0;
@@ -915,5 +977,9 @@ button:disabled {
 
   .message-menu-button {
     opacity: 1;
+  }
+
+  .users-sidebar {
+    display: none;
   }
 }
