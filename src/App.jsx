@@ -862,7 +862,15 @@ export default function App() {
           throw new Error(`Upload failed (${response.status}): ${errorBody}`);
         }
 
-        return response.json();
+        const data = await response.json();
+        return {
+          name: data.file.name,
+          type: data.file.mimeType,
+          url: data.file.webViewLink,
+          viewUrl: data.file.webViewLink,
+          downloadUrl: data.file.webContentLink,
+          path: data.file.id
+        };
       })
     );
   }
