@@ -877,6 +877,8 @@ export default function App() {
       }
     );
 
+    console.log(`https://api.imgbb.com/1/upload?key=${import.meta.env.VITE_IMGBB_API_KEY}`)
+
     if (!response.ok) {
       const errorBody = await response.text();
       throw new Error(`Upload failed (${response.status}): ${errorBody}`);
