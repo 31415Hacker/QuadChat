@@ -888,10 +888,9 @@ export default function App() {
     formData.append("fileToUpload", fileToUpload);
 
     const response = await fetch(
-      "https://cors-anywhere.herokuapp.com/https://catbox.moe/user/api.php",
+      "https://wandering-glade-2384.ariqipraditya.workers.dev",
       {
         method: "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
         body: formData
       }
     );
