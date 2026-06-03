@@ -327,7 +327,6 @@ export default function App() {
   const [settingsPassword, setSettingsPassword] = useState("");
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const [extractedAttachments, setExtractedAttachments] = useState({});
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const endRef = useRef(null);
@@ -335,7 +334,6 @@ export default function App() {
   const pendingFilesRef = useRef([]);
   const knownMessageIdsRef = useRef(new Set());
   const hasLoadedMessagesRef = useRef(false);
-  const extractedRef = useRef({});
 
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserAdmin =
@@ -491,56 +489,8 @@ export default function App() {
   }, [messages]);
 
   useEffect(() => {
-    if (messages.length === 0) return;
-
-    let cancelled = false;
-
-    for (const item of messages) {
-      if (
-        !item.attachments ||
-        item.attachments.length === 0 ||
-        !item.attachments[0].containedFiles ||
-        extractedAttachments[item.id]
-      ) {
-        continue;
-      }
-
-      const att = item.attachments[0];
-
-      (async () => {
-        try {
-          const response = await fetch(att.url);
-          const blob = await response.blob();
-          const zip = await JSZip.loadAsync(blob);
-          const files = await Promise.all(
-            att.containedFiles.map(async (cf) => {
-              const fileBlob = await zip.file(cf.name).async("blob");
-              return { ...cf, blobUrl: URL.createObjectURL(fileBlob) };
-            })
-          );
-          if (!cancelled) {
-            setExtractedAttachments((prev) => ({ ...prev, [item.id]: files }));
-          }
-        } catch (e) {
-          console.error("Extract failed:", item.id, e);
-        }
-      })();
-
-      break;
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [messages]);
-
-  useEffect(() => {
     pendingFilesRef.current = pendingFiles;
   }, [pendingFiles]);
-
-  useEffect(() => {
-    extractedRef.current = extractedAttachments;
-  }, [extractedAttachments]);
 
   useEffect(
     () => () => {
@@ -549,12 +499,6 @@ export default function App() {
           URL.revokeObjectURL(pendingFile.previewUrl);
         }
       });
-
-      for (const files of Object.values(extractedRef.current)) {
-        for (const file of files) {
-          URL.revokeObjectURL(file.blobUrl);
-        }
-      }
     },
     []
   );
@@ -592,9 +536,11 @@ export default function App() {
           const notification = new Notification(`QuadChat: ${senderName}`, {
             body: getReplyPreview(
               item.text ||
-                (item.attachments?.length > 0
-                  ? "Sent an attachment"
-                  : "Sent a message")
+                (item.isFile
+                  ? "Sent a file"
+                  : item.attachments?.length > 0
+                    ? "Sent an attachment"
+                    : "Sent a message")
             ),
             icon: notificationIcon,
             tag: `quadchat-${item.id}`
@@ -920,29 +866,31 @@ export default function App() {
     });
   }
 
-  async function uploadPendingFiles() {
-    if (!sessionUserId || pendingFiles.length === 0) {
-      return [];
+  const blockedExtensions = [
+    ".exe", ".msi", ".bat", ".com", ".cmd", ".vbs",
+    ".ps1", ".scr", ".cpl", ".jar", ".dll", ".ocx", ".sys"
+  ];
+
+  async function uploadToCatbox(file) {
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+
+    let fileToUpload = file;
+
+    if (blockedExtensions.includes(ext)) {
+      const zip = new JSZip();
+      zip.file(file.name, file);
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      fileToUpload = new File([zipBlob], file.name + ".zip", { type: "application/zip" });
     }
-
-    const zip = new JSZip();
-    const containedFiles = [];
-
-    for (const pendingFile of pendingFiles) {
-      zip.file(pendingFile.file.name, pendingFile.file);
-      containedFiles.push({
-        name: pendingFile.file.name,
-        type: pendingFile.file.type || "application/octet-stream"
-      });
-    }
-
-    const zipBlob = await zip.generateAsync({ type: "blob" });
 
     const formData = new FormData();
     formData.append("reqtype", "fileupload");
-    formData.append("fileToUpload", zipBlob, "files.zip");
+    formData.append("fileToUpload", fileToUpload);
 
-    const response = await fetch("https://catbox.moe/user/api.php", {
+    const proxyUrl = "https://api.allorigins.win/raw?url=" +
+      encodeURIComponent("https://catbox.moe/user/api.php");
+
+    const response = await fetch(proxyUrl, {
       method: "POST",
       body: formData
     });
@@ -952,18 +900,7 @@ export default function App() {
       throw new Error(`Upload failed (${response.status}): ${errorBody}`);
     }
 
-    const url = (await response.text()).trim();
-
-    return [
-      {
-        name: "files.zip",
-        type: "application/zip",
-        url,
-        viewUrl: url,
-        downloadUrl: url,
-        containedFiles
-      }
-    ];
+    return (await response.text()).trim();
   }
 
   function findCommandTargets(targetName) {
@@ -1111,25 +1048,37 @@ export default function App() {
         return;
       }
 
-      const attachments = await uploadPendingFiles();
-
-      await addDoc(messagesRef, {
-        text: cleanMessage,
-        ...(commandResult?.metadata || {}),
-        ...(attachments.length > 0 ? { attachments } : {}),
-        ...(replyTo && !commandResult?.metadata
-          ? {
-              replyTo: {
-                id: replyTo.id,
-                text: replyTo.text,
-                userId: replyTo.userId,
-                senderName: replyTo.senderName
+      if (cleanMessage) {
+        await addDoc(messagesRef, {
+          text: cleanMessage,
+          ...(commandResult?.metadata || {}),
+          ...(replyTo && !commandResult?.metadata
+            ? {
+                replyTo: {
+                  id: replyTo.id,
+                  text: replyTo.text,
+                  userId: replyTo.userId,
+                  senderName: replyTo.senderName
+                }
               }
-            }
-          : {}),
-        userId: sessionUserId,
-        createdAt: serverTimestamp()
-      });
+            : {}),
+          userId: sessionUserId,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      for (const pendingFile of pendingFiles) {
+        const url = await uploadToCatbox(pendingFile.file);
+        await addDoc(messagesRef, {
+          text: url,
+          isFile: true,
+          fileName: pendingFile.file.name,
+          fileType: pendingFile.file.type || "application/octet-stream",
+          userId: sessionUserId,
+          createdAt: serverTimestamp()
+        });
+      }
+
       setMessage("");
       setReplyTo(null);
       setPendingFiles((currentFiles) => {
@@ -1422,75 +1371,46 @@ export default function App() {
                         <span>{item.replyTo.text || "Message unavailable"}</span>
                       </div>
                     ) : null}
-                    {item.text ? (
+                    {item.isFile ? (
+                      <a
+                        className="message-file-link"
+                        href={item.text}
+                        key={item.id}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <FileText size={18} />
+                        <span>{item.fileName || item.text}</span>
+                      </a>
+                    ) : item.text ? (
                       <p>
                         {renderMessageText(item.text, profiles, item.adminCommand)}
                       </p>
                     ) : null}
                     {item.attachments?.length > 0 ? (
                       <div className="message-attachments">
-                        {item.attachments[0].containedFiles ? (
-                          extractedAttachments[item.id]
-                            ? extractedAttachments[item.id].map((file) =>
-                                file.type?.startsWith("image/") ? (
-                                  <a
-                                    className="message-image-link"
-                                    href={file.blobUrl}
-                                    key={file.name}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    <img src={file.blobUrl} alt={file.name} />
-                                  </a>
-                                ) : (
-                                  <a
-                                    className="message-file-link"
-                                    href={file.blobUrl}
-                                    key={file.name}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    <FileText size={18} />
-                                    <span>{file.name}</span>
-                                  </a>
-                                )
-                              )
-                            : item.attachments.map((attachment) => (
-                                <a
-                                  className="message-file-link"
-                                  href={attachment.url}
-                                  key={attachment.url}
-                                  rel="noreferrer"
-                                  target="_blank"
-                                >
-                                  <FileText size={18} />
-                                  <span>{attachment.name}</span>
-                                </a>
-                              ))
-                        ) : (
-                          item.attachments.map((attachment) =>
-                            attachment.type?.startsWith("image/") ? (
-                              <a
-                                className="message-image-link"
-                                href={attachment.url}
-                                key={attachment.path || attachment.url}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                <img src={attachment.url} alt={attachment.name} />
-                              </a>
-                            ) : (
-                              <a
-                                className="message-file-link"
-                                href={attachment.viewUrl || attachment.url}
-                                key={attachment.path || attachment.url}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                <FileText size={18} />
-                                <span>{attachment.name}</span>
-                              </a>
-                            )
+                        {item.attachments.map((attachment) =>
+                          attachment.type?.startsWith("image/") ? (
+                            <a
+                              className="message-image-link"
+                              href={attachment.url}
+                              key={attachment.path || attachment.url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              <img src={attachment.url} alt={attachment.name} />
+                            </a>
+                          ) : (
+                            <a
+                              className="message-file-link"
+                              href={attachment.viewUrl || attachment.url}
+                              key={attachment.path || attachment.url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              <FileText size={18} />
+                              <span>{attachment.name}</span>
+                            </a>
                           )
                         )}
                       </div>
