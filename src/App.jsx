@@ -54,7 +54,6 @@ import {
   Users
 } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
-import JSZip from "jszip";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
@@ -866,29 +865,12 @@ export default function App() {
     });
   }
 
-  const blockedExtensions = [
-    ".exe", ".msi", ".bat", ".com", ".cmd", ".vbs",
-    ".ps1", ".scr", ".cpl", ".jar", ".dll", ".ocx", ".sys"
-  ];
-
-  async function uploadToCatbox(file) {
-    const ext = "." + file.name.split(".").pop().toLowerCase();
-
-    let fileToUpload = file;
-
-    if (blockedExtensions.includes(ext)) {
-      const zip = new JSZip();
-      zip.file(file.name, file);
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      fileToUpload = new File([zipBlob], file.name + ".zip", { type: "application/zip" });
-    }
-
+  async function uploadToImgBB(file) {
     const formData = new FormData();
-    formData.append("reqtype", "fileupload");
-    formData.append("fileToUpload", fileToUpload);
+    formData.append("image", file);
 
     const response = await fetch(
-      "https://wandering-glade-2384.ariqipraditya.workers.dev",
+      `https://api.imgbb.com/1/upload?key=${import.meta.env.VITE_IMGBB_API_KEY}`,
       {
         method: "POST",
         body: formData
@@ -900,7 +882,8 @@ export default function App() {
       throw new Error(`Upload failed (${response.status}): ${errorBody}`);
     }
 
-    return (await response.text()).trim();
+    const result = await response.json();
+    return result.data.url;
   }
 
   function findCommandTargets(targetName) {
@@ -1068,7 +1051,7 @@ export default function App() {
       }
 
       for (const pendingFile of pendingFiles) {
-        const url = await uploadToCatbox(pendingFile.file);
+        const url = await uploadToImgBB(pendingFile.file);
         await addDoc(messagesRef, {
           text: url,
           isFile: true,
@@ -1373,14 +1356,15 @@ export default function App() {
                     ) : null}
                     {item.isFile ? (
                       <a
-                        className="message-file-link"
+                        className="message-image-link"
                         href={item.text}
-                        key={item.id}
                         rel="noreferrer"
                         target="_blank"
                       >
-                        <FileText size={18} />
-                        <span>{item.fileName || item.text}</span>
+                        <img
+                          src={item.text}
+                          alt={item.fileName || "Uploaded image"}
+                        />
                       </a>
                     ) : item.text ? (
                       <p>
