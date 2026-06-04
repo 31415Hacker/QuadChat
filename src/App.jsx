@@ -40,6 +40,7 @@ import {
   CircleUserRound,
   CornerDownLeft,
   FileText,
+  Film,
   MoreVertical,
   Plus,
   X,
@@ -203,6 +204,17 @@ function getMuteLabel(profile) {
   }).format(mutedUntilDate)}.`;
 }
 
+const VIDEO_EXT_REGEX = /\.(mp4|webm|mov|avi|mkv|ogg|wmv|flv)$/i;
+
+function isVideoUrl(str) {
+  try {
+    const url = new URL(str);
+    return VIDEO_EXT_REGEX.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function renderMessageText(text, profiles, isAdminCommand = false) {
   if (!text) {
     return null;
@@ -217,21 +229,29 @@ function renderMessageText(text, profiles, isAdminCommand = false) {
   );
 
   return text.split(/(\s+)/).map((part, index) => {
-    if (!part.startsWith("@")) {
-      return part;
+    if (part.startsWith("@")) {
+      const mention = normalizeName(part);
+      const isMention =
+        mention === "everyone" || knownNames.some((name) => name === mention);
+
+      return isMention ? (
+        <span className="mention" key={`${part}-${index}`}>
+          {part}
+        </span>
+      ) : (
+        part
+      );
     }
 
-    const mention = normalizeName(part);
-    const isMention =
-      mention === "everyone" || knownNames.some((name) => name === mention);
+    if (isVideoUrl(part)) {
+      return (
+        <video controls className="message-video" key={`${part}-${index}`}>
+          <source src={part} />
+        </video>
+      );
+    }
 
-    return isMention ? (
-      <span className="mention" key={`${part}-${index}`}>
-        {part}
-      </span>
-    ) : (
-      part
-    );
+    return part;
   });
 }
 
@@ -246,7 +266,9 @@ function getReplyPreview(text) {
 }
 
 function getFilePreview(file) {
-  return file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
+  return file.type.startsWith("image/") || file.type.startsWith("video/")
+    ? URL.createObjectURL(file)
+    : "";
 }
 
 async function saveUserProfile(firebaseUser, displayNameOverride) {
@@ -1335,17 +1357,29 @@ export default function App() {
                       </div>
                     ) : null}
                     {item.isFile ? (
-                      <a
-                        className="message-image-link"
-                        href={item.text}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <img
-                          src={item.text}
-                          alt={item.fileName || "Uploaded image"}
-                        />
-                      </a>
+                      item.fileType?.startsWith("video/") ? (
+                        <video
+                          controls
+                          className="message-video"
+                        >
+                          <source
+                            src={item.text}
+                            type={item.fileType}
+                          />
+                        </video>
+                      ) : (
+                        <a
+                          className="message-image-link"
+                          href={item.text}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <img
+                            src={item.text}
+                            alt={item.fileName || "Uploaded image"}
+                          />
+                        </a>
+                      )
                     ) : item.text ? (
                       <p>
                         {renderMessageText(item.text, profiles, item.adminCommand)}
@@ -1364,6 +1398,17 @@ export default function App() {
                             >
                               <img src={attachment.url} alt={attachment.name} />
                             </a>
+                          ) : attachment.type?.startsWith("video/") ? (
+                            <video
+                              controls
+                              className="message-video"
+                              key={attachment.path || attachment.url}
+                            >
+                              <source
+                                src={attachment.url}
+                                type={attachment.type}
+                              />
+                            </video>
                           ) : (
                             <a
                               className="message-file-link"
@@ -1429,7 +1474,11 @@ export default function App() {
               {pendingFiles.map((pendingFile) => (
                 <div className="attachment-preview" key={pendingFile.id}>
                   {pendingFile.previewUrl ? (
-                    <img src={pendingFile.previewUrl} alt="" />
+                    pendingFile.file.type.startsWith("video/") ? (
+                      <Film size={18} />
+                    ) : (
+                      <img src={pendingFile.previewUrl} alt="" />
+                    )
                   ) : (
                     <FileText size={22} />
                   )}

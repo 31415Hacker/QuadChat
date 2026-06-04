@@ -605,6 +605,14 @@ button:disabled {
   object-fit: contain;
 }
 
+.message-video {
+  border-radius: 8px;
+  display: block;
+  max-height: 320px;
+  max-width: 100%;
+  width: 100%;
+}
+
 .message-file-link {
   align-items: center;
   background: rgba(255, 255, 255, 0.62);
@@ -805,6 +813,11 @@ button:disabled {
   border-radius: 6px;
   height: 38px;
   object-fit: cover;
+  width: 38px;
+}
+
+.attachment-preview svg {
+  height: 38px;
   width: 38px;
 }
 
