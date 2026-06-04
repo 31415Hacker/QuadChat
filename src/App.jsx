@@ -41,7 +41,10 @@ import {
   CornerDownLeft,
   FileText,
   Film,
+  Mic,
   MoreVertical,
+  Pause,
+  Play,
   Plus,
   X,
   Settings,
@@ -67,6 +70,7 @@ const notificationsEnabledKey = "quadchat:notificationsEnabled";
 const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 const maxAttachments = 4;
 const maxAttachmentBytes = 10 * 1024 * 1024;
+const supportsRecording = typeof MediaRecorder !== "undefined";
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -271,6 +275,12 @@ function getFilePreview(file) {
     : "";
 }
 
+function formatDuration(seconds) {
+  const min = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  return `${min}:${sec.toString().padStart(2, "0")}`;
+}
+
 async function saveUserProfile(firebaseUser, displayNameOverride) {
   if (!firebaseUser) {
     return;
@@ -341,6 +351,9 @@ export default function App() {
     "Notification" in window ? Notification.permission : "unsupported"
   );
   const [isSending, setIsSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingPaused, setIsRecordingPaused] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -354,6 +367,10 @@ export default function App() {
   const endRef = useRef(null);
   const fileInputRef = useRef(null);
   const pendingFilesRef = useRef([]);
+  const mediaRecorderRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const shouldSendRef = useRef(false);
   const knownMessageIdsRef = useRef(new Set());
   const hasLoadedMessagesRef = useRef(false);
 
@@ -1004,8 +1021,140 @@ export default function App() {
     };
   }
 
+  async function sendAudioRecording(blob) {
+    const file = new File([blob], "Voice message.webm", {
+      type: "audio/webm"
+    });
+
+    setIsSending(true);
+    setError("");
+
+    try {
+      const url = await uploadToCloudinary(file);
+      await addDoc(messagesRef, {
+        text: url,
+        isFile: true,
+        fileName: "Voice message.webm",
+        fileType: "audio/webm",
+        userId: sessionUserId,
+        createdAt: serverTimestamp()
+      });
+    } catch (firebaseError) {
+      console.error("QuadChat audio upload failed:", firebaseError);
+      setError(
+        firebaseError.code === "permission-denied"
+          ? "Firestore rules blocked this upload."
+          : firebaseError.message
+      );
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Voice recording is not supported in this browser.");
+      return;
+    }
+
+    setError("");
+    recordingChunksRef.current = [];
+    setRecordingDuration(0);
+    setIsRecordingPaused(false);
+
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm";
+        const recorder = new MediaRecorder(stream, { mimeType });
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recordingChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(recordingChunksRef.current, {
+            type: "audio/webm"
+          });
+          stream.getTracks().forEach((track) => track.stop());
+
+          if (shouldSendRef.current) {
+            sendAudioRecording(blob);
+          }
+        };
+
+        recorder.onerror = () => {
+          setError("Recording failed. Please try again.");
+          setIsRecording(false);
+          setIsRecordingPaused(false);
+          stream.getTracks().forEach((track) => track.stop());
+        };
+
+        recorder.start(250);
+        setIsRecording(true);
+
+        recordingTimerRef.current = setInterval(() => {
+          setRecordingDuration((prev) => prev + 1);
+        }, 1000);
+      })
+      .catch(() => {
+        setError(
+          "Microphone access denied. Please allow microphone permissions."
+        );
+      });
+  }
+
+  function pauseRecording() {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.pause();
+      setIsRecordingPaused(true);
+      clearInterval(recordingTimerRef.current);
+    }
+  }
+
+  function resumeRecording() {
+    if (mediaRecorderRef.current?.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setIsRecordingPaused(false);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    }
+  }
+
+  function stopRecording(sendAfter = false) {
+    if (
+      mediaRecorderRef.current &&
+      (mediaRecorderRef.current.state === "recording" ||
+        mediaRecorderRef.current.state === "paused")
+    ) {
+      shouldSendRef.current = sendAfter;
+      mediaRecorderRef.current.stop();
+      clearInterval(recordingTimerRef.current);
+    }
+
+    setIsRecording(false);
+    setIsRecordingPaused(false);
+  }
+
+  function cancelRecording() {
+    stopRecording(false);
+    setRecordingDuration(0);
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
+
+    if (isRecording || isRecordingPaused) {
+      stopRecording(true);
+      return;
+    }
+
     const cleanMessage = message.trim();
     const hasAttachments = pendingFiles.length > 0;
 
@@ -1367,6 +1516,17 @@ export default function App() {
                             type={item.fileType}
                           />
                         </video>
+                      ) : item.fileType?.startsWith("audio/") ? (
+                        <audio
+                          controls
+                          className="message-audio"
+                          src={item.text}
+                        >
+                          <source
+                            src={item.text}
+                            type={item.fileType}
+                          />
+                        </audio>
                       ) : (
                         <a
                           className="message-image-link"
@@ -1495,17 +1655,53 @@ export default function App() {
               ))}
             </div>
           ) : null}
-          <div className="composer-row">
-            <button
-              aria-label="Attach files"
-              className="attach-button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Attach files"
-              type="button"
-              disabled={pendingFiles.length >= maxAttachments || isSending}
-            >
-              <Plus size={22} />
-            </button>
+          <div
+            className="composer-row"
+            style={
+              isRecording || isRecordingPaused
+                ? { gridTemplateColumns: "50px 1fr 50px" }
+                : { gridTemplateColumns: "50px 50px 1fr 50px" }
+            }
+          >
+            {isRecording || isRecordingPaused ? (
+              <button
+                type="button"
+                className="recording-cancel-btn"
+                onClick={cancelRecording}
+                title="Delete recording"
+                aria-label="Delete recording"
+                disabled={isSending}
+              >
+                <Trash2 size={20} />
+              </button>
+            ) : (
+              <>
+                <button
+                  aria-label="Attach files"
+                  className="attach-button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files"
+                  type="button"
+                  disabled={
+                    pendingFiles.length >= maxAttachments || isSending
+                  }
+                >
+                  <Plus size={22} />
+                </button>
+                {supportsRecording ? (
+                  <button
+                    aria-label="Record voice message"
+                    className="mic-button"
+                    onClick={startRecording}
+                    title="Record voice message"
+                    type="button"
+                    disabled={isSending}
+                  >
+                    <Mic size={22} />
+                  </button>
+                ) : null}
+              </>
+            )}
             <input
               ref={fileInputRef}
               className="file-input"
@@ -1513,20 +1709,55 @@ export default function App() {
               multiple
               onChange={(event) => addPendingFiles(event.target.files)}
             />
-            <input
-              type="text"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onPaste={handleComposerPaste}
-              placeholder="Type a message"
-              maxLength={500}
-            />
+            {isRecording || isRecordingPaused ? (
+              <div className="recording-bar">
+                <span className="recording-dot" />
+                <span className="recording-timer">
+                  {formatDuration(recordingDuration)}
+                </span>
+                <button
+                  type="button"
+                  className="recording-pause-btn"
+                  onClick={
+                    isRecordingPaused ? resumeRecording : pauseRecording
+                  }
+                  title={
+                    isRecordingPaused
+                      ? "Resume recording"
+                      : "Pause recording"
+                  }
+                  aria-label={
+                    isRecordingPaused
+                      ? "Resume recording"
+                      : "Pause recording"
+                  }
+                >
+                  {isRecordingPaused ? (
+                    <Play size={18} />
+                  ) : (
+                    <Pause size={18} />
+                  )}
+                </button>
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                onPaste={handleComposerPaste}
+                placeholder="Type a message"
+                maxLength={500}
+              />
+            )}
             <button
               type="submit"
               aria-label="Send message"
               title="Send message"
               disabled={
-                (!message.trim() && pendingFiles.length === 0) ||
+                (!message.trim() &&
+                  pendingFiles.length === 0 &&
+                  !isRecording &&
+                  !isRecordingPaused) ||
                 !activeName ||
                 isSending ||
                 !sessionUserId ||

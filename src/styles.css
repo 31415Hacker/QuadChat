@@ -870,10 +870,88 @@ button:disabled {
   transform: none;
 }
 
+.mic-button {
+  background: #eef5f1;
+  border: 1px solid #d9e5df;
+  color: #173f4f;
+}
+
+.mic-button:hover:not(:disabled) {
+  background: #dfeae4;
+  transform: none;
+}
+
 .composer-row button {
   height: 48px;
   padding: 0;
   width: 50px;
+}
+
+.recording-bar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  height: 48px;
+  padding: 0 8px;
+}
+
+.recording-dot {
+  animation: blink 1s step-end infinite;
+  background: #dc2626;
+  border-radius: 999px;
+  flex: 0 0 10px;
+  height: 10px;
+  width: 10px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.recording-timer {
+  color: #dc2626;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 36px;
+}
+
+.recording-pause-btn {
+  background: transparent;
+  border: 0;
+  color: #173f4f;
+  height: 36px;
+  margin-left: auto;
+  min-height: 36px;
+  padding: 0;
+  width: 36px;
+}
+
+.recording-pause-btn:hover:not(:disabled) {
+  background: #eef5f1;
+  transform: none;
+}
+
+.recording-cancel-btn {
+  background: transparent;
+  border: 0;
+  color: #63756a;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  width: 50px;
+}
+
+.recording-cancel-btn:hover:not(:disabled) {
+  color: #dc2626;
+  transform: none;
+}
+
+.message-audio {
+  display: block;
+  max-width: 100%;
+  width: 100%;
 }
 
 .chat-body {
