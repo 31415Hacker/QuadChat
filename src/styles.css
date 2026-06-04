@@ -527,6 +527,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 20px;
 }

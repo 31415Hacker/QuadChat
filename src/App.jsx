@@ -590,7 +590,7 @@ export default function App() {
 
   useEffect(() => {
     if (isNearBottomRef.current) {
-      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      endRef.current?.scrollIntoView({ block: "end" });
     }
   }, [messages]);
 
