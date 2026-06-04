@@ -54,6 +54,7 @@ import {
   Users
 } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
+import { uploadToCloudinary } from "../cloudinary.js";
 
 const messagesRef = collection(db, "messages");
 const usersRef = collection(db, "users");
@@ -865,29 +866,6 @@ export default function App() {
     });
   }
 
-  async function uploadToImgBB(file) {
-    const formData = new FormData();
-    formData.append("image", file, file.name);
-
-    const response = await fetch(
-      `https://api.imgbb.com/1/upload?key=${import.meta.env.VITE_IMGBB_API_KEY}`,
-      {
-        method: "POST",
-        body: formData
-      }
-    );
-
-    console.log(import.meta.env.VITE_IMGBB_API_KEY);
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Upload failed (${response.status}): ${errorBody}`);
-    }
-
-    const result = await response.json();
-    return result.data.url;
-  }
-
   function findCommandTargets(targetName) {
     const normalizedTarget = normalizeName(targetName);
     const allProfiles = Object.values(profiles);
@@ -1053,7 +1031,7 @@ export default function App() {
       }
 
       for (const pendingFile of pendingFiles) {
-        const url = await uploadToImgBB(pendingFile.file);
+        const url = await uploadToCloudinary(pendingFile.file);
         await addDoc(messagesRef, {
           text: url,
           isFile: true,
