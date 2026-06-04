@@ -70,6 +70,7 @@ const notificationsEnabledKey = "quadchat:notificationsEnabled";
 const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 const maxAttachments = 4;
 const maxAttachmentBytes = 10 * 1024 * 1024;
+const PAGE_SIZE = 30;
 const supportsRecording = typeof MediaRecorder !== "undefined";
 
 function formatTime(timestamp) {
@@ -364,13 +365,24 @@ export default function App() {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const endRef = useRef(null);
+  const sentinelRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const pendingFilesRef = useRef([]);
   const mediaRecorderRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const shouldSendRef = useRef(false);
+  const oldestDocSnapRef = useRef(null);
+  const newestDocSnapRef = useRef(null);
+  const newMessagesUnsubRef = useRef(null);
+  const hasMoreMessagesRef = useRef(true);
+  const isLoadingMoreRef = useRef(false);
+  const scrollSaveRef = useRef(null);
+  const isNearBottomRef = useRef(true);
   const knownMessageIdsRef = useRef(new Set());
   const hasLoadedMessagesRef = useRef(false);
 
@@ -497,35 +509,131 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setMessages([]);
-      return undefined;
+      setHasMoreMessages(true);
+      hasMoreMessagesRef.current = true;
+      oldestDocSnapRef.current = null;
+      newestDocSnapRef.current = null;
+      if (newMessagesUnsubRef.current) {
+        newMessagesUnsubRef.current();
+        newMessagesUnsubRef.current = null;
+      }
+      return;
     }
 
-    const recentMessagesQuery = query(
-      messagesRef,
-      orderBy("createdAt", "asc")
-    );
+    let cancelled = false;
 
-    const unsubscribe = onSnapshot(
-      recentMessagesQuery,
-      (snapshot) => {
-        setMessages(
-          snapshot.docs.map((messageDoc) => ({
-            id: messageDoc.id,
-            ...messageDoc.data()
-          }))
+    async function loadInitialMessages() {
+      const initialQ = query(
+        messagesRef,
+        orderBy("createdAt", "asc"),
+        limitToLast(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(initialQ);
+
+      if (cancelled) return;
+
+      const msgs = snapshot.docs.map((messageDoc) => ({
+        id: messageDoc.id,
+        ...messageDoc.data()
+      }));
+
+      setMessages(msgs);
+      const hasMore = snapshot.docs.length >= PAGE_SIZE;
+      setHasMoreMessages(hasMore);
+      hasMoreMessagesRef.current = hasMore;
+      oldestDocSnapRef.current = snapshot.docs[0] || null;
+      newestDocSnapRef.current =
+        snapshot.docs[snapshot.docs.length - 1] || null;
+
+      if (newestDocSnapRef.current) {
+        const newQuery = query(
+          messagesRef,
+          orderBy("createdAt", "asc"),
+          startAfter(newestDocSnapRef.current)
         );
-      },
-      (firebaseError) => {
-        setError(firebaseError.message);
-      }
-    );
 
-    return unsubscribe;
+        newMessagesUnsubRef.current = onSnapshot(
+          newQuery,
+          (snap) => {
+            if (cancelled) return;
+
+            snap.docChanges().forEach((change) => {
+              if (change.type === "added") {
+                const msg = {
+                  id: change.doc.id,
+                  ...change.doc.data()
+                };
+                setMessages((prev) => [...prev, msg]);
+                newestDocSnapRef.current = change.doc;
+              }
+            });
+          },
+          (firebaseError) => {
+            if (!cancelled) setError(firebaseError.message);
+          }
+        );
+      }
+    }
+
+    loadInitialMessages();
+
+    return () => {
+      cancelled = true;
+
+      if (newMessagesUnsubRef.current) {
+        newMessagesUnsubRef.current();
+        newMessagesUnsubRef.current = null;
+      }
+    };
   }, [user]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (isNearBottomRef.current) {
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, [messages]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    function handleScroll() {
+      const threshold = 150;
+      isNearBottomRef.current =
+        container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoadingMore && scrollSaveRef.current && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const heightDiff = container.scrollHeight - scrollSaveRef.current.scrollHeight;
+      container.scrollTop = scrollSaveRef.current.scrollTop + heightDiff;
+      scrollSaveRef.current = null;
+    }
+  }, [isLoadingMore]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const container = messagesContainerRef.current;
+    if (!sentinel || !container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMoreMessages();
+        }
+      },
+      { root: container, threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreMessages, messages]);
 
   useEffect(() => {
     pendingFilesRef.current = pendingFiles;
@@ -1147,6 +1255,55 @@ export default function App() {
     setRecordingDuration(0);
   }
 
+  async function loadMoreMessages() {
+    if (isLoadingMoreRef.current || !hasMoreMessagesRef.current || !oldestDocSnapRef.current) return;
+
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+
+    if (messagesContainerRef.current) {
+      scrollSaveRef.current = {
+        scrollTop: messagesContainerRef.current.scrollTop,
+        scrollHeight: messagesContainerRef.current.scrollHeight
+      };
+    }
+
+    try {
+      const olderQuery = query(
+        messagesRef,
+        orderBy("createdAt", "desc"),
+        startAfter(oldestDocSnapRef.current),
+        limit(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(olderQuery);
+
+      if (snapshot.empty) {
+        setHasMoreMessages(false);
+        hasMoreMessagesRef.current = false;
+        return;
+      }
+
+      const olderMsgs = snapshot.docs
+        .reverse()
+        .map((messageDoc) => ({
+          id: messageDoc.id,
+          ...messageDoc.data()
+        }));
+
+      setMessages((prev) => [...olderMsgs, ...prev]);
+      oldestDocSnapRef.current = snapshot.docs[snapshot.docs.length - 1];
+      const hasMore = snapshot.docs.length >= PAGE_SIZE;
+      setHasMoreMessages(hasMore);
+      hasMoreMessagesRef.current = hasMore;
+    } catch (firebaseError) {
+      setError(firebaseError.message);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
 
@@ -1444,151 +1601,159 @@ export default function App() {
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
 
         <div className="chat-body">
-          <div className="messages" role="log" aria-live="polite">
-            {messages.length === 0 ? (
+          <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
+            {messages.length === 0 && !isLoadingMore ? (
               <div className="empty-state">
                 <MessageCircle size={42} />
                 <p>No messages yet. Say hello when you are ready.</p>
               </div>
             ) : (
-              messages.map((item) => {
-                const senderProfile = profiles[item.userId];
-                const senderName = getProfileName(senderProfile, item.name);
-                const isMine = item.userId === sessionUserId;
-                const isMenuOpen = openMessageMenuId === item.id;
+              <>
+                {isLoadingMore ? (
+                  <div className="loading-more">Loading older messages...</div>
+                ) : null}
+                {hasMoreMessages && !isLoadingMore ? (
+                  <div className="sentinel" ref={sentinelRef} />
+                ) : null}
+                {messages.map((item) => {
+                  const senderProfile = profiles[item.userId];
+                  const senderName = getProfileName(senderProfile, item.name);
+                  const isMine = item.userId === sessionUserId;
+                  const isMenuOpen = openMessageMenuId === item.id;
 
-                return (
-                  <article
-                    className={`message ${isMine ? "message-mine" : ""}`}
-                    key={item.id}
-                  >
-                    <div className="message-meta">
-                      <strong>{senderName}</strong>
-                      <span>{formatTime(item.createdAt)}</span>
-                    </div>
-                    <div className="message-actions">
-                      <button
-                        aria-expanded={isMenuOpen}
-                        aria-label="Message options"
-                        className="message-menu-button"
-                        onClick={() =>
-                          setOpenMessageMenuId(isMenuOpen ? "" : item.id)
-                        }
-                        title="Message options"
-                        type="button"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-                      {isMenuOpen ? (
-                        <div className="message-menu">
-                          <button
-                            onClick={() => {
-                              setReplyTo({
-                                id: item.id,
-                                text: getReplyPreview(item.text),
-                                userId: item.userId,
-                                senderName
-                              });
-                              setOpenMessageMenuId("");
-                            }}
-                            type="button"
-                          >
-                            <CornerDownLeft size={16} />
-                            <span>Reply</span>
-                          </button>
+                  return (
+                    <article
+                      className={`message ${isMine ? "message-mine" : ""}`}
+                      key={item.id}
+                    >
+                      <div className="message-meta">
+                        <strong>{senderName}</strong>
+                        <span>{formatTime(item.createdAt)}</span>
+                      </div>
+                      <div className="message-actions">
+                        <button
+                          aria-expanded={isMenuOpen}
+                          aria-label="Message options"
+                          className="message-menu-button"
+                          onClick={() =>
+                            setOpenMessageMenuId(isMenuOpen ? "" : item.id)
+                          }
+                          title="Message options"
+                          type="button"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {isMenuOpen ? (
+                          <div className="message-menu">
+                            <button
+                              onClick={() => {
+                                setReplyTo({
+                                  id: item.id,
+                                  text: getReplyPreview(item.text),
+                                  userId: item.userId,
+                                  senderName
+                                });
+                                setOpenMessageMenuId("");
+                              }}
+                              type="button"
+                            >
+                              <CornerDownLeft size={16} />
+                              <span>Reply</span>
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      {item.replyTo ? (
+                        <div className="reply-card">
+                          <strong>{item.replyTo.senderName || "Unknown"}</strong>
+                          <span>{item.replyTo.text || "Message unavailable"}</span>
                         </div>
                       ) : null}
-                    </div>
-                    {item.replyTo ? (
-                      <div className="reply-card">
-                        <strong>{item.replyTo.senderName || "Unknown"}</strong>
-                        <span>{item.replyTo.text || "Message unavailable"}</span>
-                      </div>
-                    ) : null}
-                    {item.isFile ? (
-                      item.fileType?.startsWith("video/") ? (
-                        <video
-                          controls
-                          className="message-video"
-                        >
-                          <source
+                      {item.isFile ? (
+                        item.fileType?.startsWith("video/") ? (
+                          <video
+                            controls
+                            className="message-video"
+                          >
+                            <source
+                              src={item.text}
+                              type={item.fileType}
+                            />
+                          </video>
+                        ) : item.fileType?.startsWith("audio/") ? (
+                          <audio
+                            controls
+                            className="message-audio"
                             src={item.text}
-                            type={item.fileType}
-                          />
-                        </video>
-                      ) : item.fileType?.startsWith("audio/") ? (
-                        <audio
-                          controls
-                          className="message-audio"
-                          src={item.text}
-                        >
-                          <source
-                            src={item.text}
-                            type={item.fileType}
-                          />
-                        </audio>
-                      ) : (
-                        <a
-                          className="message-image-link"
-                          href={item.text}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          <img
-                            src={item.text}
-                            alt={item.fileName || "Uploaded image"}
-                          />
-                        </a>
-                      )
-                    ) : item.text ? (
-                      <p>
-                        {renderMessageText(item.text, profiles, item.adminCommand)}
-                      </p>
-                    ) : null}
-                    {item.attachments?.length > 0 ? (
-                      <div className="message-attachments">
-                        {item.attachments.map((attachment) =>
-                          attachment.type?.startsWith("image/") ? (
-                            <a
-                              className="message-image-link"
-                              href={attachment.url}
-                              key={attachment.path || attachment.url}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              <img src={attachment.url} alt={attachment.name} />
-                            </a>
-                          ) : attachment.type?.startsWith("video/") ? (
-                            <video
-                              controls
-                              className="message-video"
-                              key={attachment.path || attachment.url}
-                            >
-                              <source
-                                src={attachment.url}
-                                type={attachment.type}
-                              />
-                            </video>
-                          ) : (
-                            <a
-                              className="message-file-link"
-                              href={attachment.viewUrl || attachment.url}
-                              key={attachment.path || attachment.url}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              <FileText size={18} />
-                              <span>{attachment.name}</span>
-                            </a>
-                          )
-                        )}
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })
+                          >
+                            <source
+                              src={item.text}
+                              type={item.fileType}
+                            />
+                          </audio>
+                        ) : (
+                          <a
+                            className="message-image-link"
+                            href={item.text}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <img
+                              src={item.text}
+                              alt={item.fileName || "Uploaded image"}
+                            />
+                          </a>
+                        )
+                      ) : item.text ? (
+                        <p>
+                          {renderMessageText(item.text, profiles, item.adminCommand)}
+                        </p>
+                      ) : null}
+                      {item.attachments?.length > 0 ? (
+                        <div className="message-attachments">
+                          {item.attachments.map((attachment) =>
+                            attachment.type?.startsWith("image/") ? (
+                              <a
+                                className="message-image-link"
+                                href={attachment.url}
+                                key={attachment.path || attachment.url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                <img src={attachment.url} alt={attachment.name} />
+                              </a>
+                            ) : attachment.type?.startsWith("video/") ? (
+                              <video
+                                controls
+                                className="message-video"
+                                key={attachment.path || attachment.url}
+                              >
+                                <source
+                                  src={attachment.url}
+                                  type={attachment.type}
+                                />
+                              </video>
+                            ) : (
+                              <a
+                                className="message-file-link"
+                                href={attachment.viewUrl || attachment.url}
+                                key={attachment.path || attachment.url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                <FileText size={18} />
+                                <span>{attachment.name}</span>
+                              </a>
+                            )
+                          )}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+                <div ref={endRef} />
+              </>
             )}
-            <div ref={endRef} />
           </div>
           <aside className="users-sidebar">
             <div className="users-sidebar-header">

@@ -954,6 +954,18 @@ button:disabled {
   width: 100%;
 }
 
+.sentinel {
+  height: 1px;
+  flex-shrink: 0;
+}
+
+.loading-more {
+  color: #63756a;
+  font-size: 0.85rem;
+  padding: 12px;
+  text-align: center;
+}
+
 .chat-body {
   display: flex;
   min-height: 0;
