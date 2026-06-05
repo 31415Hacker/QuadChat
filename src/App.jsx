@@ -590,12 +590,23 @@ export default function App() {
             if (cancelled) return;
 
             snap.docChanges().forEach((change) => {
+              if (change.type !== "added" && change.type !== "modified") {
+                return;
+              }
+              const msg = {
+                id: change.doc.id,
+                ...change.doc.data()
+              };
+              setMessages((prev) => {
+                const existingIndex = prev.findIndex((m) => m.id === msg.id);
+                if (existingIndex === -1) {
+                  return [...prev, msg];
+                }
+                const next = prev.slice();
+                next[existingIndex] = { ...next[existingIndex], ...msg };
+                return next;
+              });
               if (change.type === "added") {
-                const msg = {
-                  id: change.doc.id,
-                  ...change.doc.data()
-                };
-                setMessages((prev) => [...prev, msg]);
                 newestDocSnapRef.current = change.doc;
               }
             });
