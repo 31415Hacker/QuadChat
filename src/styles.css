@@ -236,6 +236,24 @@ input {
   padding: 12px;
 }
 
+.auth-footer-links {
+  align-items: center;
+  color: #63756a;
+  display: flex;
+  font-size: 0.85rem;
+  gap: 16px;
+  justify-content: center;
+}
+
+.auth-footer-links a {
+  color: #2b5876;
+  text-decoration: none;
+}
+
+.auth-footer-links a:hover {
+  text-decoration: underline;
+}
+
 input {
   background: white;
   border: 1px solid #cbd7cf;

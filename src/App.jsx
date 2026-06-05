@@ -1717,6 +1717,12 @@ export default function App() {
             <ShieldCheck size={18} />
             <span>Production mode: Firebase Authentication manages accounts.</span>
           </div>
+
+          <div className="auth-footer-links">
+            <a href="./privacy.html" rel="noopener noreferrer" target="_blank">
+              Privacy Policy
+            </a>
+          </div>
         </section>
       ) : (
       <section className="chat-panel" aria-label="QuadChat room">
