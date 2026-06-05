@@ -1088,6 +1088,75 @@ button:disabled {
   overflow: hidden;
 }
 
+.channel-tabs {
+  border-bottom: 1px solid #d9e5df;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 8px 8px 0;
+}
+
+.channel-tab {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: #52615b;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 5px;
+  justify-content: center;
+  min-width: 0;
+  padding: 8px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.channel-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-tab:hover {
+  background: #eef5f1;
+  color: #173f4f;
+}
+
+.channel-tab.active {
+  background: #ffffff;
+  border-color: #d9e5df;
+  color: #173f4f;
+}
+
+.channel-tab[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.channel-description {
+  align-items: center;
+  background: #eef5f1;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  color: #173f4f;
+  display: flex;
+  font-size: 0.8rem;
+  gap: 8px;
+  line-height: 1.4;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+}
+
+.channel-description svg {
+  flex: 0 0 auto;
+}
+
 .users-sidebar-header {
   align-items: center;
   color: #52615b;

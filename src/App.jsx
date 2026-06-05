@@ -46,6 +46,8 @@ import {
   FileText,
   Film,
   ImagePlus,
+  Lightbulb,
+  Megaphone,
   Mic,
   MicOff,
   MoreVertical,
@@ -72,6 +74,12 @@ const usersRef = collection(db, "users");
 const appSettingsRef = doc(db, "settings", "app");
 const googleProvider = new GoogleAuthProvider();
 const adminEmails = ["ariqipraditya@gmail.com"];
+const developerEmails = ["ariqipraditya@gmail.com"];
+const CHANNELS = [
+  { id: "group", label: "Group Chat" },
+  { id: "updates", label: "Updates" },
+  { id: "suggestions", label: "Suggestions" }
+];
 const sessionUserIdKey = "quadchat:sessionUserId";
 const notificationsEnabledKey = "quadchat:notificationsEnabled";
 const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
@@ -156,6 +164,14 @@ function hasUsernameSpaces(value) {
 
 function isAdminEmail(email) {
   return adminEmails.includes((email || "").toLowerCase());
+}
+
+function isDeveloperEmail(email) {
+  return developerEmails.includes((email || "").toLowerCase());
+}
+
+function messageChannel(item) {
+  return item?.channel || "group";
 }
 
 function parseDuration(value) {
@@ -306,6 +322,7 @@ async function saveUserProfile(
   const profileRef = doc(db, "users", firebaseUser.uid);
   const profileSnapshot = await getDoc(profileRef);
   const userIsAdmin = isAdminEmail(firebaseUser.email);
+  const userIsDeveloper = isDeveloperEmail(firebaseUser.email);
   const profileData = {
     id: firebaseUser.uid,
     displayName,
@@ -319,9 +336,14 @@ async function saveUserProfile(
     profileData.photoURL = firebaseUser.photoURL || "";
   }
 
-  if (!profileSnapshot.exists() || userIsAdmin) {
+  if (!profileSnapshot.exists() || userIsAdmin || userIsDeveloper) {
     profileData.isAdmin = userIsAdmin;
-    profileData.role = userIsAdmin ? "admin" : "member";
+    profileData.isDeveloper = userIsDeveloper;
+    profileData.role = userIsDeveloper
+      ? "developer"
+      : userIsAdmin
+        ? "admin"
+        : "member";
   }
 
   await setDoc(profileRef, profileData, { merge: true });
@@ -408,10 +430,19 @@ export default function App() {
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserAdmin =
     currentProfile?.isAdmin || isAdminEmail(user?.email || "");
+  const isCurrentUserDeveloper =
+    currentProfile?.isDeveloper || isDeveloperEmail(user?.email || "");
   const hasGoogleProvider = user?.providerData?.some(
     (provider) => provider.providerId === "google.com"
   );
   const muteLabel = getMuteLabel(currentProfile);
+  const [activeChannel, setActiveChannel] = useState("group");
+  const channelMessages = useMemo(
+    () => messages.filter((item) => messageChannel(item) === activeChannel),
+    [messages, activeChannel]
+  );
+  const canPostInActiveChannel =
+    activeChannel !== "updates" || isCurrentUserDeveloper;
 
   const activeName = useMemo(
     () => getProfileName(currentProfile, user?.displayName || user?.email || ""),
@@ -634,7 +665,7 @@ export default function App() {
     if (isNearBottomRef.current) {
       endRef.current?.scrollIntoView({ block: "end" });
     }
-  }, [messages]);
+  }, [channelMessages]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -1273,6 +1304,11 @@ export default function App() {
       type: "audio/webm"
     });
 
+    if (activeChannel === "updates" && !isCurrentUserDeveloper) {
+      setError("Only developers can post in Updates.");
+      return;
+    }
+
     setIsSending(true);
     setError("");
 
@@ -1284,6 +1320,7 @@ export default function App() {
         fileName: "Voice message.webm",
         fileType: "audio/webm",
         userId: sessionUserId,
+        channel: activeChannel,
         createdAt: serverTimestamp()
       });
     } catch (firebaseError) {
@@ -1451,6 +1488,11 @@ export default function App() {
       return;
     }
 
+    if (activeChannel === "updates" && !isCurrentUserDeveloper) {
+      setError("Only developers can post in Updates.");
+      return;
+    }
+
     const cleanMessage = message.trim();
     const hasAttachments = pendingFiles.length > 0;
 
@@ -1481,6 +1523,7 @@ export default function App() {
       if (cleanMessage) {
         await addDoc(messagesRef, {
           text: cleanMessage,
+          channel: activeChannel,
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
             ? {
@@ -1502,6 +1545,7 @@ export default function App() {
         await addDoc(messagesRef, {
           text: url,
           isFile: true,
+          channel: activeChannel,
           fileName: pendingFile.file.name,
           fileType: pendingFile.file.type || "application/octet-stream",
           userId: sessionUserId,
@@ -1682,9 +1726,15 @@ export default function App() {
             <div>
               <h1>QuadChat</h1>
               <p>
-                Signed in as {activeName} · {messages.length} messages
+                Signed in as {activeName} · {channelMessages.length} message
+                {channelMessages.length === 1 ? "" : "s"} in{" "}
+                {CHANNELS.find((c) => c.id === activeChannel)?.label}
               </p>
-              {isCurrentUserAdmin ? <span className="admin-badge">Admin</span> : null}
+              {isCurrentUserDeveloper ? (
+                <span className="admin-badge">Developer</span>
+              ) : isCurrentUserAdmin ? (
+                <span className="admin-badge">Admin</span>
+              ) : null}
             </div>
           </div>
           <button
@@ -1741,10 +1791,34 @@ export default function App() {
 
         <div className="chat-body">
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
-            {messages.length === 0 && !isLoadingMore ? (
+            {activeChannel === "suggestions" ? (
+              <div className="channel-description">
+                <Lightbulb size={16} />
+                <span>
+                  Share what you'd like to see in the next update. Anyone
+                  can post suggestions here.
+                </span>
+              </div>
+            ) : activeChannel === "updates" ? (
+              <div className="channel-description">
+                <Megaphone size={16} />
+                <span>
+                  {isCurrentUserDeveloper
+                    ? "You're a developer — post announcements and release notes here for everyone to read."
+                    : "Read official updates from the developer here. Only developers can post."}
+                </span>
+              </div>
+            ) : null}
+            {channelMessages.length === 0 && !isLoadingMore ? (
               <div className="empty-state">
                 <MessageCircle size={42} />
-                <p>No messages yet. Say hello when you are ready.</p>
+                <p>
+                  {activeChannel === "updates"
+                    ? "No updates yet."
+                    : activeChannel === "suggestions"
+                      ? "No suggestions yet. Be the first!"
+                      : "No messages yet. Say hello when you are ready."}
+                </p>
               </div>
             ) : (
               <>
@@ -1754,7 +1828,7 @@ export default function App() {
                 {hasMoreMessages && !isLoadingMore ? (
                   <div className="sentinel" ref={sentinelRef} />
                 ) : null}
-                {messages.map((item) => {
+                {channelMessages.map((item) => {
                   const senderProfile = profiles[item.userId];
                   const senderName = getProfileName(senderProfile, item.name);
                   const isMine = item.userId === sessionUserId;
@@ -1895,6 +1969,33 @@ export default function App() {
             )}
           </div>
           <aside className="users-sidebar">
+            <div
+              className="channel-tabs"
+              role="tablist"
+              aria-label="Channels"
+            >
+              {CHANNELS.map((channel) => (
+                <button
+                  aria-selected={activeChannel === channel.id}
+                  className={`channel-tab ${
+                    activeChannel === channel.id ? "active" : ""
+                  }`}
+                  key={channel.id}
+                  onClick={() => setActiveChannel(channel.id)}
+                  role="tab"
+                  type="button"
+                >
+                  {channel.id === "group" ? (
+                    <MessageCircle size={14} />
+                  ) : channel.id === "updates" ? (
+                    <Megaphone size={14} />
+                  ) : (
+                    <Lightbulb size={14} />
+                  )}
+                  <span>{channel.label}</span>
+                </button>
+              ))}
+            </div>
             <div className="users-sidebar-header">
               <Users size={16} />
               <span>Users</span>
@@ -2001,7 +2102,9 @@ export default function App() {
                   title="Attach files"
                   type="button"
                   disabled={
-                    pendingFiles.length >= maxAttachments || isSending
+                    pendingFiles.length >= maxAttachments ||
+                    isSending ||
+                    !canPostInActiveChannel
                   }
                 >
                   <Plus size={22} />
@@ -2013,7 +2116,7 @@ export default function App() {
                     onClick={startRecording}
                     title="Record voice message"
                     type="button"
-                    disabled={isSending}
+                    disabled={isSending || !canPostInActiveChannel}
                   >
                     <Mic size={22} />
                   </button>
@@ -2079,7 +2182,8 @@ export default function App() {
                 !activeName ||
                 isSending ||
                 !sessionUserId ||
-                (!isCurrentUserAdmin && isProfileMuted(currentProfile))
+                (!isCurrentUserAdmin && isProfileMuted(currentProfile)) ||
+                !canPostInActiveChannel
               }
             >
               <Send size={20} />
@@ -2101,7 +2205,11 @@ export default function App() {
                 <h2>Settings</h2>
                 <p>{user.email}</p>
                 <p>ID: {sessionUserId}</p>
-                {isCurrentUserAdmin ? <p>Role: admin</p> : null}
+                {isCurrentUserDeveloper ? (
+                  <p>Role: developer</p>
+                ) : isCurrentUserAdmin ? (
+                  <p>Role: admin</p>
+                ) : null}
               </div>
               <button
                 className="modal-close"
