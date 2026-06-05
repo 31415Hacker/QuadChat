@@ -54,9 +54,15 @@ input {
 }
 
 .chat-panel {
+  display: flex;
+  height: min(820px, calc(100vh - 56px));
+}
+
+.chat-main {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
-  height: min(820px, calc(100vh - 56px));
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .chat-header,

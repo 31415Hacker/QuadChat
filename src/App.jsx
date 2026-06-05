@@ -1720,7 +1720,38 @@ export default function App() {
         </section>
       ) : (
       <section className="chat-panel" aria-label="QuadChat room">
-        <header className="chat-header">
+        <aside className="channel-sidebar" aria-label="Channels">
+          <div
+            className="channel-tabs"
+            role="tablist"
+            aria-label="Channels"
+          >
+            {CHANNELS.map((channel) => (
+              <button
+                aria-selected={activeChannel === channel.id}
+                className={`channel-tab ${
+                  activeChannel === channel.id ? "active" : ""
+                }`}
+                key={channel.id}
+                onClick={() => setActiveChannel(channel.id)}
+                role="tab"
+                type="button"
+                title={channel.label}
+              >
+                {channel.id === "group" ? (
+                  <MessageCircle size={18} />
+                ) : channel.id === "updates" ? (
+                  <Megaphone size={18} />
+                ) : (
+                  <Lightbulb size={18} />
+                )}
+                <span>{channel.label}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+        <div className="chat-main">
+          <header className="chat-header">
           <div className="chat-title">
             <div className="brand-mark" aria-hidden="true">
               <MessageCircle size={26} strokeWidth={2.3} />
@@ -1792,36 +1823,6 @@ export default function App() {
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
 
         <div className="chat-body">
-          <aside className="channel-sidebar" aria-label="Channels">
-            <div
-              className="channel-tabs"
-              role="tablist"
-              aria-label="Channels"
-            >
-              {CHANNELS.map((channel) => (
-                <button
-                  aria-selected={activeChannel === channel.id}
-                  className={`channel-tab ${
-                    activeChannel === channel.id ? "active" : ""
-                  }`}
-                  key={channel.id}
-                  onClick={() => setActiveChannel(channel.id)}
-                  role="tab"
-                  type="button"
-                  title={channel.label}
-                >
-                  {channel.id === "group" ? (
-                    <MessageCircle size={18} />
-                  ) : channel.id === "updates" ? (
-                    <Megaphone size={18} />
-                  ) : (
-                    <Lightbulb size={18} />
-                  )}
-                  <span>{channel.label}</span>
-                </button>
-              ))}
-            </div>
-          </aside>
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
             {activeChannel === "suggestions" ? (
               <div className="channel-description">
@@ -2195,6 +2196,7 @@ export default function App() {
             </button>
           </div>
         </form>
+        </div>
       </section>
       )}
       {isSettingsOpen && user ? (
