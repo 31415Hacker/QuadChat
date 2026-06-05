@@ -428,10 +428,12 @@ export default function App() {
   const hasLoadedMessagesRef = useRef(false);
 
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
-  const isCurrentUserAdmin =
-    currentProfile?.isAdmin || isAdminEmail(user?.email || "");
   const isCurrentUserDeveloper =
     currentProfile?.isDeveloper || isDeveloperEmail(user?.email || "");
+  const isCurrentUserAdmin =
+    currentProfile?.isAdmin ||
+    isCurrentUserDeveloper ||
+    isAdminEmail(user?.email || "");
   const hasGoogleProvider = user?.providerData?.some(
     (provider) => provider.providerId === "google.com"
   );
@@ -1968,7 +1970,7 @@ export default function App() {
               </>
             )}
           </div>
-          <aside className="users-sidebar">
+          <aside className="channel-sidebar" aria-label="Channels">
             <div
               className="channel-tabs"
               role="tablist"
@@ -1984,18 +1986,21 @@ export default function App() {
                   onClick={() => setActiveChannel(channel.id)}
                   role="tab"
                   type="button"
+                  title={channel.label}
                 >
                   {channel.id === "group" ? (
-                    <MessageCircle size={14} />
+                    <MessageCircle size={18} />
                   ) : channel.id === "updates" ? (
-                    <Megaphone size={14} />
+                    <Megaphone size={18} />
                   ) : (
-                    <Lightbulb size={14} />
+                    <Lightbulb size={18} />
                   )}
                   <span>{channel.label}</span>
                 </button>
               ))}
             </div>
+          </aside>
+          <aside className="users-sidebar">
             <div className="users-sidebar-header">
               <Users size={16} />
               <span>Users</span>
