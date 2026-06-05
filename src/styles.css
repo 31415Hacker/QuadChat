@@ -1128,10 +1128,21 @@ button:disabled {
 
 .user-name {
   color: #1e293b;
+  flex: 1 1 auto;
   font-size: 0.9rem;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-mic {
+  color: #22c55e;
+  flex: 0 0 auto;
+}
+
+.user-mic-muted {
+  color: #b91c1c;
 }
 
 @media (max-width: 640px) {

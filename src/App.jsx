@@ -47,6 +47,7 @@ import {
   Film,
   ImagePlus,
   Mic,
+  MicOff,
   MoreVertical,
   Pause,
   Play,
@@ -1890,6 +1891,7 @@ export default function App() {
             <div className="users-sidebar-list">
               {Object.values(profiles).map((profile) => {
                 const name = getProfileName(profile, profile.email || "");
+                const muted = isProfileMuted(profile);
                 return (
                   <div
                     className={`user-item ${onlineUsers.has(profile.id) ? "online" : ""}`}
@@ -1897,6 +1899,19 @@ export default function App() {
                   >
                     <span className="user-dot" />
                     <span className="user-name">{name}</span>
+                    {muted ? (
+                      <MicOff
+                        aria-label={`${name} is muted`}
+                        className="user-mic user-mic-muted"
+                        size={14}
+                      />
+                    ) : (
+                      <Mic
+                        aria-label={`${name} can speak`}
+                        className="user-mic"
+                        size={14}
+                      />
+                    )}
                   </div>
                 );
               })}
