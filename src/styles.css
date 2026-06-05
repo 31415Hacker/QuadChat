@@ -445,6 +445,109 @@ button:disabled {
   margin-top: 2px;
 }
 
+.settings-photo-section {
+  background: #f8fbf9;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.settings-photo-row {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.settings-photo-preview {
+  align-items: center;
+  background: #eef5f1;
+  border: 1px solid #d9e5df;
+  border-radius: 999px;
+  color: #173f4f;
+  display: flex;
+  flex: 0 0 auto;
+  font-weight: 800;
+  height: 72px;
+  justify-content: center;
+  overflow: hidden;
+  width: 72px;
+}
+
+.settings-photo-preview img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.settings-photo-preview span {
+  font-size: 1.4rem;
+}
+
+.settings-photo-actions {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-photo-actions #settings-photo-input {
+  display: none;
+}
+
+.settings-photo-pick {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  color: #173f4f;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 600;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 12px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-photo-pick:hover {
+  background: #f3f6f1;
+  border-color: #b7cdc3;
+}
+
+.settings-photo-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-photo-remove {
+  align-self: start;
+}
+
+.settings-photo-section .settings-note {
+  color: #63756a;
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.ghost-button {
+  background: transparent;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  color: #52615b;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+}
+
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .toggle-row {
   align-items: center;
   display: flex;

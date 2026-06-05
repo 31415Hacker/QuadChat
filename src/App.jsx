@@ -45,6 +45,7 @@ import {
   CornerDownLeft,
   FileText,
   Film,
+  ImagePlus,
   Mic,
   MoreVertical,
   Pause,
@@ -58,6 +59,7 @@ import {
   MessageCircle,
   Send,
   ShieldCheck,
+  Upload,
   UserRound,
   Users
 } from "lucide-react";
@@ -286,7 +288,11 @@ function formatDuration(seconds) {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
-async function saveUserProfile(firebaseUser, displayNameOverride) {
+async function saveUserProfile(
+  firebaseUser,
+  displayNameOverride,
+  options = {}
+) {
   if (!firebaseUser) {
     return;
   }
@@ -303,9 +309,14 @@ async function saveUserProfile(firebaseUser, displayNameOverride) {
     id: firebaseUser.uid,
     displayName,
     email: firebaseUser.email || "",
-    photoURL: firebaseUser.photoURL || "",
     updatedAt: serverTimestamp()
   };
+
+  if (options.forcePhoto || options.photoURL !== undefined) {
+    profileData.photoURL = options.photoURL || "";
+  } else if (!profileSnapshot.exists()) {
+    profileData.photoURL = firebaseUser.photoURL || "";
+  }
 
   if (!profileSnapshot.exists() || userIsAdmin) {
     profileData.isAdmin = userIsAdmin;
@@ -365,6 +376,9 @@ export default function App() {
   const [settingsName, setSettingsName] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
+  const [settingsPhotoFile, setSettingsPhotoFile] = useState(null);
+  const [settingsPhotoPreview, setSettingsPhotoPreview] = useState("");
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [error, setError] = useState("");
@@ -464,6 +478,18 @@ export default function App() {
       setSettingsName(activeName || "");
     }
   }, [activeName, user]);
+
+  useEffect(() => {
+    if (isSettingsOpen) {
+      return undefined;
+    }
+    if (settingsPhotoPreview) {
+      URL.revokeObjectURL(settingsPhotoPreview);
+    }
+    setSettingsPhotoFile(null);
+    setSettingsPhotoPreview("");
+    return undefined;
+  }, [isSettingsOpen, settingsPhotoPreview]);
 
   useEffect(() => {
     if (!user) {
@@ -792,7 +818,25 @@ export default function App() {
 
     try {
       const credential = await linkWithPopup(user, googleProvider);
-      await saveUserProfile(credential.user);
+      const profileRef = doc(db, "users", credential.user.uid);
+      const profileSnap = await getDoc(profileRef);
+      const existingPhoto = profileSnap.data()?.photoURL || "";
+      const googlePhoto = credential.user.photoURL || "";
+
+      let photoChoice = null;
+      if (googlePhoto && existingPhoto && googlePhoto !== existingPhoto) {
+        const overwrite = window.confirm(
+          "You already have a profile picture. Replace it with your Google account picture?"
+        );
+        photoChoice = overwrite ? googlePhoto : existingPhoto;
+      } else if (googlePhoto) {
+        photoChoice = googlePhoto;
+      }
+
+      await saveUserProfile(credential.user, undefined, {
+        photoURL: photoChoice ?? "",
+        forcePhoto: photoChoice !== null
+      });
       await credential.user.reload();
       setUser(auth.currentUser);
       setSettingsMessage("Google account connected.");
@@ -852,10 +896,89 @@ export default function App() {
     setSettingsName(activeName || "");
     setSettingsCurrentPassword("");
     setSettingsPassword("");
+    setSettingsPhotoFile(null);
+    if (settingsPhotoPreview) {
+      URL.revokeObjectURL(settingsPhotoPreview);
+    }
+    setSettingsPhotoPreview("");
     setSettingsMessage("");
     setError("");
     setIsProfileMenuOpen(false);
     setIsSettingsOpen(true);
+  }
+
+  function handlePhotoFileChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setSettingsMessage("Profile picture must be an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSettingsMessage("Profile picture must be under 5 MB.");
+      return;
+    }
+    if (settingsPhotoPreview) {
+      URL.revokeObjectURL(settingsPhotoPreview);
+    }
+    setSettingsPhotoFile(file);
+    setSettingsPhotoPreview(URL.createObjectURL(file));
+    setSettingsMessage("");
+  }
+
+  function clearPendingPhoto() {
+    if (settingsPhotoPreview) {
+      URL.revokeObjectURL(settingsPhotoPreview);
+    }
+    setSettingsPhotoFile(null);
+    setSettingsPhotoPreview("");
+  }
+
+  async function uploadProfilePicture() {
+    if (!user || !settingsPhotoFile) {
+      return null;
+    }
+    setIsUploadingPhoto(true);
+    setSettingsMessage("");
+    try {
+      const url = await uploadToCloudinary(settingsPhotoFile);
+      await saveUserProfile(user, undefined, { photoURL: url, forcePhoto: true });
+      await user.reload();
+      setUser(auth.currentUser);
+      clearPendingPhoto();
+      setSettingsMessage("Profile picture updated.");
+      return url;
+    } catch (uploadError) {
+      console.error(uploadError);
+      setSettingsMessage(uploadError.message || "Profile picture upload failed.");
+      return null;
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }
+
+  async function removeProfilePicture() {
+    if (!user) {
+      return;
+    }
+    const confirmed = window.confirm("Remove your profile picture?");
+    if (!confirmed) {
+      return;
+    }
+    setIsSavingSettings(true);
+    setSettingsMessage("");
+    try {
+      await saveUserProfile(user, undefined, { photoURL: "", forcePhoto: true });
+      await user.reload();
+      setUser(auth.currentUser);
+      setSettingsMessage("Profile picture removed.");
+    } catch (firebaseError) {
+      setSettingsMessage(getAuthErrorMessage(firebaseError));
+    } finally {
+      setIsSavingSettings(false);
+    }
   }
 
   async function saveSettings(event) {
@@ -1977,6 +2100,65 @@ export default function App() {
                 maxLength={32}
                 placeholder="Username without spaces"
               />
+
+              <section className="settings-photo-section">
+                <div className="settings-photo-row">
+                  <div className="settings-photo-preview" aria-hidden="true">
+                    {settingsPhotoPreview ? (
+                      <img src={settingsPhotoPreview} alt="" />
+                    ) : user?.photoURL ? (
+                      <img src={user.photoURL} alt="" />
+                    ) : (
+                      <span>{getInitials(activeName)}</span>
+                    )}
+                  </div>
+                  <div className="settings-photo-actions">
+                    <label className="settings-photo-pick" htmlFor="settings-photo-input">
+                      <ImagePlus size={18} />
+                      <span>{settingsPhotoFile ? "Choose another" : "Choose image"}</span>
+                    </label>
+                    <input
+                      accept="image/*"
+                      id="settings-photo-input"
+                      onChange={handlePhotoFileChange}
+                      type="file"
+                    />
+                    {settingsPhotoFile ? (
+                      <div className="settings-photo-buttons">
+                        <button
+                          disabled={isUploadingPhoto || isSavingSettings}
+                          onClick={uploadProfilePicture}
+                          type="button"
+                        >
+                          <Upload size={17} />
+                          <span>{isUploadingPhoto ? "Uploading..." : "Upload"}</span>
+                        </button>
+                        <button
+                          className="ghost-button"
+                          disabled={isUploadingPhoto}
+                          onClick={clearPendingPhoto}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : user?.photoURL ? (
+                      <button
+                        className="danger-button settings-photo-remove"
+                        disabled={isSavingSettings}
+                        onClick={removeProfilePicture}
+                        type="button"
+                      >
+                        <Trash2 size={17} />
+                        <span>Remove picture</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <p className="settings-note">
+                  JPG, PNG, GIF, or WEBP. Max 5 MB. Stored on Cloudinary.
+                </p>
+              </section>
 
               <label htmlFor="settings-current-password">
                 <KeyRound size={18} />
