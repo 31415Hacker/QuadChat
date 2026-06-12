@@ -2453,7 +2453,7 @@ export default function App() {
                     {magicLinkUrl ? (
                       <div className="magic-link-result">
                         <div className="magic-link-url">
-                          <span>{"\u2605".repeat(magicLinkUrl.length)}</span>
+                          <span>********************</span>
                         </div>
                         <button
                           className="icon-text-button"
