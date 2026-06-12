@@ -469,6 +469,62 @@ button:disabled {
   margin-top: 2px;
 }
 
+.magic-link-form {
+  display: grid;
+  gap: 10px;
+}
+
+.magic-link-form select {
+  background: white;
+  border: 1px solid #cbd7cf;
+  border-radius: 8px;
+  color: #1e293b;
+  font: inherit;
+  min-width: 0;
+  outline: none;
+  padding: 10px 12px;
+}
+
+.magic-link-form select:focus {
+  border-color: #2b5876;
+  box-shadow: 0 0 0 3px rgba(43, 88, 118, 0.16);
+}
+
+.magic-link-result {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.magic-link-url {
+  background: #eef5f1;
+  border: 1px solid #d9e5df;
+  border-radius: 8px;
+  color: #63756a;
+  flex: 1;
+  font-family: monospace;
+  font-size: 1.2rem;
+  letter-spacing: 0.05em;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 12px;
+}
+
+.magic-link-url span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.magic-link-result button {
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
 .settings-photo-section {
   background: #f8fbf9;
   border: 1px solid #d9e5df;

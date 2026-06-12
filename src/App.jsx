@@ -64,9 +64,11 @@ import {
   ShieldCheck,
   Upload,
   UserRound,
-  Users
+  Users,
+  Copy
 } from "lucide-react";
-import { auth, db, rtdb } from "../firebase.js";
+import { auth, db, rtdb, functions } from "../firebase.js";
+import { httpsCallable } from "firebase/functions";
 import { uploadToCloudinary } from "../cloudinary.js";
 
 const messagesRef = collection(db, "messages");
@@ -405,6 +407,10 @@ export default function App() {
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [error, setError] = useState("");
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [magicLinkUrl, setMagicLinkUrl] = useState("");
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [magicLinkError, setMagicLinkError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -1100,6 +1106,29 @@ export default function App() {
     } catch (firebaseError) {
       setSettingsMessage(firebaseError.message);
     }
+  }
+
+  async function generateMagicLink() {
+    if (!magicLinkEmail) return;
+    setIsGeneratingLink(true);
+    setMagicLinkError("");
+    setMagicLinkUrl("");
+    try {
+      const generate = httpsCallable(functions, "generateMagicLink");
+      const result = await generate({
+        email: magicLinkEmail,
+        redirectUrl: window.location.origin
+      });
+      setMagicLinkUrl(result.data.url);
+    } catch (err) {
+      setMagicLinkError(err.message || "Failed to generate magic link.");
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  }
+
+  function copyMagicLink() {
+    navigator.clipboard.writeText(magicLinkUrl);
   }
 
   async function removeAccount() {
@@ -2370,20 +2399,66 @@ export default function App() {
               )}
 
               {isCurrentUserAdmin ? (
-                <section className="admin-settings">
-                  <div>
-                    <h3>Admin settings</h3>
-                    <p>Control app-wide access.</p>
-                  </div>
-                  <label className="toggle-row">
-                    <input
-                      checked={appSettings.signupEnabled}
-                      onChange={toggleSignup}
-                      type="checkbox"
-                    />
-                    <span>Allow sign up</span>
-                  </label>
-                </section>
+                <>
+                  <section className="admin-settings">
+                    <div>
+                      <h3>Admin settings</h3>
+                      <p>Control app-wide access.</p>
+                    </div>
+                    <label className="toggle-row">
+                      <input
+                        checked={appSettings.signupEnabled}
+                        onChange={toggleSignup}
+                        type="checkbox"
+                      />
+                      <span>Allow sign up</span>
+                    </label>
+                  </section>
+                  <section className="admin-settings">
+                    <div>
+                      <h3>Magic link</h3>
+                      <p>Generate a one-time sign-in link for any user.</p>
+                    </div>
+                    <div className="magic-link-form">
+                      <select
+                        value={magicLinkEmail}
+                        onChange={(event) => setMagicLinkEmail(event.target.value)}
+                      >
+                        <option value="">Select a user...</option>
+                        {Object.values(profiles).map((profile) => (
+                          <option key={profile.id} value={profile.email}>
+                            {getProfileName(profile, profile.email || "Unknown")}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        disabled={!magicLinkEmail || isGeneratingLink}
+                        onClick={generateMagicLink}
+                        type="button"
+                      >
+                        {isGeneratingLink ? "Generating..." : "Generate magic link"}
+                      </button>
+                    </div>
+                    {magicLinkError ? (
+                      <div className="error-banner inline-error">{magicLinkError}</div>
+                    ) : null}
+                    {magicLinkUrl ? (
+                      <div className="magic-link-result">
+                        <div className="magic-link-url">
+                          <span>{"\u2605".repeat(magicLinkUrl.length)}</span>
+                        </div>
+                        <button
+                          className="icon-text-button"
+                          onClick={copyMagicLink}
+                          type="button"
+                        >
+                          <Copy size={16} />
+                          <span>Copy</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </section>
+                </>
               ) : null}
 
               <div className="settings-actions">
