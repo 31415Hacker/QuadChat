@@ -67,8 +67,7 @@ import {
   Users,
   Copy
 } from "lucide-react";
-import { auth, db, rtdb, functions } from "../firebase.js";
-import { httpsCallable } from "firebase/functions";
+import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
 
 const messagesRef = collection(db, "messages");
@@ -1109,17 +1108,26 @@ export default function App() {
   }
 
   async function generateMagicLink() {
-    if (!magicLinkEmail) return;
+    if (!magicLinkEmail || !user) return;
     setIsGeneratingLink(true);
     setMagicLinkError("");
     setMagicLinkUrl("");
     try {
-      const generate = httpsCallable(functions, "generateMagicLink");
-      const result = await generate({
-        email: magicLinkEmail,
-        redirectUrl: window.location.origin
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/generate-magic-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          email: magicLinkEmail,
+          redirectUrl: window.location.origin
+        })
       });
-      setMagicLinkUrl(result.data.url);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setMagicLinkUrl(result.url);
     } catch (err) {
       setMagicLinkError(err.message || "Failed to generate magic link.");
     } finally {
