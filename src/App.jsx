@@ -4,10 +4,12 @@ import {
   deleteUser,
   EmailAuthProvider,
   GoogleAuthProvider,
+  isSignInWithEmailLink,
   linkWithPopup,
   onAuthStateChanged,
   reauthenticateWithCredential,
   signInWithEmailAndPassword,
+  signInWithEmailLink,
   signInWithPopup,
   signOut as signOutOfFirebase,
   updatePassword,
@@ -410,6 +412,8 @@ export default function App() {
   const [magicLinkUrl, setMagicLinkUrl] = useState("");
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [magicLinkError, setMagicLinkError] = useState("");
+  const [pendingEmailLinkEmail, setPendingEmailLinkEmail] = useState("");
+  const [emailLinkError, setEmailLinkError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -1139,6 +1143,22 @@ export default function App() {
     navigator.clipboard.writeText(magicLinkUrl);
   }
 
+  function handleEmailLinkSignIn(event) {
+    event.preventDefault();
+    setEmailLinkError("");
+    const email = pendingEmailLinkEmail.trim();
+    if (!email) return;
+
+    signInWithEmailLink(auth, email, window.location.href)
+      .then(() => {
+        window.localStorage.removeItem("emailForSignIn");
+        window.history.replaceState(null, "", window.location.pathname);
+      })
+      .catch((err) => {
+        setEmailLinkError(err.message || "Sign-in failed. Check that this email matches the one the link was generated for.");
+      });
+  }
+
   async function removeAccount() {
     if (!user) {
       return;
@@ -1647,113 +1667,144 @@ export default function App() {
             </div>
             <div>
               <h1>QuadChat</h1>
-              <p>
-                {authView === "signup"
-                  ? "Create an account to start chatting."
-                  : "Sign in to continue chatting."}
-              </p>
+              {isSignInWithEmailLink(auth, window.location.href) ? (
+                <p>Enter your email to complete sign-in with the magic link.</p>
+              ) : (
+                <p>
+                  {authView === "signup"
+                    ? "Create an account to start chatting."
+                    : "Sign in to continue chatting."}
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="auth-tabs" role="tablist" aria-label="Authentication view">
-            <button
-              className={authView === "signin" ? "active" : ""}
-              type="button"
-              onClick={() => {
-                setAuthView("signin");
-                setError("");
-              }}
-            >
-              Sign in
-            </button>
-            {appSettings.signupEnabled ? (
+          {isSignInWithEmailLink(auth, window.location.href) ? (
+            <form className="signin-form" onSubmit={handleEmailLinkSignIn}>
+              <label htmlFor="email-link-email">
+                <UserRound size={18} />
+                <span>Email</span>
+              </label>
+              <input
+                id="email-link-email"
+                type="email"
+                value={pendingEmailLinkEmail}
+                onChange={(event) => setPendingEmailLinkEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                maxLength={120}
+              />
+              {emailLinkError ? <div className="error-banner inline-error">{emailLinkError}</div> : null}
               <button
-                className={authView === "signup" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setAuthView("signup");
-                  setError("");
-                }}
+                type="submit"
+                disabled={!pendingEmailLinkEmail.trim()}
               >
-                Sign up
+                Sign in with magic link
               </button>
-            ) : null}
-          </div>
+            </form>
+          ) : (
+            <>
+              <div className="auth-tabs" role="tablist" aria-label="Authentication view">
+                <button
+                  className={authView === "signin" ? "active" : ""}
+                  type="button"
+                  onClick={() => {
+                    setAuthView("signin");
+                    setError("");
+                  }}
+                >
+                  Sign in
+                </button>
+                {appSettings.signupEnabled ? (
+                  <button
+                    className={authView === "signup" ? "active" : ""}
+                    type="button"
+                    onClick={() => {
+                      setAuthView("signup");
+                      setError("");
+                    }}
+                  >
+                    Sign up
+                  </button>
+                ) : null}
+              </div>
 
-          <form className="signin-form" onSubmit={handleAuth}>
-            {authView === "signup" ? (
-              <>
-                <label htmlFor="signin-name">
+              <form className="signin-form" onSubmit={handleAuth}>
+                {authView === "signup" ? (
+                  <>
+                    <label htmlFor="signin-name">
+                      <UserRound size={18} />
+                      <span>Display name</span>
+                    </label>
+                    <input
+                      id="signin-name"
+                      type="text"
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      placeholder="Username without spaces"
+                      autoComplete="username"
+                      maxLength={32}
+                    />
+                  </>
+                ) : null}
+                <label htmlFor="signin-email">
                   <UserRound size={18} />
-                  <span>Display name</span>
+                  <span>Email</span>
                 </label>
                 <input
-                  id="signin-name"
-                  type="text"
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                  placeholder="Username without spaces"
-                  autoComplete="username"
-                  maxLength={32}
+                  id="signin-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  maxLength={120}
                 />
-              </>
-            ) : null}
-            <label htmlFor="signin-email">
-              <UserRound size={18} />
-              <span>Email</span>
-            </label>
-            <input
-              id="signin-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              maxLength={120}
-            />
-            <label htmlFor="signin-password">
-              <KeyRound size={18} />
-              <span>Password</span>
-            </label>
-            <input
-              id="signin-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              maxLength={64}
-            />
-            {error ? <div className="error-banner inline-error">{error}</div> : null}
-            <button
-              type="submit"
-              disabled={
-                !email.trim() ||
-                !password.trim() ||
-                (authView === "signup" && !draftName.trim())
-              }
-            >
-              {authView === "signup" ? "Create account" : "Sign in"}
-            </button>
-          </form>
+                <label htmlFor="signin-password">
+                  <KeyRound size={18} />
+                  <span>Password</span>
+                </label>
+                <input
+                  id="signin-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  maxLength={64}
+                />
+                {error ? <div className="error-banner inline-error">{error}</div> : null}
+                <button
+                  type="submit"
+                  disabled={
+                    !email.trim() ||
+                    !password.trim() ||
+                    (authView === "signup" && !draftName.trim())
+                  }
+                >
+                  {authView === "signup" ? "Create account" : "Sign in"}
+                </button>
+              </form>
 
-          <div className="auth-divider">
-            <span>or</span>
-          </div>
+              <div className="auth-divider">
+                <span>or</span>
+              </div>
 
-          <button
-            className="google-button"
-            type="button"
-            onClick={signInWithGoogle}
-          >
-            <Chrome size={18} />
-            <span>Continue with Google</span>
-          </button>
+              <button
+                className="google-button"
+                type="button"
+                onClick={signInWithGoogle}
+              >
+                <Chrome size={18} />
+                <span>Continue with Google</span>
+              </button>
 
-          <div className="mode-note">
-            <ShieldCheck size={18} />
-            <span>Production mode: Firebase Authentication manages accounts.</span>
-          </div>
+              <div className="mode-note">
+                <ShieldCheck size={18} />
+                <span>Production mode: Firebase Authentication manages accounts.</span>
+              </div>
+            </>
+          )}
 
           <div className="auth-footer-links">
             <a href="./privacy.html" rel="noopener noreferrer" target="_blank">
