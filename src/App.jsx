@@ -2452,17 +2452,14 @@ export default function App() {
                     ) : null}
                     {magicLinkUrl ? (
                       <div className="magic-link-result">
-                        <div className="magic-link-url">
-                          <span>********************</span>
-                        </div>
-                        <button
-                          className="icon-text-button"
+                        <div
+                          className="magic-link-url"
                           onClick={copyMagicLink}
-                          type="button"
+                          title="Copy magic link"
                         >
+                          <span>********************</span>
                           <Copy size={16} />
-                          <span>Copy</span>
-                        </button>
+                        </div>
                       </div>
                     ) : null}
                   </section>

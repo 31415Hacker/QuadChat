@@ -491,23 +491,35 @@ button:disabled {
 }
 
 .magic-link-result {
-  align-items: center;
   display: flex;
-  gap: 10px;
 }
 
 .magic-link-url {
+  align-items: center;
   background: #eef5f1;
   border: 1px solid #d9e5df;
   border-radius: 8px;
   color: #63756a;
+  cursor: pointer;
+  display: flex;
   flex: 1;
   font-family: monospace;
   font-size: 1.2rem;
+  gap: 8px;
   letter-spacing: 0.05em;
   min-width: 0;
   overflow: hidden;
   padding: 10px 12px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.magic-link-url:hover {
+  border-color: #2b5876;
+  box-shadow: 0 0 0 3px rgba(43, 88, 118, 0.16);
+}
+
+.magic-link-url svg {
+  flex: 0 0 auto;
 }
 
 .magic-link-url span {
