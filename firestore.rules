@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function currentUserExists() {
+      return signedIn() && exists(userPath(request.auth.uid));
+    }
+
+    function currentUserDoc() {
+      return get(userPath(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && (
+          request.auth.token.email == "ariqipraditya@gmail.com"
+          || (
+            currentUserExists()
+            && currentUserDoc().data.isAdmin == true
+          )
+        );
+    }
+
+    function isDeveloper() {
+      return signedIn()
+        && (
+          request.auth.token.email == "ariqipraditya@gmail.com"
+          || (
+            currentUserExists()
+            && currentUserDoc().data.isDeveloper == true
+          )
+        );
+    }
+
+    function isNotMuted() {
+      return signedIn()
+        && (
+          !currentUserExists()
+          || !("muted" in currentUserDoc().data)
+          || currentUserDoc().data.muted != true
+          || (
+            "mutedUntil" in currentUserDoc().data
+            && currentUserDoc().data.mutedUntil is timestamp
+            && currentUserDoc().data.mutedUntil < request.time
+          )
+        );
+    }
+
+    match /messages/{channel} {
+      allow read, write: if false;
+    }
+
+    match /messages/{channel}/messages/{messageId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && isNotMuted()
+        && request.resource.data.keys().hasOnly([
+          "text",
+          "userId",
+          "createdAt",
+          "adminCommand",
+          "command",
+          "commandTarget",
+          "replyTo",
+          "attachments",
+          "isFile",
+          "fileName",
+          "fileType"
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 1000
+        && (
+          request.resource.data.text.size() > 0
+          || (
+            "attachments" in request.resource.data
+            && request.resource.data.attachments is list
+            && request.resource.data.attachments.size() > 0
+            && request.resource.data.attachments.size() <= 4
+          )
+          || (
+            "isFile" in request.resource.data
+            && request.resource.data.isFile == true
+          )
+        )
+        && (
+          !("adminCommand" in request.resource.data)
+          || request.resource.data.adminCommand == false
+          || isAdmin()
+        )
+        && (
+          channel != "updates"
+          || isDeveloper()
+        );
+
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && userId == request.auth.uid;
+
+      allow update: if signedIn()
+        && (
+          userId == request.auth.uid
+          || isAdmin()
+        );
+
+      allow delete: if signedIn()
+        && (
+          userId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    match /settings/app {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
