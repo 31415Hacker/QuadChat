@@ -72,7 +72,10 @@ import {
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
 
-const messagesRef = collection(db, "messages");
+function messagesRef(channelId) {
+  return collection(db, "messages", channelId, "messages");
+}
+
 const usersRef = collection(db, "users");
 const appSettingsRef = doc(db, "settings", "app");
 const googleProvider = new GoogleAuthProvider();
@@ -171,10 +174,6 @@ function isAdminEmail(email) {
 
 function isDeveloperEmail(email) {
   return developerEmails.includes((email || "").toLowerCase());
-}
-
-function messageChannel(item) {
-  return item?.channel || "group";
 }
 
 function parseDuration(value) {
@@ -448,10 +447,6 @@ export default function App() {
   );
   const muteLabel = getMuteLabel(currentProfile);
   const [activeChannel, setActiveChannel] = useState("group");
-  const channelMessages = useMemo(
-    () => messages.filter((item) => messageChannel(item) === activeChannel),
-    [messages, activeChannel]
-  );
   const canPostInActiveChannel =
     activeChannel !== "updates" || isCurrentUserDeveloper;
 
@@ -593,11 +588,18 @@ export default function App() {
       return;
     }
 
+    setMessages([]);
+    setHasMoreMessages(true);
+    hasMoreMessagesRef.current = true;
+    oldestDocSnapRef.current = null;
+    newestDocSnapRef.current = null;
+
     let cancelled = false;
 
     async function loadInitialMessages() {
+      const ref = messagesRef(activeChannel);
       const initialQ = query(
-        messagesRef,
+        ref,
         orderBy("createdAt", "asc"),
         limitToLast(PAGE_SIZE)
       );
@@ -621,7 +623,7 @@ export default function App() {
 
       if (newestDocSnapRef.current) {
         const newQuery = query(
-          messagesRef,
+          ref,
           orderBy("createdAt", "asc"),
           startAfter(newestDocSnapRef.current)
         );
@@ -670,13 +672,13 @@ export default function App() {
         newMessagesUnsubRef.current = null;
       }
     };
-  }, [user]);
+  }, [user, activeChannel]);
 
   useEffect(() => {
     if (isNearBottomRef.current) {
       endRef.current?.scrollIntoView({ block: "end" });
     }
-  }, [channelMessages]);
+  }, [messages]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -1373,13 +1375,12 @@ export default function App() {
 
     try {
       const url = await uploadToCloudinary(file);
-      await addDoc(messagesRef, {
+      await addDoc(messagesRef(activeChannel), {
         text: url,
         isFile: true,
         fileName: "Voice message.webm",
         fileType: "audio/webm",
         userId: sessionUserId,
-        channel: activeChannel,
         createdAt: serverTimestamp()
       });
     } catch (firebaseError) {
@@ -1505,8 +1506,8 @@ export default function App() {
 
     try {
       const olderQuery = query(
-        messagesRef,
-        orderBy("createdAt", "desc"),
+          messagesRef(activeChannel),
+          orderBy("createdAt", "desc"),
         startAfter(oldestDocSnapRef.current),
         limit(PAGE_SIZE)
       );
@@ -1580,9 +1581,8 @@ export default function App() {
       }
 
       if (cleanMessage) {
-        await addDoc(messagesRef, {
+        await addDoc(messagesRef(activeChannel), {
           text: cleanMessage,
-          channel: activeChannel,
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
             ? {
@@ -1601,10 +1601,9 @@ export default function App() {
 
       for (const pendingFile of pendingFiles) {
         const url = await uploadToCloudinary(pendingFile.file);
-        await addDoc(messagesRef, {
+        await addDoc(messagesRef(activeChannel), {
           text: url,
           isFile: true,
-          channel: activeChannel,
           fileName: pendingFile.file.name,
           fileType: pendingFile.file.type || "application/octet-stream",
           userId: sessionUserId,
@@ -1853,8 +1852,8 @@ export default function App() {
             <div>
               <h1>QuadChat</h1>
               <p>
-                Signed in as {activeName} · {channelMessages.length} message
-                {channelMessages.length === 1 ? "" : "s"} in{" "}
+                Signed in as {activeName} · {messages.length} message
+                {messages.length === 1 ? "" : "s"} in{" "}
                 {CHANNELS.find((c) => c.id === activeChannel)?.label}
               </p>
               {isCurrentUserDeveloper ? (
@@ -1936,7 +1935,7 @@ export default function App() {
                 </span>
               </div>
             ) : null}
-            {channelMessages.length === 0 && !isLoadingMore ? (
+            {messages.length === 0 && !isLoadingMore ? (
               <div className="empty-state">
                 <MessageCircle size={42} />
                 <p>
@@ -1955,7 +1954,7 @@ export default function App() {
                 {hasMoreMessages && !isLoadingMore ? (
                   <div className="sentinel" ref={sentinelRef} />
                 ) : null}
-                {channelMessages.map((item) => {
+                {messages.map((item) => {
                   const senderProfile = profiles[item.userId];
                   const senderName = getProfileName(senderProfile, item.name);
                   const isMine = item.userId === sessionUserId;
