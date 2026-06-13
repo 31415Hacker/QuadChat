@@ -283,6 +283,19 @@ function renderMessageText(text, profiles, isAdminCommand = false) {
       );
     }
 
+    try {
+      const url = new URL(part);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return (
+          <a href={part} key={`${part}-${index}`} target="_blank" rel="noopener noreferrer">
+            {part}
+          </a>
+        );
+      }
+    } catch {
+      /* not a URL */
+    }
+
     return part;
   });
 }
@@ -2615,15 +2628,15 @@ export default function App() {
               </button>
             </header>
 
-            <form
+              <form
               className="settings-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                let text = "Gaming Session";
+                let text = "Hey guys!\nLet's do a session today";
                 if (gamingPostTime) {
                   const d = new Date(gamingPostTime);
                   text +=
-                    " — " +
+                    ", at " +
                     d.toLocaleDateString(undefined, {
                       weekday: "short",
                       month: "short",
@@ -2632,8 +2645,8 @@ export default function App() {
                       minute: "2-digit"
                     });
                 }
-                if (gamingPostMeet) text += "\nGoogle Meet: " + gamingPostMeet;
-                if (gamingPostBloxd) text += "\nBloxd.io: " + gamingPostBloxd;
+                text += ". Here is the google meet: " + (gamingPostMeet || "(not set)");
+                text += ", and I hope to play " + (gamingPostBloxd || "a game") + " with you guys. Hope you come!";
                 setMessage(text);
                 setShowGamingPost(false);
                 setGamingPostMeet("");
@@ -2653,14 +2666,14 @@ export default function App() {
               />
 
               <label htmlFor="gaming-bloxd">
-                Bloxd.io game link
+                Bloxd.io game
               </label>
               <input
                 id="gaming-bloxd"
-                type="url"
+                type="text"
                 value={gamingPostBloxd}
                 onChange={(e) => setGamingPostBloxd(e.target.value)}
-                placeholder="https://bloxd.io/..."
+                placeholder="e.g. Bed Wars"
               />
 
               <label htmlFor="gaming-time">
