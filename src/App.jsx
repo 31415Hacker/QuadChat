@@ -47,6 +47,8 @@ import {
   CornerDownLeft,
   FileText,
   Film,
+  Gamepad2,
+  Image,
   ImagePlus,
   Lightbulb,
   Megaphone,
@@ -447,6 +449,9 @@ export default function App() {
   );
   const muteLabel = getMuteLabel(currentProfile);
   const [activeChannel, setActiveChannel] = useState("group");
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+
+  const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
     activeChannel !== "updates" || isCurrentUserDeveloper;
 
@@ -720,6 +725,17 @@ export default function App() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMoreMessages, messages]);
+
+  useEffect(() => {
+    if (!showAttachMenu) return;
+    function handleClick(e) {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
+        setShowAttachMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showAttachMenu]);
 
   useEffect(() => {
     pendingFilesRef.current = pendingFiles;
@@ -2194,10 +2210,11 @@ export default function App() {
               </button>
             ) : (
               <>
+              <div className="attach-wrapper" ref={attachMenuRef}>
                 <button
                   aria-label="Attach files"
                   className="attach-button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setShowAttachMenu((prev) => !prev)}
                   title="Attach files"
                   type="button"
                   disabled={
@@ -2208,6 +2225,40 @@ export default function App() {
                 >
                   <Plus size={22} />
                 </button>
+                {showAttachMenu && (
+                  <div className="attach-menu">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fileInputRef.current.accept = "image/*,video/*";
+                        fileInputRef.current.click();
+                        setShowAttachMenu(false);
+                      }}
+                    >
+                      <Image size={20} />
+                      <span>Photos &amp; Videos</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fileInputRef.current.accept = "";
+                        fileInputRef.current.click();
+                        setShowAttachMenu(false);
+                      }}
+                    >
+                      <FileText size={20} />
+                      <span>Document</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachMenu(false)}
+                    >
+                      <Gamepad2 size={20} />
+                      <span>Gaming Post</span>
+                    </button>
+                  </div>
+                )}
+              </div>
                 {supportsRecording ? (
                   <button
                     aria-label="Record voice message"
