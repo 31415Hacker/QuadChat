@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
+import GameSessionCard from "./GameSessionCard.jsx";
 
 function messagesRef(channelId) {
   return collection(db, "messages", channelId, "messages");
@@ -2076,6 +2077,8 @@ export default function App() {
                             />
                           </a>
                         )
+                      ) : item.type === "game_session_card" ? (
+                        <GameSessionCard data={item} />
                       ) : item.text ? (
                         <p>
                           {renderMessageText(item.text, profiles, item.adminCommand)}
@@ -2630,24 +2633,30 @@ export default function App() {
 
               <form
               className="settings-form"
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                let text = "Hey guys!\nLet's do a session today";
+                let scheduledTime = "";
                 if (gamingPostTime) {
                   const d = new Date(gamingPostTime);
-                  text +=
-                    ", at " +
-                    d.toLocaleDateString(undefined, {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    });
+                  scheduledTime = d.toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  });
                 }
-                text += ". Here is the google meet: " + (gamingPostMeet || "(not set)");
-                text += ", and I hope to play " + (gamingPostBloxd || "a game") + " with you guys. Hope you come!";
-                setMessage(text);
+                const rows = [["📅 When", scheduledTime || "TBD"]];
+                if (gamingPostBloxd) rows.push(["🎮 Mode", gamingPostBloxd]);
+                await addDoc(channelMessagesRef(activeChannel), {
+                  type: "game_session_card",
+                  title: "Bloxd.io Session",
+                  googleMeetLink: gamingPostMeet,
+                  note: "Grab your snacks. We're launching the custom lobby code directly inside the Meet chat as soon as everyone drops in. Don't be late! 🚀",
+                  tableData: { headers: ["Details", "Information"], rows },
+                  userId: sessionUserId,
+                  createdAt: serverTimestamp()
+                });
                 setShowGamingPost(false);
                 setGamingPostMeet("");
                 setGamingPostBloxd("");
