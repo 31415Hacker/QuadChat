@@ -65,8 +65,8 @@ service cloud.firestore {
         && isNotMuted()
         && request.resource.data.userId == request.auth.uid
         && (
-          request.resource.data.type == "game_session_card"
-          ? (
+          request.resource.data.type != "game_session_card"
+          || (
             request.resource.data.keys().hasOnly([
               "type",
               "title",
@@ -87,7 +87,10 @@ service cloud.firestore {
             && request.resource.data.tableData.rows is list
             && request.resource.data.tableData.rows.size() <= 20
           )
-          : (
+        )
+        && (
+          request.resource.data.type == "game_session_card"
+          || (
             request.resource.data.keys().hasOnly([
               "text",
               "userId",
