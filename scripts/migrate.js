@@ -50,8 +50,13 @@ async function migrate() {
       .doc(doc.id);
 
     if ((await targetRef.get()).exists) {
-      console.log(`  SKIP  ${doc.id} — already exists in messages/${channel}/messages`);
-      skipped++;
+      console.log(`  EXISTS ${doc.id} — already in messages/${channel}/messages`);
+      if (shouldDelete) {
+        await doc.ref.delete();
+        deleted++;
+      } else {
+        skipped++;
+      }
       continue;
     }
 
