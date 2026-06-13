@@ -450,6 +450,10 @@ export default function App() {
   const muteLabel = getMuteLabel(currentProfile);
   const [activeChannel, setActiveChannel] = useState("group");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showGamingPost, setShowGamingPost] = useState(false);
+  const [gamingPostMeet, setGamingPostMeet] = useState("");
+  const [gamingPostBloxd, setGamingPostBloxd] = useState("");
+  const [gamingPostTime, setGamingPostTime] = useState("");
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -2251,7 +2255,10 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowAttachMenu(false)}
+                      onClick={() => {
+                        setShowAttachMenu(false);
+                        setShowGamingPost(true);
+                      }}
                     >
                       <Gamepad2 size={20} />
                       <span>Gaming Post</span>
@@ -2579,6 +2586,103 @@ export default function App() {
                 >
                   <Trash2 size={17} />
                   <span>Remove account</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {showGamingPost ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="settings-modal"
+            aria-label="Create gaming post"
+            role="dialog"
+            aria-modal="true"
+          >
+            <header className="settings-header">
+              <div>
+                <h2>Gaming Post</h2>
+                <p>Schedule a gaming session</p>
+              </div>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={() => setShowGamingPost(false)}
+              >
+                X
+              </button>
+            </header>
+
+            <form
+              className="settings-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                let text = "Gaming Session";
+                if (gamingPostTime) {
+                  const d = new Date(gamingPostTime);
+                  text +=
+                    " — " +
+                    d.toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    });
+                }
+                if (gamingPostMeet) text += "\nGoogle Meet: " + gamingPostMeet;
+                if (gamingPostBloxd) text += "\nBloxd.io: " + gamingPostBloxd;
+                setMessage(text);
+                setShowGamingPost(false);
+                setGamingPostMeet("");
+                setGamingPostBloxd("");
+                setGamingPostTime("");
+              }}
+            >
+              <label htmlFor="gaming-meet">
+                Google Meet link
+              </label>
+              <input
+                id="gaming-meet"
+                type="url"
+                value={gamingPostMeet}
+                onChange={(e) => setGamingPostMeet(e.target.value)}
+                placeholder="https://meet.google.com/..."
+              />
+
+              <label htmlFor="gaming-bloxd">
+                Bloxd.io game link
+              </label>
+              <input
+                id="gaming-bloxd"
+                type="url"
+                value={gamingPostBloxd}
+                onChange={(e) => setGamingPostBloxd(e.target.value)}
+                placeholder="https://bloxd.io/..."
+              />
+
+              <label htmlFor="gaming-time">
+                Scheduled time
+              </label>
+              <input
+                id="gaming-time"
+                type="datetime-local"
+                value={gamingPostTime}
+                onChange={(e) => setGamingPostTime(e.target.value)}
+              />
+
+              <div className="settings-actions">
+                <button type="submit">
+                  Create Post
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => setShowGamingPost(false)}
+                >
+                  Cancel
                 </button>
               </div>
             </form>
