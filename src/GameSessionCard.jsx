@@ -196,12 +196,21 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
         )}
 
         {/* Table */}
-        {card.tableData?.rows?.length > 0 && (
+        {card.tableData?.headers?.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-slate-700">
             <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-700/60">
+                  {card.tableData.headers.map((h, i) => (
+                    <th key={i} className="px-3 py-2 text-left font-semibold text-slate-300">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {card.tableData.rows.map((row, ri) => (
-                  <tr key={ri} className={ri > 0 ? "border-t border-slate-700" : ""}>
+                {(card.tableData.rows ?? []).map((row, ri) => (
+                  <tr key={ri} className="border-t border-slate-700">
                     <td className="px-3 py-2.5 font-semibold text-slate-300 whitespace-nowrap w-1/3 align-top">
                       {row[0]}
                     </td>
@@ -213,7 +222,7 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Meet button */}
