@@ -22,12 +22,26 @@ async function migrate() {
 
   console.log(`Found ${total} documents to migrate.`);
 
+  const knownChannels = new Set(["group", "updates", "suggestions"]);
   let moved = 0;
   let skipped = 0;
+  let deleted = 0;
+
+  const shouldDelete = process.argv.includes("--delete");
 
   for (const doc of snapshot.docs) {
     const data = doc.data();
     const channel = data.channel || "group";
+
+    if (!knownChannels.has(channel)) {
+      const action = shouldDelete ? "DELETED" : "UNKNOWN";
+      console.log(`  ${action} ${doc.id} — channel "${channel}" is not a known channel`);
+      if (shouldDelete) {
+        await doc.ref.delete();
+        deleted++;
+      }
+      continue;
+    }
 
     const targetRef = db
       .collection("messages")
@@ -44,11 +58,21 @@ async function migrate() {
     await targetRef.set(data);
     console.log(`  MOVED ${doc.id} → messages/${channel}/messages`);
     moved++;
+
+    if (shouldDelete) {
+      await doc.ref.delete();
+      deleted++;
+    }
   }
 
-  console.log(`\nDone: ${moved} moved, ${skipped} skipped (of ${total}).`);
-  console.log("The original flat 'messages' collection is untouched.");
-  console.log("Once verified, delete it from the Firebase console to clean up.");
+  console.log(
+    `\nDone: ${moved} moved, ${deleted} deleted, ${skipped} skipped (of ${total}).`
+  );
+  if (shouldDelete) {
+    console.log("Originals have been deleted from the flat 'messages' collection.");
+  } else {
+    console.log("Re-run with --delete to remove originals from the flat 'messages' collection.");
+  }
 }
 
 migrate().catch((err) => {
