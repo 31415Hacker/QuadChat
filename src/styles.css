@@ -1414,3 +1414,6 @@ button:disabled {
     display: none;
   }
 }
+
+@tailwind components;
+@tailwind utilities;
