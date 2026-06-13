@@ -103,7 +103,7 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-700/60">
-                  {card.tableData.headers.map((h, i) => (
+                  {card.tableData?.headers?.map((h, i) => (
                     <th key={i} className="px-3 py-2 text-left font-semibold text-slate-300">
                       {h}
                     </th>
