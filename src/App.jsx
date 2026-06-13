@@ -465,9 +465,7 @@ export default function App() {
   const [activeChannel, setActiveChannel] = useState("group");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showGamingPost, setShowGamingPost] = useState(false);
-  const [gamingPostMeet, setGamingPostMeet] = useState("");
-  const [gamingPostBloxd, setGamingPostBloxd] = useState("");
-  const [gamingPostTime, setGamingPostTime] = useState("");
+  const [gamingPostCard, setGamingPostCard] = useState(null);
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -2273,6 +2271,16 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setShowAttachMenu(false);
+                        setGamingPostCard({
+                          type: "game_session_card",
+                          title: "Bloxd.io Session",
+                          googleMeetLink: "",
+                          note: "Grab your snacks. We're launching the custom lobby code directly inside the Meet chat as soon as everyone drops in. Don't be late! 🚀",
+                          tableData: {
+                            headers: ["Details", "Information"],
+                            rows: []
+                          }
+                        });
                         setShowGamingPost(true);
                       }}
                     >
@@ -2609,7 +2617,7 @@ export default function App() {
         </div>
       ) : null}
 
-      {showGamingPost ? (
+      {showGamingPost && gamingPostCard ? (
         <div className="modal-backdrop" role="presentation">
           <section
             className="settings-modal"
@@ -2620,7 +2628,7 @@ export default function App() {
             <header className="settings-header">
               <div>
                 <h2>Gaming Post</h2>
-                <p>Schedule a gaming session</p>
+                <p>Edit your session card</p>
               </div>
               <button
                 className="modal-close"
@@ -2631,83 +2639,35 @@ export default function App() {
               </button>
             </header>
 
-              <form
-              className="settings-form"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                let scheduledTime = "";
-                if (gamingPostTime) {
-                  const d = new Date(gamingPostTime);
-                  scheduledTime = d.toLocaleDateString(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
+            <GameSessionCard
+              data={gamingPostCard}
+              isEditingMode
+              onChange={setGamingPostCard}
+            />
+
+            <div className="settings-actions">
+              <button
+                type="button"
+                onClick={async () => {
+                  await addDoc(channelMessagesRef(activeChannel), {
+                    ...gamingPostCard,
+                    userId: sessionUserId,
+                    createdAt: serverTimestamp()
                   });
-                }
-                const rows = [["📅 When", scheduledTime || "TBD"]];
-                if (gamingPostBloxd) rows.push(["🎮 Mode", gamingPostBloxd]);
-                await addDoc(channelMessagesRef(activeChannel), {
-                  type: "game_session_card",
-                  title: "Bloxd.io Session",
-                  googleMeetLink: gamingPostMeet,
-                  note: "Grab your snacks. We're launching the custom lobby code directly inside the Meet chat as soon as everyone drops in. Don't be late! 🚀",
-                  tableData: { headers: ["Details", "Information"], rows },
-                  userId: sessionUserId,
-                  createdAt: serverTimestamp()
-                });
-                setShowGamingPost(false);
-                setGamingPostMeet("");
-                setGamingPostBloxd("");
-                setGamingPostTime("");
-              }}
-            >
-              <label htmlFor="gaming-meet">
-                Google Meet link
-              </label>
-              <input
-                id="gaming-meet"
-                type="url"
-                value={gamingPostMeet}
-                onChange={(e) => setGamingPostMeet(e.target.value)}
-                placeholder="https://meet.google.com/..."
-              />
-
-              <label htmlFor="gaming-bloxd">
-                Bloxd.io game
-              </label>
-              <input
-                id="gaming-bloxd"
-                type="text"
-                value={gamingPostBloxd}
-                onChange={(e) => setGamingPostBloxd(e.target.value)}
-                placeholder="e.g. Bed Wars"
-              />
-
-              <label htmlFor="gaming-time">
-                Scheduled time
-              </label>
-              <input
-                id="gaming-time"
-                type="datetime-local"
-                value={gamingPostTime}
-                onChange={(e) => setGamingPostTime(e.target.value)}
-              />
-
-              <div className="settings-actions">
-                <button type="submit">
-                  Create Post
-                </button>
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={() => setShowGamingPost(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                  setShowGamingPost(false);
+                  setGamingPostCard(null);
+                }}
+              >
+                Send
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => setShowGamingPost(false)}
+              >
+                Cancel
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
