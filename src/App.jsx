@@ -2649,7 +2649,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={async () => {
-                  await addDoc(channelMessagesRef(activeChannel), {
+                  await addDoc(messagesRef(activeChannel), {
                     ...gamingPostCard,
                     userId: sessionUserId,
                     createdAt: serverTimestamp()
