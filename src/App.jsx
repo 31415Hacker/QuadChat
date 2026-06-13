@@ -2278,7 +2278,10 @@ export default function App() {
                           note: "Grab your snacks. We're launching the custom lobby code directly inside the Meet chat as soon as everyone drops in. Don't be late! 🚀",
                           tableData: {
                             headers: ["Details", "Information"],
-                            rows: []
+                            rows: [
+                              ["📅 When", "Tonight around 7:30 PM-ish"],
+                              ["🎮 Mode", "Custom Bedwars / Parkour"]
+                            ]
                           }
                         });
                         setShowGamingPost(true);
