@@ -83,6 +83,17 @@ service cloud.firestore {
           "tableData"
         ])
         && (
+          request.resource.data.type != "game_session_card"
+          || (
+            request.resource.data.tableData is map
+            && request.resource.data.tableData.keys().hasOnly(["headers", "rows"])
+            && request.resource.data.tableData.headers is list
+            && request.resource.data.tableData.headers.size() <= 10
+            && request.resource.data.tableData.rows is list
+            && request.resource.data.tableData.rows.size() <= 20
+          )
+        )
+        && (
           channel != "updates"
           || isDeveloper()
         );

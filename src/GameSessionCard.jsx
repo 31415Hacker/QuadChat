@@ -27,7 +27,7 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
 
   function addRow() {
     if (!newLabel.trim() && !newDetail.trim()) return;
-    const rows = [...card.tableData.rows, [newLabel.trim(), newDetail.trim()]];
+    const rows = [...card.tableData.rows, { label: newLabel.trim(), detail: newDetail.trim() }];
     updateTable({ ...card.tableData, rows });
     setNewLabel("");
     setNewDetail("");
@@ -38,12 +38,10 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
     updateTable({ ...card.tableData, rows });
   }
 
-  function updateRow(index, col, value) {
+  function updateRow(index, field, value) {
     const rows = card.tableData.rows.map((row, i) => {
       if (i !== index) return row;
-      const next = [...row];
-      next[col] = value;
-      return next;
+      return { ...row, [field]: value };
     });
     updateTable({ ...card.tableData, rows });
   }
@@ -114,16 +112,22 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
               <tbody>
                 {card.tableData.rows.map((row, ri) => (
                   <tr key={ri} className="border-t border-slate-700">
-                    {row.map((cell, ci) => (
-                      <td key={ci} className="px-3 py-1.5">
-                        <input
-                          className="w-full bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none"
-                          value={cell}
-                          onChange={(e) => updateRow(ri, ci, e.target.value)}
-                          placeholder={card.tableData.headers[ci] || ""}
-                        />
-                      </td>
-                    ))}
+                    <td className="px-3 py-1.5">
+                      <input
+                        className="w-full bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none"
+                        value={row.label}
+                        onChange={(e) => updateRow(ri, "label", e.target.value)}
+                        placeholder={card.tableData.headers[0] || ""}
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        className="w-full bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none"
+                        value={row.detail}
+                        onChange={(e) => updateRow(ri, "detail", e.target.value)}
+                        placeholder={card.tableData.headers[1] || ""}
+                      />
+                    </td>
                     <td className="px-2 py-1.5 text-center">
                       <button
                         type="button"
@@ -212,10 +216,10 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
                 {(card.tableData.rows ?? []).map((row, ri) => (
                   <tr key={ri} className="border-t border-slate-700">
                     <td className="px-3 py-2.5 font-semibold text-slate-300 whitespace-nowrap w-1/3 align-top">
-                      {row[0]}
+                      {row.label}
                     </td>
                     <td className="px-3 py-2.5 text-slate-100">
-                      {row[1]}
+                      {row.detail}
                     </td>
                   </tr>
                 ))}

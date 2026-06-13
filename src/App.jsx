@@ -2279,8 +2279,8 @@ export default function App() {
                           tableData: {
                             headers: ["Details", "Information"],
                             rows: [
-                              ["📅 When", "Tonight around 7:30 PM-ish"],
-                              ["🎮 Mode", "Custom Bedwars / Parkour"]
+                              { label: "📅 When", detail: "Tonight around 7:30 PM-ish" },
+                              { label: "🎮 Mode", detail: "Custom Bedwars / Parkour" }
                             ]
                           }
                         });
