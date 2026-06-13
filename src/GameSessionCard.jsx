@@ -98,7 +98,7 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
         />
 
         {/* Editable table */}
-        {card.tableData.rows.length > 0 && (
+        {(card.tableData?.rows?.length ?? 0) > 0 && (
           <div className="overflow-hidden rounded-lg border border-slate-700">
             <table className="w-full text-sm">
               <thead>
@@ -196,7 +196,7 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
         )}
 
         {/* Table */}
-        {card.tableData.rows.length > 0 && (
+        {card.tableData?.rows?.length > 0 && (
           <div className="overflow-hidden rounded-lg border border-slate-700">
             <table className="w-full text-sm">
               <tbody>
