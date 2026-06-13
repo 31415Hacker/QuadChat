@@ -64,68 +64,24 @@ service cloud.firestore {
       allow create: if signedIn()
         && isNotMuted()
         && request.resource.data.userId == request.auth.uid
-        && (
-          request.resource.data.type != "game_session_card"
-          || (
-            request.resource.data.keys().hasOnly([
-              "type",
-              "title",
-              "googleMeetLink",
-              "note",
-              "tableData",
-              "userId",
-              "createdAt"
-            ])
-            && request.resource.data.title is string
-            && request.resource.data.title.size() <= 200
-            && request.resource.data.note is string
-            && request.resource.data.note.size() <= 500
-            && request.resource.data.tableData is map
-            && request.resource.data.tableData.keys().hasOnly(["headers", "rows"])
-            && request.resource.data.tableData.headers is list
-            && request.resource.data.tableData.headers.size() <= 10
-            && request.resource.data.tableData.rows is list
-            && request.resource.data.tableData.rows.size() <= 20
-          )
-        )
-        && (
-          request.resource.data.type == "game_session_card"
-          || (
-            request.resource.data.keys().hasOnly([
-              "text",
-              "userId",
-              "createdAt",
-              "adminCommand",
-              "command",
-              "commandTarget",
-              "replyTo",
-              "attachments",
-              "isFile",
-              "fileName",
-              "fileType"
-            ])
-            && request.resource.data.text is string
-            && request.resource.data.text.size() <= 1000
-            && (
-              request.resource.data.text.size() > 0
-              || (
-                "attachments" in request.resource.data
-                && request.resource.data.attachments is list
-                && request.resource.data.attachments.size() > 0
-                && request.resource.data.attachments.size() <= 4
-              )
-              || (
-                "isFile" in request.resource.data
-                && request.resource.data.isFile == true
-              )
-            )
-            && (
-              !("adminCommand" in request.resource.data)
-              || request.resource.data.adminCommand == false
-              || isAdmin()
-            )
-          )
-        )
+        && request.resource.data.keys().hasOnly([
+          "text",
+          "userId",
+          "createdAt",
+          "adminCommand",
+          "command",
+          "commandTarget",
+          "replyTo",
+          "attachments",
+          "isFile",
+          "fileName",
+          "fileType",
+          "type",
+          "title",
+          "googleMeetLink",
+          "note",
+          "tableData"
+        ])
         && (
           channel != "updates"
           || isDeveloper()
