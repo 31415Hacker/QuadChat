@@ -237,6 +237,15 @@ function getMuteLabel(profile) {
   }).format(mutedUntilDate)}.`;
 }
 
+function getWarningLabel(profile) {
+  if (!profile?.warning) return "";
+  const w = profile.warning;
+  let label = "The admin has warned you.";
+  if (w.action) label += ` The admin may ${w.action} you.`;
+  if (w.reason) label += ` ${w.reason}`;
+  return label;
+}
+
 const VIDEO_EXT_REGEX = /\.(mp4|webm|mov|avi|mkv|ogg|wmv|flv)$/i;
 
 function isVideoUrl(str) {
@@ -462,6 +471,7 @@ export default function App() {
     (provider) => provider.providerId === "google.com"
   );
   const muteLabel = getMuteLabel(currentProfile);
+  const warningLabel = getWarningLabel(currentProfile);
   const [activeChannel, setActiveChannel] = useState("group");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showGamingPost, setShowGamingPost] = useState(false);
@@ -1301,12 +1311,91 @@ export default function App() {
     const parts = cleanMessage.trim().split(/\s+/);
     const command = parts[0]?.toLowerCase();
 
-    if (!["?mute", "?unmute"].includes(command)) {
+    if (!["?mute", "?unmute", "?warn", "?unwarn"].includes(command)) {
       return null;
     }
 
     if (!isCurrentUserAdmin) {
       return null;
+    }
+
+    if (command === "?warn") {
+      const match = cleanMessage.match(/^\?warn\s+(\S+)\s+"([^"]+)"\s+"([^"]+)"$/);
+      if (!match) {
+        setError('Use ?warn username "action" "reason" (username plain, action and reason in double quotes).');
+        return { handled: true };
+      }
+      const targetName = match[1];
+      const action = match[2].trim();
+      const reason = match[3].trim();
+
+      if (!action || !reason) {
+        setError('Action and reason must not be empty.');
+        return { handled: true };
+      }
+
+      const targets = findCommandTargets(targetName);
+      if (targets.length === 0) {
+        setError(`Could not find ${targetName}.`);
+        return { handled: true };
+      }
+
+      await Promise.all(
+        targets.map((target) =>
+          setDoc(
+            doc(db, "users", target.id),
+            {
+              warning: {
+                action,
+                reason,
+                warnedBy: sessionUserId,
+                warnedAt: serverTimestamp()
+              }
+            },
+            { merge: true }
+          )
+        )
+      );
+      setError("");
+      return {
+        handled: false,
+        metadata: {
+          adminCommand: true,
+          command,
+          commandTarget: `${targetName}: ${action} — ${reason}`
+        }
+      };
+    }
+
+    if (command === "?unwarn") {
+      const targetName = parts[1];
+      if (!targetName) {
+        setError("Use ?unwarn username.");
+        return { handled: true };
+      }
+      const targets = findCommandTargets(targetName);
+      if (targets.length === 0) {
+        setError(`Could not find ${targetName}.`);
+        return { handled: true };
+      }
+      await Promise.all(
+        targets.map((target) =>
+          setDoc(
+            doc(db, "users", target.id),
+            { warning: null },
+            { merge: true }
+          )
+        )
+      );
+      setError("");
+      return {
+        handled: false,
+        metadata: {
+          adminCommand: true,
+          command,
+          commandTarget: targetName
+        }
+      };
     }
 
     const targetName = parts[1];
@@ -1946,6 +2035,7 @@ export default function App() {
 
         {error ? <div className="error-banner">{error}</div> : null}
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
+        {warningLabel ? <div className="error-banner warning-banner">{warningLabel}</div> : null}
 
         <div className="chat-body">
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">

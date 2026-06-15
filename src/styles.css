@@ -718,6 +718,12 @@ button:disabled {
   padding: 12px 20px;
 }
 
+.warning-banner {
+  background: #fff9e6;
+  border-bottom-color: #f0d78a;
+  color: #7d5d00;
+}
+
 .inline-error {
   border: 1px solid #f2b6aa;
   border-radius: 8px;
