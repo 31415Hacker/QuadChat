@@ -1682,7 +1682,7 @@ export default function App() {
         <section className="signin-panel" aria-label="Loading QuadChat">
           <div className="signin-brand">
             <div className="brand-mark" aria-hidden="true">
-              <MessageCircle size={28} strokeWidth={2.3} />
+              <img src="/logo.png" alt="QuadChat" className="brand-logo" />
             </div>
             <div>
               <h1>QuadChat</h1>
@@ -1694,7 +1694,7 @@ export default function App() {
         <section className="signin-panel" aria-label="Sign in to QuadChat">
           <div className="signin-brand">
             <div className="brand-mark" aria-hidden="true">
-              <MessageCircle size={28} strokeWidth={2.3} />
+              <img src="/logo.png" alt="QuadChat" className="brand-logo" />
             </div>
             <div>
               <h1>QuadChat</h1>

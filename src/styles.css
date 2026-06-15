@@ -98,6 +98,12 @@ input {
   justify-content: center;
 }
 
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
 .chat-header h1,
 .chat-header p,
 .signin-brand h1,
