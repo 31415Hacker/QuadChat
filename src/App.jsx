@@ -44,6 +44,7 @@ import {
   BellOff,
   Chrome,
   CircleUserRound,
+  Clock,
   CornerDownLeft,
   FileText,
   Film,
@@ -246,6 +247,22 @@ function getWarningLabel(profile) {
   return label;
 }
 
+function getStatusColor(mode) {
+  switch (mode) {
+    case "busy": return "#ef4444";
+    case "away": return "#f59e0b";
+    default: return "#22c55e";
+  }
+}
+
+function getStatusLabel(mode) {
+  switch (mode) {
+    case "busy": return "Busy";
+    case "away": return "Away";
+    default: return "Active";
+  }
+}
+
 const VIDEO_EXT_REGEX = /\.(mp4|webm|mov|avi|mkv|ogg|wmv|flv)$/i;
 
 function isVideoUrl(str) {
@@ -435,6 +452,9 @@ export default function App() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
+  const [scheduledBusy, setScheduledBusy] = useState([]);
   const [error, setError] = useState("");
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
   const [magicLinkUrl, setMagicLinkUrl] = useState("");
@@ -608,6 +628,41 @@ export default function App() {
 
     return unsubscribe;
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !sessionUserId) return;
+    const profile = profiles[sessionUserId];
+    if (!profile?.status?.scheduledBusy?.length) return;
+
+    const check = () => {
+      const now = Date.now();
+      const inBusy = profile.status.scheduledBusy.some(
+        (s) => now >= s.start?.toDate() && now <= s.end?.toDate()
+      );
+      if (inBusy && profile.status.mode !== "busy") {
+        setDoc(doc(db, "users", sessionUserId), {
+          status: { ...profile.status, mode: "busy" }
+        }, { merge: true });
+      }
+    };
+
+    check();
+    const id = setInterval(check, 30000);
+    return () => clearInterval(id);
+  }, [user, sessionUserId, profiles]);
+
+  useEffect(() => {
+    if (!statusModalOpen || !sessionUserId) return;
+    const profile = profiles[sessionUserId];
+    const s = profile?.status;
+    setEditStatus({ mode: s?.mode || "active", text: s?.text || "" });
+    setScheduledBusy(
+      (s?.scheduledBusy || []).map((sb) => ({
+        start: sb.start?.toDate(),
+        end: sb.end?.toDate()
+      }))
+    );
+  }, [statusModalOpen, sessionUserId, profiles]);
 
   useEffect(() => {
     if (!user) {
@@ -2023,9 +2078,14 @@ export default function App() {
               ) : (
                 <span>{getInitials(activeName)}</span>
               )}
+              <span className="avatar-status-dot" style={{ background: getStatusColor(currentProfile?.status?.mode || "active") }} />
             </button>
             {isProfileMenuOpen ? (
               <div className="profile-menu">
+                <button type="button" onClick={() => { setIsProfileMenuOpen(false); setStatusModalOpen(true); }}>
+                  <Clock size={17} />
+                  <span>Set status</span>
+                </button>
                 <button type="button" onClick={openSettings}>
                   <Settings size={17} />
                   <span>Settings</span>
@@ -2054,6 +2114,120 @@ export default function App() {
         {error ? <div className="error-banner">{error}</div> : null}
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
         {warningLabel ? <div className="error-banner warning-banner">{warningLabel}</div> : null}
+
+        {statusModalOpen ? (
+          <div className="modal-backdrop" onClick={() => setStatusModalOpen(false)}>
+            <div className="status-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="status-modal-header">
+                <Clock size={18} />
+                <span>Set status</span>
+                <button className="modal-close" type="button" onClick={() => setStatusModalOpen(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="status-picker">
+                {["active", "busy", "away"].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`status-option ${editStatus.mode === mode ? "selected" : ""}`}
+                    onClick={() => setEditStatus((s) => ({ ...s, mode }))}
+                  >
+                    <span className="status-dot" style={{ background: getStatusColor(mode) }} />
+                    <span>{getStatusLabel(mode)}</span>
+                  </button>
+                ))}
+              </div>
+
+              <input
+                className="status-text-input"
+                type="text"
+                placeholder="What's your status?"
+                value={editStatus.text}
+                onChange={(e) => setEditStatus((s) => ({ ...s, text: e.target.value }))}
+                maxLength={80}
+              />
+
+              <details className="status-schedule-details">
+                <summary>Schedule busy time</summary>
+                <div className="status-schedule-form">
+                  <label>
+                    From
+                    <input
+                      type="datetime-local"
+                      value={editStatus.scheduleStart || ""}
+                      onChange={(e) => setEditStatus((s) => ({ ...s, scheduleStart: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    To
+                    <input
+                      type="datetime-local"
+                      value={editStatus.scheduleEnd || ""}
+                      onChange={(e) => setEditStatus((s) => ({ ...s, scheduleEnd: e.target.value }))}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="add-schedule-btn"
+                    disabled={!editStatus.scheduleStart || !editStatus.scheduleEnd}
+                    onClick={() => {
+                      if (!editStatus.scheduleStart || !editStatus.scheduleEnd) return;
+                      const start = new Date(editStatus.scheduleStart);
+                      const end = new Date(editStatus.scheduleEnd);
+                      if (end <= start) return;
+                      setScheduledBusy((prev) => [
+                        ...prev,
+                        { start, end }
+                      ]);
+                      setEditStatus((s) => ({ ...s, scheduleStart: "", scheduleEnd: "" }));
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+                {scheduledBusy.length > 0 ? (
+                  <div className="scheduled-list">
+                    {scheduledBusy.map((s, i) => (
+                      <div key={i} className="scheduled-item">
+                        <span>
+                          {s.start.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                          {" — "}
+                          {s.end.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </span>
+                        <button type="button" className="remove-schedule-btn" onClick={() => setScheduledBusy((prev) => prev.filter((_, j) => j !== i))}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </details>
+
+              <div className="status-modal-actions">
+                <button
+                  type="button"
+                  className="save-status-btn"
+                  onClick={async () => {
+                    const scheduled = scheduledBusy.map((s) => ({
+                      start: Timestamp.fromDate(s.start),
+                      end: Timestamp.fromDate(s.end)
+                    }));
+                    await setDoc(
+                      doc(db, "users", sessionUserId),
+                      { status: { mode: editStatus.mode, text: editStatus.text, scheduledBusy: scheduled } },
+                      { merge: true }
+                    );
+                    setStatusModalOpen(false);
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="chat-body">
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
@@ -2245,13 +2419,17 @@ export default function App() {
               {Object.values(profiles).map((profile) => {
                 const name = getProfileName(profile, profile.email || "");
                 const muted = isProfileMuted(profile);
+                const statusMode = onlineUsers.has(profile.id) ? (profile.status?.mode || "active") : "offline";
                 return (
                   <div
                     className={`user-item ${onlineUsers.has(profile.id) ? "online" : ""}`}
                     key={profile.id}
                   >
-                    <span className="user-dot" />
+                    <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
                     <span className="user-name">{name}</span>
+                    {onlineUsers.has(profile.id) && profile.status?.text ? (
+                      <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
+                    ) : null}
                     {muted ? (
                       <MicOff
                         aria-label={`${name} is muted`}
