@@ -2067,19 +2067,21 @@ export default function App() {
             <span>Sign out</span>
           </button>
           <div className="profile-actions">
-            <button
-              className="avatar-button"
-              type="button"
-              onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)}
-              title="Profile options"
-            >
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="" />
-              ) : (
-                <span>{getInitials(activeName)}</span>
-              )}
+            <div className="avatar-wrapper">
+              <button
+                className="avatar-button"
+                type="button"
+                onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)}
+                title="Profile options"
+              >
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="" />
+                ) : (
+                  <span>{getInitials(activeName)}</span>
+                )}
+              </button>
               <span className="avatar-status-dot" style={{ background: getStatusColor(currentProfile?.status?.mode || "active") }} />
-            </button>
+            </div>
             {isProfileMenuOpen ? (
               <div className="profile-menu">
                 <button type="button" onClick={() => { setIsProfileMenuOpen(false); setStatusModalOpen(true); }}>
