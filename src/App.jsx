@@ -57,12 +57,14 @@ import {
   Megaphone,
   Mic,
   MicOff,
+  Moon,
   MoreVertical,
   Pause,
   Play,
   Plus,
   X,
   Settings,
+  Sun,
   Trash2,
   KeyRound,
   LogOut,
@@ -467,6 +469,10 @@ export default function App() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [appSettings, setAppSettings] = useState({ signupEnabled: true });
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [isDarkTheme, setIsDarkTheme] = useState(() => {
+    const stored = localStorage.getItem("quadchat-theme");
+    return stored !== null ? stored === "dark" : true;
+  });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
   const [scheduledBusy, setScheduledBusy] = useState([]);
@@ -564,6 +570,16 @@ export default function App() {
       remove(presenceRef);
     };
   }, [user]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkTheme) {
+      root.removeAttribute("data-theme");
+    } else {
+      root.setAttribute("data-theme", "light");
+    }
+    localStorage.setItem("quadchat-theme", isDarkTheme ? "dark" : "light");
+  }, [isDarkTheme]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -2131,6 +2147,10 @@ export default function App() {
                 <button type="button" onClick={openSettings}>
                   <Settings size={17} />
                   <span>Settings</span>
+                </button>
+                <button type="button" onClick={() => setIsDarkTheme((prev) => !prev)}>
+                  {isDarkTheme ? <Sun size={17} /> : <Moon size={17} />}
+                  <span>{isDarkTheme ? "Light mode" : "Dark mode"}</span>
                 </button>
                 <button type="button" onClick={toggleNotifications}>
                   {notificationsEnabled ? (
