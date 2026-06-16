@@ -19,6 +19,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -30,7 +31,8 @@ import {
   serverTimestamp,
   setDoc,
   startAfter,
-  Timestamp
+  Timestamp,
+  updateDoc
 } from "firebase/firestore";
 import {
   onValue,
@@ -1754,6 +1756,23 @@ export default function App() {
     }
   }
 
+  async function handleRsvp(messageId, status, customText) {
+    if (!sessionUserId || !activeChannel || !messageId) return;
+    const ref = doc(db, "messages", activeChannel, "messages", messageId);
+    if (!status) {
+      await updateDoc(ref, { [`rsvps.${sessionUserId}`]: deleteField() });
+      return;
+    }
+    await updateDoc(ref, {
+      [`rsvps.${sessionUserId}`]: {
+        name: activeName,
+        status,
+        customText: customText || "",
+        updatedAt: serverTimestamp()
+      }
+    });
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
 
@@ -2381,7 +2400,7 @@ export default function App() {
                           </a>
                         )
                       ) : item.type === "game_session_card" ? (
-                        <GameSessionCard data={item} />
+                        <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} />
                       ) : item.text ? (
                         <p>
                           {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId)}

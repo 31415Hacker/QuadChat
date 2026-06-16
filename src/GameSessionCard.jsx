@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ExternalLink, Plus, GripHorizontal } from "lucide-react";
+import { ExternalLink, Plus, GripHorizontal, Check, X, Minus } from "lucide-react";
 
 const EMPTY_CARD = {
   type: "game_session_card",
@@ -12,10 +12,29 @@ const EMPTY_CARD = {
   }
 };
 
-export default function GameSessionCard({ data, isEditingMode, onChange }) {
+export default function GameSessionCard({ data, isEditingMode, onChange, sessionUserId, sessionUserName, onRsvp }) {
   const card = data || EMPTY_CARD;
   const [newLabel, setNewLabel] = useState("");
   const [newDetail, setNewDetail] = useState("");
+  const [customRsvp, setCustomRsvp] = useState("");
+
+  const rsvps = card.rsvps || {};
+  const myRsvp = sessionUserId ? rsvps[sessionUserId] : null;
+
+  function handleRsvp(status) {
+    if (!onRsvp) return;
+    if (myRsvp?.status === status && !myRsvp?.customText) {
+      onRsvp(null);
+    } else {
+      onRsvp(status, "");
+    }
+  }
+
+  function handleCustomRsvp() {
+    if (!onRsvp || !customRsvp.trim()) return;
+    onRsvp("custom", customRsvp.trim());
+    setCustomRsvp("");
+  }
 
   function update(field, value) {
     onChange?.({ ...card, [field]: value });
@@ -233,6 +252,85 @@ export default function GameSessionCard({ data, isEditingMode, onChange }) {
       <div className="px-5 pb-5">
         {renderMeetButton()}
       </div>
+
+      {/* RSVP section */}
+      {sessionUserId ? (
+        <div className="border-t border-slate-700 px-5 py-4 space-y-3">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">RSVP</div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { status: "coming", label: "I'm in", icon: Check, color: "text-green-400 border-green-500/50 hover:bg-green-500/20" },
+              { status: "maybe", label: "Maybe", icon: Minus, color: "text-yellow-400 border-yellow-500/50 hover:bg-yellow-500/20" },
+              { status: "not_coming", label: "Can't go", icon: X, color: "text-red-400 border-red-500/50 hover:bg-red-500/20" }
+            ].map(({ status, label, icon: Icon, color }) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => handleRsvp(status)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                  myRsvp?.status === status && !myRsvp?.customText
+                    ? `${color} bg-slate-700/60`
+                    : "text-slate-400 border-slate-600 hover:border-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                className="w-28 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Custom..."
+                value={customRsvp}
+                onChange={(e) => setCustomRsvp(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCustomRsvp(); }}
+              />
+              <button
+                type="button"
+                onClick={handleCustomRsvp}
+                disabled={!customRsvp.trim()}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:pointer-events-none text-white transition-colors"
+              >
+                <Check size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* RSVP list */}
+          {Object.keys(rsvps).length > 0 ? (
+            <div className="space-y-2 text-sm">
+              {[
+                { key: "coming", label: "Coming", icon: Check, color: "text-green-400" },
+                { key: "maybe", label: "Maybe", icon: Minus, color: "text-yellow-400" },
+                { key: "not_coming", label: "Not coming", icon: X, color: "text-red-400" },
+                { key: "custom", label: "Custom", icon: null, color: "text-slate-400" }
+              ].map(({ key, label, icon: Icon, color }) => {
+                const entries = Object.entries(rsvps).filter(([, r]) => key === "custom" ? r.status === "custom" : r.status === key);
+                if (entries.length === 0) return null;
+                return (
+                  <div key={key}>
+                    <div className={`text-xs font-semibold mb-1 flex items-center gap-1 ${color}`}>
+                      {Icon ? <Icon size={12} /> : null}
+                      {label}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {entries.map(([uid, r]) => (
+                        <div key={uid} className="flex items-center gap-1 text-slate-300">
+                          <span>{r.name}</span>
+                          {r.customText ? <span className="text-slate-500">— {r.customText}</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500">No RSVPs yet. Be the first!</div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
