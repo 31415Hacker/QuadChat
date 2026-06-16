@@ -757,7 +757,7 @@ export default function App() {
           startAfter(newestDocSnapRef.current)
         );
 
-        newMessagesUnsubRef.current = onSnapshot(
+        const unsubNew = onSnapshot(
           newQuery,
           (snap) => {
             if (cancelled) return;
@@ -789,6 +789,32 @@ export default function App() {
           }
         );
       }
+
+      const modUnsub = onSnapshot(
+        query(ref, orderBy("createdAt", "asc")),
+        (snap) => {
+          if (cancelled) return;
+          snap.docChanges().forEach((change) => {
+            if (change.type !== "modified") return;
+            const msg = {
+              id: change.doc.id,
+              ...change.doc.data()
+            };
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === msg.id);
+              if (idx === -1) return prev;
+              const next = prev.slice();
+              next[idx] = { ...next[idx], ...msg };
+              return next;
+            });
+          });
+        }
+      );
+
+      newMessagesUnsubRef.current = () => {
+        unsubNew();
+        modUnsub();
+      };
     }
 
     loadInitialMessages();
