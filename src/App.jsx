@@ -1357,12 +1357,14 @@ export default function App() {
         )
       );
       setError("");
+      const name = getProfileName(targets[0], targetName);
       return {
         handled: false,
         metadata: {
           adminCommand: true,
           command,
-          commandTarget: `${targetName}: ${action} — ${reason}`
+          commandTarget: `${targetName}: ${action} — ${reason}`,
+          notificationText: `⚠️ @${name} was warned — ${action}: ${reason}`
         }
       };
     }
@@ -1388,12 +1390,14 @@ export default function App() {
         )
       );
       setError("");
+      const name = getProfileName(targets[0], targetName);
       return {
         handled: false,
         metadata: {
           adminCommand: true,
           command,
-          commandTarget: targetName
+          commandTarget: targetName,
+          notificationText: `⚠️ Warning removed for @${name}`
         }
       };
     }
@@ -1436,18 +1440,21 @@ export default function App() {
         )
       );
       setError("");
+      const name = getProfileName(targets[0], targetName);
       return {
         handled: false,
         metadata: {
           adminCommand: true,
           command,
-          commandTarget: targetName
+          commandTarget: targetName,
+          notificationText: `🔇 @${name} was unmuted`
         }
       };
     }
 
     const timeFlagIndex = parts.findIndex((part) => part === "-t");
     const duration = timeFlagIndex >= 0 ? parseDuration(parts[timeFlagIndex + 1]) : null;
+    const durationStr = timeFlagIndex >= 0 ? parts[timeFlagIndex + 1] : null;
 
     if (timeFlagIndex >= 0 && !duration) {
       setError("Use durations like 30s, 10m, 2h, or 1d.");
@@ -1471,12 +1478,14 @@ export default function App() {
       )
     );
     setError("");
+    const name = getProfileName(targets[0], targetName);
     return {
       handled: false,
       metadata: {
         adminCommand: true,
         command,
-        commandTarget: targetName
+        commandTarget: targetName,
+        notificationText: `🔇 @${name} was muted${durationStr ? ` for ${durationStr}` : ''}`
       }
     };
   }
@@ -1702,8 +1711,9 @@ export default function App() {
       }
 
       if (cleanMessage) {
+        const messageText = commandResult?.metadata?.notificationText || cleanMessage;
         await addDoc(messagesRef(activeChannel), {
-          text: cleanMessage,
+          text: messageText,
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
             ? {
