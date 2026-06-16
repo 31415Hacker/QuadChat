@@ -71,6 +71,8 @@ service cloud.firestore {
           "adminCommand",
           "command",
           "commandTarget",
+          "notificationText",
+          "targetUserId",
           "replyTo",
           "attachments",
           "isFile",
@@ -87,7 +89,11 @@ service cloud.firestore {
           || isDeveloper()
         );
 
-      allow update, delete: if false;
+      allow update: if signedIn()
+        && isNotMuted()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvps"]);
+
+      allow delete: if false;
     }
 
     match /users/{userId} {
