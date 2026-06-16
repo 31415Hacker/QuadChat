@@ -257,13 +257,17 @@ function isVideoUrl(str) {
   }
 }
 
-function renderMessageText(text, profiles, isAdminCommand = false) {
+function renderMessageText(text, profiles, isAdminCommand = false, sessionUserId = null, targetUserId = null) {
   if (!text) {
     return null;
   }
 
   if (isAdminCommand) {
-    return <span className="admin-command-text">{text}</span>;
+    let displayText = text;
+    if (sessionUserId && targetUserId && sessionUserId === targetUserId) {
+      displayText = text.replace(/@\S+/g, 'You');
+    }
+    return <span className="admin-command-text">{displayText}</span>;
   }
 
   const knownNames = Object.values(profiles).map((profile) =>
@@ -1364,7 +1368,8 @@ export default function App() {
           adminCommand: true,
           command,
           commandTarget: `${targetName}: ${action} — ${reason}`,
-          notificationText: `⚠️ @${name} was warned — ${action}: ${reason}`
+          notificationText: `⚠️ @${name} was warned — ${action}: ${reason}`,
+          targetUserId: targets[0].id
         }
       };
     }
@@ -1397,7 +1402,8 @@ export default function App() {
           adminCommand: true,
           command,
           commandTarget: targetName,
-          notificationText: `⚠️ Warning removed for @${name}`
+          notificationText: `⚠️ Warning removed for @${name}`,
+          targetUserId: targets[0].id
         }
       };
     }
@@ -1447,7 +1453,8 @@ export default function App() {
           adminCommand: true,
           command,
           commandTarget: targetName,
-          notificationText: `🔇 @${name} was unmuted`
+          notificationText: `🔇 @${name} was unmuted`,
+          targetUserId: targets[0].id
         }
       };
     }
@@ -1485,7 +1492,8 @@ export default function App() {
         adminCommand: true,
         command,
         commandTarget: targetName,
-        notificationText: `🔇 @${name} was muted${durationStr ? ` for ${durationStr}` : ''}`
+        notificationText: `🔇 @${name} was muted${durationStr ? ` for ${durationStr}` : ''}`,
+        targetUserId: targets[0].id
       }
     };
   }
@@ -2179,7 +2187,7 @@ export default function App() {
                         <GameSessionCard data={item} />
                       ) : item.text ? (
                         <p>
-                          {renderMessageText(item.text, profiles, item.adminCommand)}
+                          {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId)}
                         </p>
                       ) : null}
                       {item.attachments?.length > 0 ? (
