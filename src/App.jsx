@@ -263,6 +263,19 @@ function getStatusLabel(mode) {
   }
 }
 
+function getRelativeTime(timestamp) {
+  if (!timestamp?.toDate) return "";
+  const diff = Date.now() - timestamp.toDate();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return timestamp.toDate().toLocaleDateString();
+}
+
 const VIDEO_EXT_REGEX = /\.(mp4|webm|mov|avi|mkv|ogg|wmv|flv)$/i;
 
 function isVideoUrl(str) {
@@ -534,10 +547,18 @@ export default function App() {
     if (!user) return;
 
     const presenceRef = rtdbRef(rtdb, `presence/${user.uid}`);
+
     set(presenceRef, true);
     onDisconnect(presenceRef).remove();
 
+    const handleBeforeUnload = () => {
+      setDoc(doc(db, "users", user.uid), { lastOnline: serverTimestamp() }, { merge: true });
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      setDoc(doc(db, "users", user.uid), { lastOnline: serverTimestamp() }, { merge: true });
       remove(presenceRef);
     };
   }, [user]);
@@ -2428,10 +2449,17 @@ export default function App() {
                     key={profile.id}
                   >
                     <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
-                    <span className="user-name">{name}</span>
-                    {onlineUsers.has(profile.id) && profile.status?.text ? (
-                      <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
-                    ) : null}
+                    <div className="user-info">
+                      <span className="user-name">
+                        {name}
+                        {onlineUsers.has(profile.id) && profile.status?.text ? (
+                          <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
+                        ) : null}
+                      </span>
+                      <span className="user-last-online">
+                        {onlineUsers.has(profile.id) ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
+                      </span>
+                    </div>
                     {muted ? (
                       <MicOff
                         aria-label={`${name} is muted`}
