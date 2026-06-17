@@ -2519,7 +2519,7 @@ export default function App() {
                     <div className="user-info">
                       <span className="user-name">
                         {name}
-                        {onlineUsers.has(profile.id) && profile.status?.text ? (
+                        {profile.status?.text ? (
                           <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
                         ) : null}
                       </span>

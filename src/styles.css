@@ -44,6 +44,8 @@
 
 /* ========== Light theme ========== */
 [data-theme="light"] {
+  color-scheme: light;
+  
   --bg-page: #f3f6f1;
   --bg-panel: rgba(255, 255, 255, 0.92);
   --bg-panel-border: rgba(82, 98, 86, 0.14);
@@ -88,6 +90,7 @@
 
 :root {
   color: var(--text-primary);
+  color-scheme: dark;
   
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -362,6 +365,44 @@ input {
 }
 
 input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--shadow-focus);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.75;
+}
+
+textarea {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  color: var(--text-primary);
+  min-width: 0;
+  outline: none;
+  padding: 12px 13px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--shadow-focus);
+}
+
+select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  color: var(--text-primary);
+  outline: none;
+  padding: 8px 10px;
+}
+
+select:focus {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 3px var(--shadow-focus);
 }
@@ -1729,6 +1770,30 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-input);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 @tailwind components;
