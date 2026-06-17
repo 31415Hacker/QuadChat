@@ -691,6 +691,15 @@ export default function App() {
   }, [user, sessionUserId, profiles]);
 
   useEffect(() => {
+    if (!user || !sessionUserId) return;
+    setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true });
+    const id = setInterval(() => {
+      setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true });
+    }, 300000);
+    return () => clearInterval(id);
+  }, [user, sessionUserId]);
+
+  useEffect(() => {
     if (!statusModalOpen || !sessionUserId) return;
     const profile = profiles[sessionUserId];
     const s = profile?.status;
@@ -1843,6 +1852,8 @@ export default function App() {
 
     setIsSending(true);
     setError("");
+
+    setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true }).catch(() => {});
 
     try {
       const commandResult = await runAdminCommand(cleanMessage);
