@@ -685,7 +685,7 @@ button:disabled {
 
 .settings-photo-pick {
   align-items: center;
-  background: var(--bg-surface)fff;
+  background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-accent);
@@ -799,21 +799,21 @@ button:disabled {
 }
 
 .error-banner {
-  background: var(--bg-surface)0ed;
-  border-bottom: 1px solid #f2b6aa;
-  color: #8f2b1b;
+  background: var(--error-bg);
+  border-bottom: 1px solid var(--error-border);
+  color: var(--error-text);
   font-size: 0.93rem;
   padding: 12px 20px;
 }
 
 .warning-banner {
-  background: var(--bg-surface)9e6;
-  border-bottom-color: #f0d78a;
-  color: #7d5d00;
+  background: var(--warning-bg);
+  border-bottom-color: var(--warning-border);
+  color: var(--warning-text);
 }
 
 .inline-error {
-  border: 1px solid #f2b6aa;
+  border: 1px solid var(--error-border);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -1371,7 +1371,7 @@ button:disabled {
 }
 
 .channel-tab.active {
-  background: var(--bg-surface)fff;
+  background: var(--bg-surface);
   border-color: var(--border-color);
   color: var(--text-accent);
 }
