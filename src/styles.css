@@ -184,7 +184,7 @@ input {
   align-items: center;
   background: var(--accent-brand);
   border-radius: 8px;
-  color: var(--text-accent);
+  color: #3d3520;
   display: flex;
   flex: 0 0 52px;
   height: 52px;
@@ -218,7 +218,7 @@ input {
 .admin-badge {
   background: var(--accent-brand);
   border-radius: 999px;
-  color: var(--text-accent);
+  color: #3d3520;
   display: inline-flex;
   font-size: 0.72rem;
   font-weight: 900;
