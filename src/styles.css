@@ -1,45 +1,45 @@
 /* ========== Theme Variables (default: dark) ========== */
 :root {
-  --bg-page: #0f1715;
-  --bg-panel: rgba(23, 33, 30, 0.95);
-  --bg-panel-border: rgba(100, 116, 110, 0.2);
-  --bg-sidebar: #1a2522;
-  --bg-surface: #1e2926;
-  --bg-hover: #25332f;
-  --bg-hover-alt: #2a3a35;
-  --bg-input: #25332f;
-  --bg-modal-backdrop: rgba(0, 0, 0, 0.6);
-  --bg-accent: #1a5f6f;
+  --bg-page: #0a0f0e;
+  --bg-panel: rgba(16, 24, 22, 0.96);
+  --bg-panel-border: rgba(60, 85, 78, 0.18);
+  --bg-sidebar: #0e1614;
+  --bg-surface: #17211e;
+  --bg-hover: #1f2d29;
+  --bg-hover-alt: #263733;
+  --bg-input: #1a2623;
+  --bg-modal-backdrop: rgba(0, 0, 0, 0.65);
+  --bg-accent: #1a6d7a;
   
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  --text-accent: #94b8c7;
-  --text-inverse: #0f1715;
+  --text-primary: #e8eeed;
+  --text-secondary: #94acac;
+  --text-tertiary: #668081;
+  --text-accent: #7fc1cc;
+  --text-inverse: #0a0f0e;
   
-  --border-color: #334155;
-  --border-input: #475569;
+  --border-color: #263733;
+  --border-input: #3a524d;
   
-  --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.5);
-  --shadow-dropdown: 0 18px 44px rgba(0, 0, 0, 0.5);
-  --shadow-modal: 0 26px 80px rgba(0, 0, 0, 0.6);
-  --shadow-focus: rgba(43, 88, 118, 0.3);
+  --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.55);
+  --shadow-dropdown: 0 18px 44px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 26px 80px rgba(0, 0, 0, 0.65);
+  --shadow-focus: rgba(60, 150, 170, 0.3);
   
-  --accent-primary: #de654d;
-  --accent-primary-dark: #c94f39;
+  --accent-primary: #e0705a;
+  --accent-primary-dark: #cc5a44;
   --accent-red: #ef4444;
   --accent-red-dark: #dc2626;
-  --accent-green: #22c55e;
-  --accent-yellow: #f59e0b;
+  --accent-green: #2dd48b;
+  --accent-yellow: #eab308;
   --accent-brand: #f6c85f;
-  --accent-blue: #60a5fa;
+  --accent-blue: #5bb5f5;
   
-  --error-bg: #3b1a1a;
-  --error-border: #991b1b;
-  --error-text: #fca5a5;
-  --warning-bg: #3b2f00;
-  --warning-border: #a68a00;
-  --warning-text: #fde68a;
+  --error-bg: #2d1414;
+  --error-border: #8a2e2e;
+  --error-text: #fbb4b4;
+  --warning-bg: #2d2410;
+  --warning-border: #8a7520;
+  --warning-text: #fce38a;
 }
 
 /* ========== Light theme ========== */
