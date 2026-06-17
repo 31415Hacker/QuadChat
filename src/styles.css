@@ -437,14 +437,17 @@ button:disabled {
 }
 
 .icon-text-button {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-on-accent);
   gap: 8px;
   min-height: 42px;
   white-space: nowrap;
 }
 
 .icon-text-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .profile-actions {
