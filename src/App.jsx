@@ -750,6 +750,7 @@ export default function App() {
       newestDocSnapRef.current =
         snapshot.docs[snapshot.docs.length - 1] || null;
 
+      let unsubNew;
       if (newestDocSnapRef.current) {
         const newQuery = query(
           ref,
@@ -757,7 +758,7 @@ export default function App() {
           startAfter(newestDocSnapRef.current)
         );
 
-        const unsubNew = onSnapshot(
+        unsubNew = onSnapshot(
           newQuery,
           (snap) => {
             if (cancelled) return;
@@ -812,7 +813,7 @@ export default function App() {
       );
 
       newMessagesUnsubRef.current = () => {
-        unsubNew();
+        if (unsubNew) unsubNew();
         modUnsub();
       };
     }
