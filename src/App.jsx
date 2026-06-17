@@ -2507,7 +2507,8 @@ export default function App() {
               {Object.values(profiles).map((profile) => {
                 const name = getProfileName(profile, profile.email || "");
                 const muted = isProfileMuted(profile);
-                const statusMode = onlineUsers.has(profile.id) ? (profile.status?.mode || "active") : "offline";
+                const theirMode = profile.status?.mode;
+                const statusMode = (theirMode === "busy" || theirMode === "away") ? theirMode : (onlineUsers.has(profile.id) ? "active" : "offline");
                 return (
                   <div
                     className={`user-item ${onlineUsers.has(profile.id) ? "online" : ""}`}
