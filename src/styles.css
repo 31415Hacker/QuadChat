@@ -10,6 +10,7 @@
   --bg-input: #1a2623;
   --bg-modal-backdrop: rgba(0, 0, 0, 0.65);
   --bg-accent: #1a6d7a;
+  --text-on-accent: #ffffff;
   
   --text-primary: #e8eeed;
   --text-secondary: #94acac;
@@ -56,6 +57,7 @@
   --bg-input: #ffffff;
   --bg-modal-backdrop: rgba(23, 63, 79, 0.38);
   --bg-accent: #173f4f;
+  --text-on-accent: #ffffff;
   
   --text-primary: #1e293b;
   --text-secondary: #52615b;
@@ -165,7 +167,7 @@ input {
 
 .chat-header {
   background: var(--bg-accent);
-  color: var(--text-inverse);
+  color: var(--text-on-accent);
   justify-content: space-between;
   padding: 22px 24px;
   position: relative;
@@ -209,7 +211,7 @@ input {
 }
 
 .chat-header p {
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 255, 255, 0.72);
   margin-top: 3px;
 }
 
@@ -451,9 +453,9 @@ button:disabled {
 
 .avatar-button {
   background: var(--accent-brand);
-  border: 2px solid rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
-  color: var(--text-accent);
+  color: #3d3520;
   height: 46px;
   min-height: 46px;
   overflow: hidden;
@@ -1752,7 +1754,7 @@ button:disabled {
 }
 
 .avatar-status-dot {
-  border: 2px solid white;
+  border: 2px solid var(--bg-accent);
   border-radius: 999px;
   bottom: -2px;
   flex: 0 0 14px;
