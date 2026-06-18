@@ -838,6 +838,7 @@ button:disabled {
 .danger-button {
   background: var(--accent-red);
   gap: 8px;
+  padding: 0 16px;
 }
 
 .danger-button:hover:not(:disabled) {

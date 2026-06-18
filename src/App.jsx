@@ -12,6 +12,7 @@ import {
   signInWithEmailLink,
   signInWithPopup,
   signOut as signOutOfFirebase,
+  unlink,
   updatePassword,
   updateProfile
 } from "firebase/auth";
@@ -514,6 +515,9 @@ export default function App() {
     isAdminEmail(user?.email || "");
   const hasGoogleProvider = user?.providerData?.some(
     (provider) => provider.providerId === "google.com"
+  );
+  const hasEmailProvider = user?.providerData?.some(
+    (provider) => provider.providerId === "password"
   );
   const muteLabel = getMuteLabel(currentProfile);
   const warningLabel = getWarningLabel(currentProfile);
@@ -1072,6 +1076,34 @@ export default function App() {
       await credential.user.reload();
       setUser(auth.currentUser);
       setSettingsMessage("Google account connected.");
+    } catch (firebaseError) {
+      setSettingsMessage(getAuthErrorMessage(firebaseError));
+    } finally {
+      setIsSavingSettings(false);
+    }
+  }
+
+  async function unlinkGoogleAccount() {
+    if (!user) return;
+
+    if (!hasEmailProvider) {
+      setSettingsMessage("Set a password first so you can sign in without Google, then unlink.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Unlink Google from this account? You can link a different Google account later."
+    );
+    if (!confirmed) return;
+
+    setIsSavingSettings(true);
+    setSettingsMessage("");
+
+    try {
+      await unlink(user, googleProvider.providerId);
+      await user.reload();
+      setUser(auth.currentUser);
+      setSettingsMessage("Google account unlinked.");
     } catch (firebaseError) {
       setSettingsMessage(getAuthErrorMessage(firebaseError));
     } finally {
@@ -2932,6 +2964,14 @@ export default function App() {
                     <h3>Google account</h3>
                     <p>Google sign-in is connected.</p>
                   </div>
+                  <button
+                    className="danger-button"
+                    disabled={isSavingSettings}
+                    onClick={unlinkGoogleAccount}
+                    type="button"
+                  >
+                    Unlink Google
+                  </button>
                 </section>
               )}
 
