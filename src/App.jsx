@@ -36,10 +36,15 @@ import {
   updateDoc
 } from "firebase/firestore";
 import {
+  get,
   onValue,
   ref as rtdbRef,
   set,
   onDisconnect,
+  push,
+  onChildAdded,
+  off,
+  update,
   remove
 } from "firebase/database";
 import {
@@ -61,6 +66,9 @@ import {
   Moon,
   MoreVertical,
   Pause,
+  Phone,
+  PhoneIncoming,
+  PhoneOff,
   Play,
   Plus,
   X,
@@ -102,6 +110,9 @@ const maxAttachments = 4;
 const maxAttachmentBytes = 10 * 1024 * 1024;
 const PAGE_SIZE = 30;
 const supportsRecording = typeof MediaRecorder !== "undefined";
+const rtcConfig = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -525,6 +536,15 @@ export default function App() {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showGamingPost, setShowGamingPost] = useState(false);
   const [gamingPostCard, setGamingPostCard] = useState(null);
+  const [callStatus, setCallStatus] = useState("idle");
+  const [callPartnerId, setCallPartnerId] = useState(null);
+  const [callPartnerName, setCallPartnerName] = useState("");
+  const [callMuted, setCallMuted] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(null);
+  const peerRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(null);
+  const callNodeRef = useRef(null);
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -702,6 +722,19 @@ export default function App() {
     }, 300000);
     return () => clearInterval(id);
   }, [user, sessionUserId]);
+
+  useEffect(() => {
+    if (callStatus !== "idle") return;
+
+    const callsRef = rtdbRef(rtdb, "calls");
+    const unsub = onChildAdded(callsRef, (snap) => {
+      const data = snap.val();
+      if (data.calleeId === sessionUserId && data.status === "calling" && !incomingCall) {
+        setIncomingCall({ key: snap.key, ...data });
+      }
+    });
+    return () => off(callsRef);
+  }, [sessionUserId, callStatus, incomingCall]);
 
   useEffect(() => {
     if (!statusModalOpen || !sessionUserId) return;
@@ -1108,6 +1141,170 @@ export default function App() {
       setSettingsMessage(getAuthErrorMessage(firebaseError));
     } finally {
       setIsSavingSettings(false);
+    }
+  }
+
+  function cleanupCall() {
+    if (peerRef.current) {
+      peerRef.current.close();
+      peerRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((t) => t.stop());
+      remoteStreamRef.current = null;
+    }
+    if (callNodeRef.current) {
+      remove(callNodeRef.current);
+      callNodeRef.current = null;
+    }
+    setCallStatus("idle");
+    setCallPartnerId(null);
+    setCallPartnerName("");
+    setCallMuted(false);
+    setIncomingCall(null);
+  }
+
+  async function createPeerConnection(callNodeRefVal, isCaller) {
+    const pc = new RTCPeerConnection(rtcConfig);
+    peerRef.current = pc;
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate && callNodeRefVal) {
+        const candidateRef = rtdbRef(rtdb, `${callNodeRefVal.key}/candidates/${isCaller ? "caller" : "callee"}/${Date.now()}`);
+        set(candidateRef, e.candidate.toJSON());
+      }
+    };
+
+    pc.ontrack = (e) => {
+      remoteStreamRef.current = e.streams[0];
+    };
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current));
+    }
+
+    return pc;
+  }
+
+  async function startCall(calleeId, calleeName) {
+    if (callStatus !== "idle") return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+
+      const callRef = push(rtdbRef(rtdb, "calls"));
+      callNodeRef.current = callRef;
+
+      const initialData = {
+        callerId: sessionUserId,
+        calleeId,
+        callerName: activeName,
+        calleeName,
+        status: "calling",
+        startedAt: Date.now()
+      };
+      await set(callRef, initialData);
+
+      const pc = await createPeerConnection(callRef, true);
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await update(callRef, { offer: { type: offer.type, sdp: offer.sdp } });
+
+      setCallStatus("calling");
+      setCallPartnerId(calleeId);
+      setCallPartnerName(calleeName);
+
+      const answerRef = rtdbRef(rtdb, `${callRef.key}/answer`);
+      const unsubAnswer = onValue(answerRef, async (snap) => {
+        if (snap.exists() && pc.signalingState !== "stable") {
+          const ans = snap.val();
+          await pc.setRemoteDescription(new RTCSessionDescription(ans));
+          setCallStatus("connected");
+        }
+      });
+
+      const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/callee`);
+      onChildAdded(candidatesRef, (snap) => {
+        const candidate = new RTCIceCandidate(snap.val());
+        pc.addIceCandidate(candidate);
+      });
+
+      peerRef.current._unsubAnswer = unsubAnswer;
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+          cleanupCall();
+        }
+      };
+    } catch (e) {
+      console.error("call error:", e);
+      cleanupCall();
+    }
+  }
+
+  async function answerCall() {
+    if (!incomingCall) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+
+      const callRef = rtdbRef(rtdb, incomingCall.key);
+      callNodeRef.current = callRef;
+
+      const snap = await get(callRef);
+      const data = snap.val();
+
+      const pc = await createPeerConnection(callRef, false);
+
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await update(callRef, { answer: { type: answer.type, sdp: answer.sdp }, status: "connected" });
+
+      setCallStatus("connected");
+      setCallPartnerId(data.callerId);
+      setCallPartnerName(data.callerName);
+      setIncomingCall(null);
+
+      const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/caller`);
+      onChildAdded(candidatesRef, (snap) => {
+        const candidate = new RTCIceCandidate(snap.val());
+        pc.addIceCandidate(candidate);
+      });
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+          cleanupCall();
+        }
+      };
+    } catch (e) {
+      console.error("answer error:", e);
+      cleanupCall();
+    }
+  }
+
+  function rejectCall() {
+    if (incomingCall) {
+      remove(rtdbRef(rtdb, incomingCall.key));
+      setIncomingCall(null);
+    }
+  }
+
+  function toggleCallMute() {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setCallMuted(!audioTrack.enabled);
+      }
     }
   }
 
@@ -2361,6 +2558,47 @@ export default function App() {
           </div>
         ) : null}
 
+        {incomingCall ? (
+          <div className="modal-backdrop">
+            <div className="incoming-call">
+              <PhoneIncoming size={36} />
+              <p><strong>{incomingCall.callerName}</strong> is calling...</p>
+              <div className="incoming-call-actions">
+                <button className="danger-button" type="button" onClick={rejectCall}>
+                  <PhoneOff size={18} />
+                  <span>Decline</span>
+                </button>
+                <button className="save-status-btn" type="button" onClick={answerCall}>
+                  <Phone size={18} />
+                  <span>Answer</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {callStatus === "connected" || callStatus === "calling" ? (
+          <div className="active-call-bar">
+            <div className="active-call-info">
+              <Phone size={15} />
+              <span>{callStatus === "calling" ? "Calling" : "On call with"} <strong>{callPartnerName}</strong></span>
+            </div>
+            <div className="active-call-actions">
+              <button
+                className="call-action-btn"
+                type="button"
+                onClick={toggleCallMute}
+                title={callMuted ? "Unmute" : "Mute"}
+              >
+                {callMuted ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button className="call-action-btn call-end-btn" type="button" onClick={cleanupCall} title="End call">
+                <PhoneOff size={16} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="chat-body">
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
             {activeChannel === "suggestions" ? (
@@ -2570,6 +2808,16 @@ export default function App() {
                         {onlineUsers.has(profile.id) ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
                       </span>
                     </div>
+                    {profile.id !== sessionUserId && onlineUsers.has(profile.id) && callStatus === "idle" ? (
+                      <button
+                        className="user-call-btn"
+                        type="button"
+                        onClick={() => startCall(profile.id, name)}
+                        title={`Call ${name}`}
+                      >
+                        <Phone size={13} />
+                      </button>
+                    ) : null}
                     {muted ? (
                       <MicOff
                         aria-label={`${name} is muted`}
