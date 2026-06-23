@@ -1925,3 +1925,11 @@ button:disabled {
 
 @tailwind components;
 @tailwind utilities;
+
+.commit-fineprint {
+  color: var(--text-tertiary);
+  font-size: 0.65rem;
+  opacity: 0.5;
+  padding: 8px 16px;
+  text-align: center;
+}

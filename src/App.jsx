@@ -3359,6 +3359,7 @@ export default function App() {
           </section>
         </div>
       ) : null}
+      <div className="commit-fineprint">commit {__COMMIT_HASH__}</div>
     </main>
   );
 }
