@@ -545,6 +545,7 @@ export default function App() {
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const callNodeRef = useRef(null);
+  const seenCallIdsRef = useRef(new Set());
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -725,16 +726,18 @@ export default function App() {
 
   useEffect(() => {
     if (callStatus !== "idle") return;
+    seenCallIdsRef.current = new Set();
 
     const callsRef = rtdbRef(rtdb, "calls");
     const unsub = onChildAdded(callsRef, (snap) => {
       const data = snap.val();
-      if (data.calleeId === sessionUserId && data.status === "calling" && !incomingCall) {
+      if (data.calleeId === sessionUserId && data.status === "calling" && !seenCallIdsRef.current.has(snap.key)) {
+        seenCallIdsRef.current.add(snap.key);
         setIncomingCall({ key: snap.key, ...data });
       }
     });
     return () => off(callsRef);
-  }, [sessionUserId, callStatus, incomingCall]);
+  }, [sessionUserId, callStatus]);
 
   useEffect(() => {
     if (!statusModalOpen || !sessionUserId) return;
