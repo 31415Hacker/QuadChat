@@ -1899,6 +1899,11 @@ button:disabled {
   border-color: var(--accent-red-dark);
 }
 
+.remote-muted-icon {
+  color: var(--accent-yellow);
+  opacity: 0.7;
+}
+
 /* ========== Scrollbar ========== */
 ::-webkit-scrollbar {
   width: 8px;

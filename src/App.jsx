@@ -36,7 +36,6 @@ import {
   updateDoc
 } from "firebase/firestore";
 import {
-  get,
   onValue,
   ref as rtdbRef,
   set,
@@ -540,12 +539,14 @@ export default function App() {
   const [callPartnerId, setCallPartnerId] = useState(null);
   const [callPartnerName, setCallPartnerName] = useState("");
   const [callMuted, setCallMuted] = useState(false);
+  const [remoteMuted, setRemoteMuted] = useState(false);
   const [incomingCall, setIncomingCall] = useState(null);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const callNodeRef = useRef(null);
   const seenCallIdsRef = useRef(new Set());
+  const isCallerRef = useRef(false);
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -738,6 +739,17 @@ export default function App() {
     });
     return () => off(callsRef);
   }, [sessionUserId, callStatus]);
+
+  useEffect(() => {
+    if (!incomingCall) return;
+    const callRef = rtdbRef(rtdb, `${incomingCall.key}/status`);
+    const unsub = onValue(callRef, (snap) => {
+      if (!snap.exists() || snap.val() === "ended") {
+        setIncomingCall(null);
+      }
+    });
+    return () => off(callRef);
+  }, [incomingCall]);
 
   useEffect(() => {
     if (!statusModalOpen || !sessionUserId) return;
@@ -1149,6 +1161,10 @@ export default function App() {
 
   function cleanupCall() {
     if (peerRef.current) {
+      if (peerRef.current._unsubAnswer) {
+        peerRef.current._unsubAnswer();
+        delete peerRef.current._unsubAnswer;
+      }
       peerRef.current.close();
       peerRef.current = null;
     }
@@ -1156,12 +1172,10 @@ export default function App() {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
-    if (remoteStreamRef.current) {
-      remoteStreamRef.current.getTracks().forEach((t) => t.stop());
-      remoteStreamRef.current = null;
-    }
     if (callNodeRef.current) {
-      remove(callNodeRef.current);
+      update(callNodeRef.current, { status: "ended" }).then(() => {
+        remove(callNodeRef.current).catch(() => {});
+      });
       callNodeRef.current = null;
     }
     setCallStatus("idle");
@@ -1169,6 +1183,10 @@ export default function App() {
     setCallPartnerName("");
     setCallMuted(false);
     setIncomingCall(null);
+  }
+
+  function hangUp() {
+    cleanupCall();
   }
 
   async function createPeerConnection(callNodeRefVal, isCaller) {
@@ -1202,22 +1220,22 @@ export default function App() {
 
       const callRef = push(rtdbRef(rtdb, "calls"));
       callNodeRef.current = callRef;
-
-      const initialData = {
-        callerId: sessionUserId,
-        calleeId,
-        callerName: activeName,
-        calleeName,
-        status: "calling",
-        startedAt: Date.now()
-      };
-      await set(callRef, initialData);
+      isCallerRef.current = true;
 
       const pc = await createPeerConnection(callRef, true);
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await update(callRef, { offer: { type: offer.type, sdp: offer.sdp } });
+
+      await set(callRef, {
+        callerId: sessionUserId,
+        calleeId,
+        callerName: activeName,
+        calleeName,
+        status: "calling",
+        startedAt: Date.now(),
+        offer: { type: offer.type, sdp: offer.sdp }
+      });
 
       setCallStatus("calling");
       setCallPartnerId(calleeId);
@@ -1238,7 +1256,17 @@ export default function App() {
         pc.addIceCandidate(candidate);
       });
 
+      const callerMuteRef = rtdbRef(rtdb, `${callRef.key}/calleeMuted`);
+      onValue(callerMuteRef, (snap) => setRemoteMuted(!!snap.val()));
+
       peerRef.current._unsubAnswer = unsubAnswer;
+
+      const cancelRef = rtdbRef(rtdb, `${callRef.key}/status`);
+      onValue(cancelRef, (snap) => {
+        if (!snap.exists() || snap.val() === "ended") {
+          cleanupCall();
+        }
+      });
 
       pc.oniceconnectionstatechange = () => {
         if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
@@ -1260,27 +1288,42 @@ export default function App() {
 
       const callRef = rtdbRef(rtdb, incomingCall.key);
       callNodeRef.current = callRef;
+      isCallerRef.current = false;
 
-      const snap = await get(callRef);
-      const data = snap.val();
+      const offer = incomingCall.offer;
+      if (!offer) {
+        setSettingsMessage("Call no longer available.");
+        setIncomingCall(null);
+        return;
+      }
 
       const pc = await createPeerConnection(callRef, false);
 
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await update(callRef, { answer: { type: answer.type, sdp: answer.sdp }, status: "connected" });
 
       setCallStatus("connected");
-      setCallPartnerId(data.callerId);
-      setCallPartnerName(data.callerName);
+      setCallPartnerId(incomingCall.callerId);
+      setCallPartnerName(incomingCall.callerName);
       setIncomingCall(null);
 
       const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/caller`);
       onChildAdded(candidatesRef, (snap) => {
         const candidate = new RTCIceCandidate(snap.val());
         pc.addIceCandidate(candidate);
+      });
+
+      const calleeMuteRef = rtdbRef(rtdb, `${callRef.key}/callerMuted`);
+      onValue(calleeMuteRef, (snap) => setRemoteMuted(!!snap.val()));
+
+      const cancelRef = rtdbRef(rtdb, `${callRef.key}/status`);
+      onValue(cancelRef, (snap) => {
+        if (!snap.exists() || snap.val() === "ended") {
+          cleanupCall();
+        }
       });
 
       pc.oniceconnectionstatechange = () => {
@@ -1306,7 +1349,12 @@ export default function App() {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
-        setCallMuted(!audioTrack.enabled);
+        const muted = !audioTrack.enabled;
+        setCallMuted(muted);
+        if (callNodeRef.current) {
+          const muteField = isCallerRef.current ? "callerMuted" : "calleeMuted";
+          update(callNodeRef.current, { [muteField]: muted }).catch(() => {});
+        }
       }
     }
   }
@@ -2587,6 +2635,7 @@ export default function App() {
               <span>{callStatus === "calling" ? "Calling" : "On call with"} <strong>{callPartnerName}</strong></span>
             </div>
             <div className="active-call-actions">
+              {remoteMuted ? <MicOff size={14} className="remote-muted-icon" title="Other party is muted" /> : null}
               <button
                 className="call-action-btn"
                 type="button"
@@ -2595,7 +2644,7 @@ export default function App() {
               >
                 {callMuted ? <MicOff size={16} /> : <Mic size={16} />}
               </button>
-              <button className="call-action-btn call-end-btn" type="button" onClick={cleanupCall} title="End call">
+              <button className="call-action-btn call-end-btn" type="button" onClick={hangUp} title="End call">
                 <PhoneOff size={16} />
               </button>
             </div>
