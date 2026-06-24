@@ -1160,6 +1160,9 @@ export default function App() {
   }
 
   function cleanupCall() {
+    const nodeRef = callNodeRef.current;
+    callNodeRef.current = null;
+
     if (peerRef.current) {
       if (peerRef.current._unsubAnswer) {
         peerRef.current._unsubAnswer();
@@ -1172,11 +1175,8 @@ export default function App() {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
-    if (callNodeRef.current) {
-      update(callNodeRef.current, { status: "ended" }).then(() => {
-        remove(callNodeRef.current).catch(() => {});
-      });
-      callNodeRef.current = null;
+    if (nodeRef) {
+      update(nodeRef, { status: "ended" }).then(() => remove(nodeRef)).catch(() => {});
     }
     setCallStatus("idle");
     setCallPartnerId(null);
@@ -1262,8 +1262,11 @@ export default function App() {
       peerRef.current._unsubAnswer = unsubAnswer;
 
       const cancelRef = rtdbRef(rtdb, `${callRef.key}/status`);
+      let cleaningUp = false;
       onValue(cancelRef, (snap) => {
-        if (!snap.exists() || snap.val() === "ended") {
+        if (cleaningUp) return;
+        if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
+          cleaningUp = true;
           cleanupCall();
         }
       });
@@ -1319,9 +1322,12 @@ export default function App() {
       const calleeMuteRef = rtdbRef(rtdb, `${callRef.key}/callerMuted`);
       onValue(calleeMuteRef, (snap) => setRemoteMuted(!!snap.val()));
 
-      const cancelRef = rtdbRef(rtdb, `${callRef.key}/status`);
-      onValue(cancelRef, (snap) => {
-        if (!snap.exists() || snap.val() === "ended") {
+      const cancelRef2 = rtdbRef(rtdb, `${callRef.key}/status`);
+      let cleaningUp2 = false;
+      onValue(cancelRef2, (snap) => {
+        if (cleaningUp2) return;
+        if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
+          cleaningUp2 = true;
           cleanupCall();
         }
       });
