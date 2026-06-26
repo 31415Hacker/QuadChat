@@ -1604,7 +1604,7 @@ export default function App() {
       }
 
       const participants = {};
-      room.participants.forEach((p) => {
+      (room.remoteParticipants || new Map()).forEach((p) => {
         participants[p.identity] = {
           identity: p.identity,
           name: p.name || p.identity,
