@@ -762,7 +762,7 @@ export default function App() {
         return;
       }
 
-      const statusRef = rtdbRef(rtdb, `${callKey}/status`);
+      const statusRef = rtdbRef(rtdb, `calls/${callKey}/status`);
       statusUnsubs[callKey] = onValue(statusRef, (statusSnap) => {
         const currentStatus = statusSnap.exists() ? statusSnap.val() : null;
         console.log(`[CALL-STATUS] key=${callKey} status=${currentStatus} callStatusRef=${callStatusRef.current}`);
@@ -1247,7 +1247,7 @@ export default function App() {
         if (process.env.NODE_ENV !== "production") {
           console.log(`[CALL-ICE] sending ${isCaller ? "caller" : "callee"} candidate`);
         }
-        const candidateRef = rtdbRef(rtdb, `${callNodeRefVal.key}/candidates/${isCaller ? "caller" : "callee"}/${Date.now()}`);
+        const candidateRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/candidates/${isCaller ? "caller" : "callee"}/${Date.now()}`);
         set(candidateRef, e.candidate.toJSON());
       }
     };
@@ -1304,7 +1304,7 @@ export default function App() {
       setCallPartnerId(calleeId);
       setCallPartnerName(calleeName);
 
-      const answerRef = rtdbRef(rtdb, `${callRef.key}/answer`);
+      const answerRef = rtdbRef(rtdb, `calls/${callRef.key}/answer`);
       const unsubAnswer = onValue(answerRef, async (snap) => {
         if (snap.exists() && pc.signalingState !== "stable") {
           console.log("[CALL-START] received answer, setting remote description");
@@ -1315,7 +1315,7 @@ export default function App() {
       });
       peerRef.current._unsubAnswer = unsubAnswer;
 
-      const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/callee`);
+      const candidatesRef = rtdbRef(rtdb, `calls/${callRef.key}/candidates/callee`);
       const unsubCandidates = onChildAdded(candidatesRef, (snap) => {
         try {
           if (pc.signalingState === "closed") return;
@@ -1327,11 +1327,11 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubCandidates);
 
-      const calleeMuteRef = rtdbRef(rtdb, `${callRef.key}/calleeMuted`);
+      const calleeMuteRef = rtdbRef(rtdb, `calls/${callRef.key}/calleeMuted`);
       const unsubMute = onValue(calleeMuteRef, (snap) => { console.log(`[CALL-START] remote mute changed: ${!!snap.val()}`); setRemoteMuted(!!snap.val()); });
       callCleanupsRef.current.push(unsubMute);
 
-      const cancelRef = rtdbRef(rtdb, `${callRef.key}/status`);
+      const cancelRef = rtdbRef(rtdb, `calls/${callRef.key}/status`);
       let cleaningUp = false;
       const unsubCancel = onValue(cancelRef, (snap) => {
         const s = snap.exists() ? snap.val() : null;
@@ -1373,7 +1373,7 @@ export default function App() {
       console.log("[CALL-ANSWER] got local media stream");
       localStreamRef.current = stream;
 
-      const callRef = rtdbRef(rtdb, incomingCall.key);
+      const callRef = rtdbRef(rtdb, `calls/${incomingCall.key}`);
       callNodeRef.current = callRef;
       isCallerRef.current = false;
       onDisconnect(callRef).update({ status: "ended" });
@@ -1406,7 +1406,7 @@ export default function App() {
       setCallPartnerName(incomingCall.callerName);
       setIncomingCall(null);
 
-      const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/caller`);
+      const candidatesRef = rtdbRef(rtdb, `calls/${callRef.key}/candidates/caller`);
       const unsubCandidates = onChildAdded(candidatesRef, (snap) => {
         try {
           if (pc.signalingState === "closed") return;
@@ -1418,11 +1418,11 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubCandidates);
 
-      const callerMuteRef = rtdbRef(rtdb, `${callRef.key}/callerMuted`);
+      const callerMuteRef = rtdbRef(rtdb, `calls/${callRef.key}/callerMuted`);
       const unsubMute = onValue(callerMuteRef, (snap) => { console.log(`[CALL-ANSWER] remote mute changed: ${!!snap.val()}`); setRemoteMuted(!!snap.val()); });
       callCleanupsRef.current.push(unsubMute);
 
-      const cancelRef2 = rtdbRef(rtdb, `${callRef.key}/status`);
+      const cancelRef2 = rtdbRef(rtdb, `calls/${callRef.key}/status`);
       let cleaningUp2 = false;
       const unsubCancel = onValue(cancelRef2, (snap) => {
         const s = snap.exists() ? snap.val() : null;
@@ -1454,7 +1454,7 @@ export default function App() {
   function rejectCall() {
     console.log("[CALL-REJECT] rejecting incoming call", incomingCall?.key);
     if (incomingCall) {
-      remove(rtdbRef(rtdb, incomingCall.key));
+      remove(rtdbRef(rtdb, `calls/${incomingCall.key}`));
       setIncomingCall(null);
     }
   }
