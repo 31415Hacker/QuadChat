@@ -1596,12 +1596,12 @@ export default function App() {
         }
       });
 
+      await room.connect(url, token);
+      groupCallRoomRef.current = room;
+
       for (const track of stream.getAudioTracks()) {
         await room.localParticipant.publishTrack(track);
       }
-
-      await room.connect(url, token);
-      groupCallRoomRef.current = room;
 
       const participants = {};
       room.participants.forEach((p) => {
