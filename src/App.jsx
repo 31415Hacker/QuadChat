@@ -2721,7 +2721,7 @@ export default function App() {
             {groupCallStatus === "connected" ? <PhoneOff size={18} /> : <Users size={18} />}
             <span>
               {groupCallStatus === "connected"
-                ? `In call (${Object.keys(groupCallParticipants).length})`
+                ? `In call (${Object.keys(groupCallParticipants).length + 1})`
                 : groupCallStatus === "connecting"
                   ? "Connecting..."
                   : "Group call"}
@@ -2953,7 +2953,7 @@ export default function App() {
             <div ref={groupCallAudioContainerRef} style={{ display: "none" }} />
             <div className="active-call-info">
               <Users size={15} />
-              <span>Group call — <strong>{Object.keys(groupCallParticipants).length}</strong> participant{Object.keys(groupCallParticipants).length === 1 ? "" : "s"}</span>
+              <span>Group call — <strong>{Object.keys(groupCallParticipants).length + 1}</strong> participant{Object.keys(groupCallParticipants).length + 1 === 1 ? "" : "s"}</span>
             </div>
             <div className="active-call-actions">
               <button
