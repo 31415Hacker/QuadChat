@@ -1904,6 +1904,23 @@ button:disabled {
   opacity: 0.7;
 }
 
+.group-call-bar {
+  border-top: 2px solid var(--accent-teal);
+}
+
+.group-call-indicator {
+  color: var(--accent-teal);
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.icon-text-button.group-call-active {
+  background: var(--accent-teal);
+  color: var(--text-on-accent);
+  border-color: var(--accent-teal);
+}
+
 /* ========== Scrollbar ========== */
 ::-webkit-scrollbar {
   width: 8px;

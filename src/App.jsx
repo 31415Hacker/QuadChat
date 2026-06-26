@@ -84,6 +84,7 @@ import {
   Users,
   Copy
 } from "lucide-react";
+import { Room, RoomEvent } from "livekit-client";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
 import GameSessionCard from "./GameSessionCard.jsx";
@@ -552,6 +553,14 @@ export default function App() {
   const answerCallLockRef = useRef(false);
   const remoteAudioRef = useRef(null);
   const callStatusRef = useRef(callStatus);
+
+  const [groupCallStatus, setGroupCallStatus] = useState("idle");
+  const groupCallRoomRef = useRef(null);
+  const [groupCallParticipants, setGroupCallParticipants] = useState({});
+  const [groupCallLocalMuted, setGroupCallLocalMuted] = useState(false);
+  const groupCallLocalStreamRef = useRef(null);
+  const groupCallAudioContainerRef = useRef(null);
+  const groupCallCleaningRef = useRef(false);
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -1058,6 +1067,10 @@ export default function App() {
     user
   ]);
 
+  useEffect(() => {
+    return () => { cleanupGroupCall(); };
+  }, []);
+
   async function handleAuth(event) {
     event.preventDefault();
     const cleanName = draftName.trim();
@@ -1457,6 +1470,158 @@ export default function App() {
       remove(rtdbRef(rtdb, `calls/${incomingCall.key}`));
       setIncomingCall(null);
     }
+  }
+
+  function toggleGroupCallMute() {
+    if (groupCallLocalStreamRef.current) {
+      const audioTrack = groupCallLocalStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setGroupCallLocalMuted(!audioTrack.enabled);
+      }
+    }
+  }
+
+  function cleanupGroupCall() {
+    if (groupCallCleaningRef.current) return;
+    groupCallCleaningRef.current = true;
+    if (groupCallRoomRef.current) {
+      groupCallRoomRef.current.disconnect();
+      groupCallRoomRef.current = null;
+    }
+    if (groupCallLocalStreamRef.current) {
+      groupCallLocalStreamRef.current.getTracks().forEach((t) => t.stop());
+      groupCallLocalStreamRef.current = null;
+    }
+    if (groupCallAudioContainerRef.current) {
+      groupCallAudioContainerRef.current.querySelectorAll("audio").forEach((el) => {
+        el.srcObject = null;
+        el.remove();
+      });
+    }
+    setGroupCallParticipants({});
+    setGroupCallLocalMuted(false);
+    setGroupCallStatus("idle");
+    groupCallCleaningRef.current = false;
+  }
+
+  async function joinGroupCall() {
+    if (groupCallStatus !== "idle" || groupCallCleaningRef.current) return;
+    setGroupCallStatus("connecting");
+
+    try {
+      if (callStatus !== "idle") {
+        cleanupCall();
+      }
+
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/livekit-token", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to get token");
+      }
+      const { token, url } = await res.json();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      groupCallLocalStreamRef.current = stream;
+
+      const room = new Room({ adaptiveStream: true, dynacast: true });
+
+      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        if (track.kind === "audio") {
+          const audio = document.createElement("audio");
+          audio.srcObject = new MediaStream([track.mediaStreamTrack]);
+          audio.autoplay = true;
+          audio.setAttribute("data-participant", participant.identity);
+          groupCallAudioContainerRef.current?.appendChild(audio);
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        const el = groupCallAudioContainerRef.current?.querySelector(
+          `[data-participant="${participant.identity}"]`
+        );
+        if (el) {
+          el.srcObject = null;
+          el.remove();
+        }
+      });
+
+      room.on(RoomEvent.ParticipantConnected, (participant) => {
+        setGroupCallParticipants((prev) => ({
+          ...prev,
+          [participant.identity]: {
+            identity: participant.identity,
+            name: participant.name || participant.identity,
+            isMuted: participant.isMuted || false,
+          },
+        }));
+      });
+
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        setGroupCallParticipants((prev) => {
+          const next = { ...prev };
+          delete next[participant.identity];
+          return next;
+        });
+        const el = groupCallAudioContainerRef.current?.querySelector(
+          `[data-participant="${participant.identity}"]`
+        );
+        if (el) {
+          el.srcObject = null;
+          el.remove();
+        }
+      });
+
+      room.on(RoomEvent.AudioMuted, (participant) => {
+        setGroupCallParticipants((prev) => {
+          if (!prev[participant.identity]) return prev;
+          return { ...prev, [participant.identity]: { ...prev[participant.identity], isMuted: true } };
+        });
+      });
+
+      room.on(RoomEvent.AudioUnmuted, (participant) => {
+        setGroupCallParticipants((prev) => {
+          if (!prev[participant.identity]) return prev;
+          return { ...prev, [participant.identity]: { ...prev[participant.identity], isMuted: false } };
+        });
+      });
+
+      room.on(RoomEvent.ConnectionStateChanged, (state) => {
+        if (state === "disconnected") {
+          cleanupGroupCall();
+        }
+      });
+
+      for (const track of stream.getAudioTracks()) {
+        await room.localParticipant.publishTrack(track);
+      }
+
+      await room.connect(url, token);
+      groupCallRoomRef.current = room;
+
+      const participants = {};
+      room.participants.forEach((p) => {
+        participants[p.identity] = {
+          identity: p.identity,
+          name: p.name || p.identity,
+          isMuted: p.isMuted || false,
+        };
+      });
+      setGroupCallParticipants(participants);
+
+      setGroupCallStatus("connected");
+    } catch (e) {
+      console.error("[GROUP-CALL] join error:", e);
+      cleanupGroupCall();
+    }
+  }
+
+  function leaveGroupCall() {
+    cleanupGroupCall();
   }
 
   function toggleCallMute() {
@@ -2548,6 +2713,21 @@ export default function App() {
             </div>
           </div>
           <button
+            className={`icon-text-button ${groupCallStatus === "connected" ? "group-call-active" : ""}`}
+            type="button"
+            onClick={groupCallStatus === "idle" ? joinGroupCall : leaveGroupCall}
+            title={groupCallStatus === "connected" ? "Leave group call" : groupCallStatus === "connecting" ? "Connecting..." : "Join group call"}
+          >
+            {groupCallStatus === "connected" ? <PhoneOff size={18} /> : <Users size={18} />}
+            <span>
+              {groupCallStatus === "connected"
+                ? `In call (${Object.keys(groupCallParticipants).length})`
+                : groupCallStatus === "connecting"
+                  ? "Connecting..."
+                  : "Group call"}
+            </span>
+          </button>
+          <button
             className="icon-text-button"
             type="button"
             onClick={signOut}
@@ -2768,6 +2948,29 @@ export default function App() {
           </div>
         ) : null}
 
+        {groupCallStatus === "connected" ? (
+          <div className="active-call-bar group-call-bar">
+            <div ref={groupCallAudioContainerRef} style={{ display: "none" }} />
+            <div className="active-call-info">
+              <Users size={15} />
+              <span>Group call — <strong>{Object.keys(groupCallParticipants).length}</strong> participant{Object.keys(groupCallParticipants).length === 1 ? "" : "s"}</span>
+            </div>
+            <div className="active-call-actions">
+              <button
+                className="call-action-btn"
+                type="button"
+                onClick={toggleGroupCallMute}
+                title={groupCallLocalMuted ? "Unmute" : "Mute"}
+              >
+                {groupCallLocalMuted ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button className="call-action-btn call-end-btn" type="button" onClick={leaveGroupCall} title="Leave group call">
+                <PhoneOff size={16} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="chat-body">
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
             {activeChannel === "suggestions" ? (
@@ -2971,6 +3174,11 @@ export default function App() {
                         {name}
                         {profile.status?.text ? (
                           <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
+                        ) : null}
+                        {groupCallStatus === "connected" && groupCallParticipants[profile.id] ? (
+                          <span className="group-call-indicator" title="In group call">
+                            <Users size={12} />
+                          </span>
                         ) : null}
                       </span>
                       <span className="user-last-online">
