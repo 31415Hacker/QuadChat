@@ -543,10 +543,15 @@ export default function App() {
   const [incomingCall, setIncomingCall] = useState(null);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
-  const remoteStreamRef = useRef(null);
+  const [remoteStream, setRemoteStream] = useState(null);
   const callNodeRef = useRef(null);
   const seenCallIdsRef = useRef(new Set());
   const isCallerRef = useRef(false);
+  const callCleanupsRef = useRef([]);
+  const startCallLockRef = useRef(false);
+  const answerCallLockRef = useRef(false);
+  const remoteAudioRef = useRef(null);
+  const callStatusRef = useRef(callStatus);
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -726,30 +731,62 @@ export default function App() {
   }, [user, sessionUserId]);
 
   useEffect(() => {
-    if (callStatus !== "idle") return;
-    seenCallIdsRef.current = new Set();
-
-    const callsRef = rtdbRef(rtdb, "calls");
-    const unsub = onChildAdded(callsRef, (snap) => {
-      const data = snap.val();
-      if (data.calleeId === sessionUserId && data.status === "calling" && !seenCallIdsRef.current.has(snap.key)) {
-        seenCallIdsRef.current.add(snap.key);
-        setIncomingCall({ key: snap.key, ...data });
-      }
-    });
-    return () => off(callsRef);
-  }, [sessionUserId, callStatus]);
+    callStatusRef.current = callStatus;
+    if (callStatus === "idle") {
+      console.log("[CALL] status → idle");
+    }
+  }, [callStatus]);
 
   useEffect(() => {
-    if (!incomingCall) return;
-    const callRef = rtdbRef(rtdb, `${incomingCall.key}/status`);
-    const unsub = onValue(callRef, (snap) => {
-      if (!snap.exists() || snap.val() === "ended") {
-        setIncomingCall(null);
+    if (remoteAudioRef.current && remoteStream) {
+      console.log("[CALL] setting audio element srcObject");
+      remoteAudioRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream, callStatus]);
+
+  useEffect(() => {
+    if (callStatus !== "idle") return;
+    const callsRef = rtdbRef(rtdb, "calls");
+    const statusUnsubs = {};
+
+    const unsub = onChildAdded(callsRef, (snap) => {
+      const data = snap.val();
+      if (data.calleeId !== sessionUserId || seenCallIdsRef.current.has(snap.key)) return;
+      seenCallIdsRef.current.add(snap.key);
+
+      const callKey = snap.key;
+      console.log(`[CALL-DETECT] new child key=${callKey} status=${data.status} calleeId=${data.calleeId} callerName=${data.callerName} startedAt=${data.startedAt} age=${Date.now() - data.startedAt}ms`);
+
+      if (data.status !== "calling" || Date.now() - data.startedAt >= 20000) {
+        console.log(`[CALL-DETECT] filtering out stale/ended call key=${callKey}`);
+        return;
       }
+
+      const statusRef = rtdbRef(rtdb, `${callKey}/status`);
+      statusUnsubs[callKey] = onValue(statusRef, (statusSnap) => {
+        const currentStatus = statusSnap.exists() ? statusSnap.val() : null;
+        console.log(`[CALL-STATUS] key=${callKey} status=${currentStatus} callStatusRef=${callStatusRef.current}`);
+
+        if (currentStatus === "calling" && callStatusRef.current === "idle" && Date.now() - data.startedAt < 20000) {
+          console.log(`[CALL-STATUS] showing incoming call modal for key=${callKey}`);
+          setIncomingCall({ key: callKey, ...data });
+        } else {
+          console.log(`[CALL-STATUS] clearing incoming call for key=${callKey} reason=${!currentStatus ? "no-status" : currentStatus !== "calling" ? "not-calling" : "busy-or-expired"}`);
+          setIncomingCall((prev) => prev?.key === callKey ? null : prev);
+          if (statusUnsubs[callKey]) {
+            statusUnsubs[callKey]();
+            delete statusUnsubs[callKey];
+          }
+        }
+      });
     });
-    return () => off(callRef);
-  }, [incomingCall]);
+
+    return () => {
+      console.log("[CALL-DETECT] cleaning up incoming call listener");
+      off(callsRef);
+      Object.values(statusUnsubs).forEach(fn => fn());
+    };
+  }, [sessionUserId, callStatus]);
 
   useEffect(() => {
     if (!statusModalOpen || !sessionUserId) return;
@@ -1160,10 +1197,13 @@ export default function App() {
   }
 
   function cleanupCall() {
-    const nodeRef = callNodeRef.current;
-    callNodeRef.current = null;
+    console.log("[CALL-CLEANUP] start");
+    callCleanupsRef.current.forEach(fn => fn());
+    callCleanupsRef.current = [];
+    console.log("[CALL-CLEANUP] listeners detached");
 
     if (peerRef.current) {
+      console.log("[CALL-CLEANUP] closing peer connection");
       if (peerRef.current._unsubAnswer) {
         peerRef.current._unsubAnswer();
         delete peerRef.current._unsubAnswer;
@@ -1172,20 +1212,29 @@ export default function App() {
       peerRef.current = null;
     }
     if (localStreamRef.current) {
+      console.log("[CALL-CLEANUP] stopping local stream");
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    const nodeRef = callNodeRef.current;
+    callNodeRef.current = null;
     if (nodeRef) {
+      console.log("[CALL-CLEANUP] cancelling onDisconnect + writing ended + removing node");
+      onDisconnect(nodeRef).cancel();
       update(nodeRef, { status: "ended" }).then(() => remove(nodeRef)).catch(() => {});
     }
+    console.log("[CALL-CLEANUP] resetting state variables");
+    setRemoteStream(null);
     setCallStatus("idle");
     setCallPartnerId(null);
     setCallPartnerName("");
     setCallMuted(false);
+    setRemoteMuted(false);
     setIncomingCall(null);
   }
 
   function hangUp() {
+    console.log("[CALL] hangUp called");
     cleanupCall();
   }
 
@@ -1195,13 +1244,17 @@ export default function App() {
 
     pc.onicecandidate = (e) => {
       if (e.candidate && callNodeRefVal) {
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[CALL-ICE] sending ${isCaller ? "caller" : "callee"} candidate`);
+        }
         const candidateRef = rtdbRef(rtdb, `${callNodeRefVal.key}/candidates/${isCaller ? "caller" : "callee"}/${Date.now()}`);
         set(candidateRef, e.candidate.toJSON());
       }
     };
 
     pc.ontrack = (e) => {
-      remoteStreamRef.current = e.streams[0];
+      console.log("[CALL] ontrack — remote stream received");
+      setRemoteStream(e.streams[0]);
     };
 
     if (localStreamRef.current) {
@@ -1212,20 +1265,29 @@ export default function App() {
   }
 
   async function startCall(calleeId, calleeName) {
-    if (callStatus !== "idle") return;
+    console.log(`[CALL-START] starting call to ${calleeId} (${calleeName})`);
+    if (callStatus !== "idle" || startCallLockRef.current) {
+      console.log(`[CALL-START] blocked: callStatus=${callStatus} lock=${startCallLockRef.current}`);
+      return;
+    }
+    startCallLockRef.current = true;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log("[CALL-START] got local media stream");
       localStreamRef.current = stream;
 
       const callRef = push(rtdbRef(rtdb, "calls"));
       callNodeRef.current = callRef;
       isCallerRef.current = true;
+      onDisconnect(callRef).update({ status: "ended" });
+      console.log(`[CALL-START] callRef key=${callRef.key}`);
 
       const pc = await createPeerConnection(callRef, true);
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      console.log("[CALL-START] created and set local offer");
 
       await set(callRef, {
         callerId: sessionUserId,
@@ -1236,6 +1298,7 @@ export default function App() {
         startedAt: Date.now(),
         offer: { type: offer.type, sdp: offer.sdp }
       });
+      console.log("[CALL-START] call data written to RTDB");
 
       setCallStatus("calling");
       setCallPartnerId(calleeId);
@@ -1244,69 +1307,99 @@ export default function App() {
       const answerRef = rtdbRef(rtdb, `${callRef.key}/answer`);
       const unsubAnswer = onValue(answerRef, async (snap) => {
         if (snap.exists() && pc.signalingState !== "stable") {
+          console.log("[CALL-START] received answer, setting remote description");
           const ans = snap.val();
           await pc.setRemoteDescription(new RTCSessionDescription(ans));
           setCallStatus("connected");
         }
       });
+      peerRef.current._unsubAnswer = unsubAnswer;
 
       const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/callee`);
-      onChildAdded(candidatesRef, (snap) => {
-        const candidate = new RTCIceCandidate(snap.val());
-        pc.addIceCandidate(candidate);
+      const unsubCandidates = onChildAdded(candidatesRef, (snap) => {
+        try {
+          if (pc.signalingState === "closed") return;
+          const candidate = new RTCIceCandidate(snap.val());
+          pc.addIceCandidate(candidate).catch(e => console.error("[CALL-ICE] addIceCandidate error (caller receiving callee):", e));
+        } catch (e) {
+          console.error("[CALL-ICE] bad candidate data (caller):", e, snap.val());
+        }
       });
+      callCleanupsRef.current.push(unsubCandidates);
 
-      const callerMuteRef = rtdbRef(rtdb, `${callRef.key}/calleeMuted`);
-      onValue(callerMuteRef, (snap) => setRemoteMuted(!!snap.val()));
-
-      peerRef.current._unsubAnswer = unsubAnswer;
+      const calleeMuteRef = rtdbRef(rtdb, `${callRef.key}/calleeMuted`);
+      const unsubMute = onValue(calleeMuteRef, (snap) => { console.log(`[CALL-START] remote mute changed: ${!!snap.val()}`); setRemoteMuted(!!snap.val()); });
+      callCleanupsRef.current.push(unsubMute);
 
       const cancelRef = rtdbRef(rtdb, `${callRef.key}/status`);
       let cleaningUp = false;
-      onValue(cancelRef, (snap) => {
+      const unsubCancel = onValue(cancelRef, (snap) => {
+        const s = snap.exists() ? snap.val() : null;
+        console.log(`[CALL-START] cancel listener: status=${s} cleaningUp=${cleaningUp} nodeRef=${!!callNodeRef.current}`);
         if (cleaningUp) return;
         if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
           cleaningUp = true;
+          console.log("[CALL-START] cancel listener → cleanupCall");
           cleanupCall();
         }
       });
+      callCleanupsRef.current.push(unsubCancel);
 
       pc.oniceconnectionstatechange = () => {
+        console.log(`[CALL-START] ICE state: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+          console.log("[CALL-START] ICE disconnected/failed → cleanupCall");
           cleanupCall();
         }
       };
     } catch (e) {
-      console.error("call error:", e);
+      console.error("[CALL-START] error:", e);
       cleanupCall();
+    } finally {
+      startCallLockRef.current = false;
     }
   }
 
   async function answerCall() {
-    if (!incomingCall) return;
+    console.log("[CALL-ANSWER] answerCall called", incomingCall?.key);
+    if (!incomingCall || answerCallLockRef.current) {
+      console.log(`[CALL-ANSWER] blocked: incomingCall=${!!incomingCall} lock=${answerCallLockRef.current}`);
+      return;
+    }
+    answerCallLockRef.current = true;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log("[CALL-ANSWER] got local media stream");
       localStreamRef.current = stream;
 
       const callRef = rtdbRef(rtdb, incomingCall.key);
       callNodeRef.current = callRef;
       isCallerRef.current = false;
+      onDisconnect(callRef).update({ status: "ended" });
+      console.log(`[CALL-ANSWER] callRef key=${incomingCall.key}`);
 
       const offer = incomingCall.offer;
       if (!offer) {
+        console.log("[CALL-ANSWER] no offer in incomingCall, aborting");
         setSettingsMessage("Call no longer available.");
         setIncomingCall(null);
+        answerCallLockRef.current = false;
         return;
       }
 
       const pc = await createPeerConnection(callRef, false);
+      console.log("[CALL-ANSWER] peer connection created");
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log("[CALL-ANSWER] remote description set");
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log("[CALL-ANSWER] local description set (answer)");
+
       await update(callRef, { answer: { type: answer.type, sdp: answer.sdp }, status: "connected" });
+      console.log("[CALL-ANSWER] answer written to RTDB, status → connected");
 
       setCallStatus("connected");
       setCallPartnerId(incomingCall.callerId);
@@ -1314,36 +1407,52 @@ export default function App() {
       setIncomingCall(null);
 
       const candidatesRef = rtdbRef(rtdb, `${callRef.key}/candidates/caller`);
-      onChildAdded(candidatesRef, (snap) => {
-        const candidate = new RTCIceCandidate(snap.val());
-        pc.addIceCandidate(candidate);
+      const unsubCandidates = onChildAdded(candidatesRef, (snap) => {
+        try {
+          if (pc.signalingState === "closed") return;
+          const candidate = new RTCIceCandidate(snap.val());
+          pc.addIceCandidate(candidate).catch(e => console.error("[CALL-ICE] addIceCandidate error (callee receiving caller):", e));
+        } catch (e) {
+          console.error("[CALL-ICE] bad candidate data (callee):", e, snap.val());
+        }
       });
+      callCleanupsRef.current.push(unsubCandidates);
 
-      const calleeMuteRef = rtdbRef(rtdb, `${callRef.key}/callerMuted`);
-      onValue(calleeMuteRef, (snap) => setRemoteMuted(!!snap.val()));
+      const callerMuteRef = rtdbRef(rtdb, `${callRef.key}/callerMuted`);
+      const unsubMute = onValue(callerMuteRef, (snap) => { console.log(`[CALL-ANSWER] remote mute changed: ${!!snap.val()}`); setRemoteMuted(!!snap.val()); });
+      callCleanupsRef.current.push(unsubMute);
 
       const cancelRef2 = rtdbRef(rtdb, `${callRef.key}/status`);
       let cleaningUp2 = false;
-      onValue(cancelRef2, (snap) => {
+      const unsubCancel = onValue(cancelRef2, (snap) => {
+        const s = snap.exists() ? snap.val() : null;
+        console.log(`[CALL-ANSWER] cancel listener: status=${s} cleaningUp=${cleaningUp2} nodeRef=${!!callNodeRef.current}`);
         if (cleaningUp2) return;
         if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
           cleaningUp2 = true;
+          console.log("[CALL-ANSWER] cancel listener → cleanupCall");
           cleanupCall();
         }
       });
+      callCleanupsRef.current.push(unsubCancel);
 
       pc.oniceconnectionstatechange = () => {
+        console.log(`[CALL-ANSWER] ICE state: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+          console.log("[CALL-ANSWER] ICE disconnected/failed → cleanupCall");
           cleanupCall();
         }
       };
     } catch (e) {
-      console.error("answer error:", e);
+      console.error("[CALL-ANSWER] error:", e);
       cleanupCall();
+    } finally {
+      answerCallLockRef.current = false;
     }
   }
 
   function rejectCall() {
+    console.log("[CALL-REJECT] rejecting incoming call", incomingCall?.key);
     if (incomingCall) {
       remove(rtdbRef(rtdb, incomingCall.key));
       setIncomingCall(null);
@@ -1356,6 +1465,7 @@ export default function App() {
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         const muted = !audioTrack.enabled;
+        console.log(`[CALL-MUTE] toggled: ${muted} isCaller=${isCallerRef.current} hasNode=${!!callNodeRef.current}`);
         setCallMuted(muted);
         if (callNodeRef.current) {
           const muteField = isCallerRef.current ? "callerMuted" : "calleeMuted";
@@ -2636,6 +2746,7 @@ export default function App() {
 
         {callStatus === "connected" || callStatus === "calling" ? (
           <div className="active-call-bar">
+            <audio ref={remoteAudioRef} autoPlay />
             <div className="active-call-info">
               <Phone size={15} />
               <span>{callStatus === "calling" ? "Calling" : "On call with"} <strong>{callPartnerName}</strong></span>
