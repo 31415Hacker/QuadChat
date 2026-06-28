@@ -43,6 +43,7 @@ import {
   push,
   onChildAdded,
   off,
+  onChildRemoved,
   update,
   remove
 } from "firebase/database";
@@ -553,6 +554,7 @@ export default function App() {
   const answerCallLockRef = useRef(false);
   const remoteAudioRef = useRef(null);
   const callStatusRef = useRef(callStatus);
+  const profilesRef = useRef(profiles);
 
   const [groupCallStatus, setGroupCallStatus] = useState("idle");
   const groupCallRoomRef = useRef(null);
@@ -697,15 +699,39 @@ export default function App() {
     }
 
     const presenceListRef = rtdbRef(rtdb, "presence");
-    const unsubscribe = onValue(presenceListRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setOnlineUsers(new Set(Object.keys(snapshot.val())));
-      } else {
-        setOnlineUsers(new Set());
+    const onlineSet = new Set();
+    const initSyncRef = { current: true };
+
+    const unsubAdded = onChildAdded(presenceListRef, (snap) => {
+      const uid = snap.key;
+      if (uid === sessionUserId) return;
+      onlineSet.add(uid);
+      setOnlineUsers(new Set(onlineSet));
+
+      if (!initSyncRef.current) {
+        const name = getProfileName(profilesRef.current[uid], uid);
+        if (notificationsEnabled && notificationPermission === "granted") {
+          new Notification("QuadChat", {
+            body: `${name} is online`,
+            icon: notificationIcon,
+            tag: `online-${uid}`,
+          });
+        }
       }
     });
 
-    return unsubscribe;
+    const unsubRemoved = onChildRemoved(presenceListRef, (snap) => {
+      const uid = snap.key;
+      onlineSet.delete(uid);
+      setOnlineUsers(new Set(onlineSet));
+    });
+
+    setTimeout(() => { initSyncRef.current = false; }, 2000);
+
+    return () => {
+      unsubAdded();
+      unsubRemoved();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -745,6 +771,10 @@ export default function App() {
       console.log("[CALL] status → idle");
     }
   }, [callStatus]);
+
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
