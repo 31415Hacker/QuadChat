@@ -3192,10 +3192,11 @@ export default function App() {
                 const name = getProfileName(profile, profile.email || "");
                 const muted = isProfileMuted(profile);
                 const theirMode = profile.status?.mode;
-                const statusMode = (theirMode === "busy" || theirMode === "away") ? theirMode : (onlineUsers.has(profile.id) ? "active" : "offline");
+                const isSelf = profile.id === sessionUserId;
+                const statusMode = (theirMode === "busy" || theirMode === "away") ? theirMode : (isSelf || onlineUsers.has(profile.id) ? "active" : "offline");
                 return (
                   <div
-                    className={`user-item ${onlineUsers.has(profile.id) ? "online" : ""}`}
+                    className={`user-item ${isSelf || onlineUsers.has(profile.id) ? "online" : ""}`}
                     key={profile.id}
                   >
                     <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
@@ -3212,7 +3213,7 @@ export default function App() {
                         ) : null}
                       </span>
                       <span className="user-last-online">
-                        {onlineUsers.has(profile.id) ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
+                        {isSelf || onlineUsers.has(profile.id) ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
                       </span>
                     </div>
                     {profile.id !== sessionUserId && onlineUsers.has(profile.id) && callStatus === "idle" ? (
