@@ -2416,6 +2416,17 @@ export default function App() {
     });
   }
 
+  async function handleDeleteMessage(messageId) {
+    const confirmed = window.confirm("Are you sure you want to delete this message?");
+    if (!confirmed) return;
+
+    try {
+      await deleteDoc(doc(db, "messages", activeChannel, "messages", messageId));
+    } catch (firebaseError) {
+      setError(firebaseError.message);
+    }
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
 
@@ -3085,6 +3096,19 @@ export default function App() {
                               <CornerDownLeft size={16} />
                               <span>Reply</span>
                             </button>
+                            {(isMine || isCurrentUserAdmin) ? (
+                              <button
+                                onClick={() => {
+                                  setOpenMessageMenuId("");
+                                  handleDeleteMessage(item.id);
+                                }}
+                                type="button"
+                                className="danger-button"
+                              >
+                                <Trash2 size={16} />
+                                <span>Delete</span>
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>

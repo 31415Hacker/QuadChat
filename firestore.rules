@@ -93,7 +93,11 @@ service cloud.firestore {
         && isNotMuted()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvps"]);
 
-      allow delete: if false;
+      allow delete: if signedIn()
+        && (
+          resource.data.userId == request.auth.uid
+          || isAdmin()
+        );
     }
 
     match /users/{userId} {

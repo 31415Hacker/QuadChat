@@ -1035,6 +1035,14 @@ button:disabled {
   transform: none;
 }
 
+.message-menu button.danger-button {
+  color: var(--accent-red);
+}
+
+.message-menu button.danger-button:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+}
+
 .reply-card,
 .reply-composer {
   border-left: 3px solid var(--accent-blue);
