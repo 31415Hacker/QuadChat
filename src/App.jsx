@@ -724,6 +724,17 @@ export default function App() {
       const uid = snap.key;
       onlineSet.delete(uid);
       setOnlineUsers(new Set(onlineSet));
+
+      if (!initSyncRef.current) {
+        const name = getProfileName(profilesRef.current[uid], uid);
+        if (notificationsEnabled && notificationPermission === "granted") {
+          new Notification("QuadChat", {
+            body: `${name} is offline`,
+            icon: notificationIcon,
+            tag: `offline-${uid}`,
+          });
+        }
+      }
     });
 
     setTimeout(() => { initSyncRef.current = false; }, 2000);
