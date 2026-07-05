@@ -3231,7 +3231,7 @@ export default function App() {
                 const muted = isProfileMuted(profile);
                 const theirMode = profile.status?.mode;
                 const isSelf = profile.id === sessionUserId;
-                const statusMode = (isSelf || onlineUsers.has(profile.id)) ? "active" : "offline";
+                const statusMode = (isSelf || onlineUsers.has(profile.id)) ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
                 return (
                   <div
                     className={`user-item ${isSelf || onlineUsers.has(profile.id) ? "online" : ""}`}
