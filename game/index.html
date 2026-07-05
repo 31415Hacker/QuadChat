@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Circuit Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🔌 Circuit Game</h1>
+      <div class="toolbar">
+        <button id="runBtn" title="Run code">▶ Run</button>
+        <button id="stopBtn" title="Stop code">■ Stop</button>
+        <button id="clearBtn" title="Clear board">🗑 Clear</button>
+        <label class="mode-toggle">
+          <input type="checkbox" id="wireMode" />
+          <span>🔗 Wire mode</span>
+        </label>
+      </div>
+    </header>
+
+    <div class="main">
+      <aside class="palette">
+        <h3>Components</h3>
+        <div class="palette-item" draggable="true" data-type="battery">
+          <span class="palette-icon">🔋</span>
+          <span>Battery</span>
+        </div>
+        <div class="palette-item" draggable="true" data-type="bulb">
+          <span class="palette-icon">💡</span>
+          <span>Bulb</span>
+        </div>
+        <div class="palette-item" draggable="true" data-type="chip">
+          <span class="palette-icon">🧠</span>
+          <span>Microchip</span>
+        </div>
+        <div class="palette-info">
+          <p><strong>How to play:</strong></p>
+          <ol>
+            <li>Drag components onto the board</li>
+            <li>Toggle <strong>Wire mode</strong> then click two terminals to connect</li>
+            <li>Drag components to reposition</li>
+            <li>Write code for the chip and hit <strong>Run</strong></li>
+          </ol>
+        </div>
+        <div class="palette-status" id="statusMsg">
+          Drop a component or toggle wire mode
+        </div>
+      </aside>
+
+      <div class="board-container">
+        <svg id="board" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="glow-strong">
+              <feGaussianBlur stdDeviation="8" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <!-- Wires are drawn here -->
+          <g id="wiresLayer"></g>
+          <!-- Drag preview wire -->
+          <line id="wirePreview" stroke="#7fc1cc" stroke-width="2" stroke-dasharray="4,4" display="none" />
+          <!-- Components are drawn here -->
+          <g id="componentsLayer"></g>
+        </svg>
+      </div>
+
+      <aside class="code-panel">
+        <h3>Code Editor</h3>
+        <div class="chip-pins" id="pinStatus">
+          <span class="pin-label">Pin 0: <span class="pin-val" id="pin0">LOW</span></span>
+          <span class="pin-label">Pin 1: <span class="pin-val" id="pin1">LOW</span></span>
+          <span class="pin-label">Pin 2: <span class="pin-val" id="pin2">LOW</span></span>
+          <span class="pin-label">Pin 3: <span class="pin-val" id="pin3">LOW</span></span>
+        </div>
+        <textarea id="codeEditor" spellcheck="false">// Write code for the microchip
+pinMode(0, 'OUTPUT');
+digitalWrite(0, 1);
+</textarea>
+        <div class="console" id="console">Ready.</div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="script.js?v=2"></script>
+</body>
+</html>
