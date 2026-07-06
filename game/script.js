@@ -632,25 +632,6 @@ function renderWires() {
       wiresLayer.appendChild(h);
     }
   }
-
-  // Wire crossing bridges
-  const crossings = findWireCrossings();
-  for (const cross of crossings) {
-    const w1 = state.wires.find(w => w.id === cross.id1);
-    const w2 = state.wires.find(w => w.id === cross.id2);
-    const key = `${Math.round(cross.x)},${Math.round(cross.y)}`;
-    if (isBridgeMarked(cross, w1) || isBridgeMarked(cross, w2)) continue;
-    const br = svg('path', {
-      class: 'wire-bridge',
-      d: `M ${cross.x - 6} ${cross.y} A 6 6 0 0 1 ${cross.x + 6} ${cross.y}`,
-    });
-    br.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleBridge(w1, key);
-      renderAll();
-    });
-    wiresLayer.appendChild(br);
-  }
 }
 
 function updateTerminalStyles() {
@@ -1101,6 +1082,13 @@ board.addEventListener('mousemove', e => {
 board.addEventListener('mouseup', () => {
   if (state.rotating) {
     state.rotating = false;
+    for (const wire of state.wires) {
+      if (wire.from.compId === state.selectedCompId || wire.to.compId === state.selectedCompId) {
+        wire._dirty = true;
+      }
+    }
+    renderAll();
+    runSimulation();
     return;
   }
   if (wpDragging) {
@@ -1109,6 +1097,13 @@ board.addEventListener('mouseup', () => {
   }
   if (isBoardDragging && dragCompId && hasMoved) {
     updateStatus('Component moved');
+    for (const wire of state.wires) {
+      if (wire.from.compId === dragCompId || wire.to.compId === dragCompId) {
+        wire._dirty = true;
+      }
+    }
+    renderAll();
+    runSimulation();
   }
   isBoardDragging = false;
   dragCompId = null;
