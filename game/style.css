@@ -223,105 +223,103 @@ header h1 {
 }
 
 .terminal {
-  fill: var(--accent-blue);
-  stroke: var(--text-accent);
+  fill: #5bb5f5;
+  stroke: #3a8fc0;
   stroke-width: 1.5;
   cursor: crosshair;
-  transition: r 0.12s;
+  transition: r 0.12s, fill 0.15s, stroke 0.15s;
+  filter: drop-shadow(0 0 3px rgba(91, 181, 245, 0.4));
 }
 
 .terminal:hover {
   r: 7;
-  fill: var(--text-accent);
+  fill: #7fc1cc;
+  stroke: #5bb5f5;
 }
 
 .terminal.connected {
-  fill: var(--accent-green);
-  stroke: var(--accent-green);
+  fill: #2dd48b;
+  stroke: #22a86e;
+  filter: drop-shadow(0 0 3px rgba(45, 212, 139, 0.4));
 }
 
 .terminal.wire-start {
-  fill: var(--accent-yellow);
-  stroke: var(--accent-yellow);
+  fill: #f5c842;
+  stroke: #e0b030;
+  filter: drop-shadow(0 0 3px rgba(245, 200, 66, 0.5));
 }
 
 .wire {
-  stroke: var(--text-secondary);
+  stroke: #7fc1cc;
   stroke-width: 2;
   fill: none;
   cursor: pointer;
   transition: stroke 0.15s, stroke-width 0.15s;
+  filter: drop-shadow(0 0 2px rgba(127, 193, 204, 0.3));
 }
 
 .wire:hover {
   stroke: var(--danger);
   stroke-width: 3;
+  filter: none;
 }
 
-.wire.active {
-  stroke: var(--accent-blue);
+.waypoint-handle {
+  fill: #fff;
+  stroke: #5bb5f5;
+  stroke-width: 2;
+  cursor: move;
+  transition: r 0.12s;
+  filter: drop-shadow(0 0 3px rgba(91, 181, 245, 0.5));
+}
+
+.waypoint-handle:hover {
+  r: 7;
+  fill: #f5c842;
+  stroke: #f5c842;
+}
+
+.wire-bridge {
+  fill: none;
+  stroke: #e8e8e8;
+  stroke-width: 3;
+  cursor: pointer;
+  filter: drop-shadow(0 0 4px rgba(0,0,0,0.3));
+  transition: stroke 0.15s;
+}
+
+.wire-bridge:hover {
+  stroke: #f5c842;
 }
 
 .bulb-filament {
   stroke: var(--text-tertiary);
   stroke-width: 1.5;
   fill: none;
+  transition: stroke 0.2s;
 }
 
 .bulb-filament.on {
-  stroke: var(--accent-yellow);
+  stroke: #ffd700;
   filter: url(#glow);
 }
 
 .bulb-glass {
-  fill: rgba(255, 255, 255, 0.04);
+  fill: url(#bulbGlass);
   stroke: var(--text-secondary);
-  stroke-width: 1.5;
+  stroke-width: 1.2;
+  transition: stroke 0.2s, fill 0.2s;
 }
 
 .bulb-glass.on {
-  fill: rgba(234, 179, 8, 0.12);
-  stroke: var(--accent-yellow);
+  fill: url(#bulbGlass);
+  stroke: #ffd700;
   filter: url(#glow-strong);
 }
 
-.chip-body {
-  fill: #1a1a2e;
-  stroke: var(--text-secondary);
-  stroke-width: 1.5;
-  rx: 4;
-}
-
-.chip-label {
-  fill: var(--text-secondary);
-  font-size: 8px;
-  text-anchor: middle;
-  font-family: monospace;
-}
-
-.pin-text {
-  fill: var(--text-tertiary);
-  font-size: 7px;
-  text-anchor: middle;
-  font-family: monospace;
-}
-
-.pin-text.high {
-  fill: var(--accent-green);
-  font-weight: bold;
-}
-
-.battery-body {
-  stroke: var(--text-secondary);
-  stroke-width: 1.5;
-  fill: none;
-}
-
-.battery-label {
-  fill: var(--text-tertiary);
-  font-size: 8px;
-  text-anchor: middle;
-  font-family: monospace;
+.bulb-glow-ring.on {
+  opacity: 1 !important;
+  transition: opacity 0.2s;
 }
 
 .code-panel {

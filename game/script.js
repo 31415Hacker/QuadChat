@@ -105,28 +105,36 @@ function renderBattery(comp) {
   const g = svg('g', { class: 'component-group', 'data-comp-id': comp.id });
   g.style.cursor = 'grab';
 
-  const hw = COMPONENT_DEFS.battery.width / 2;
-  const hh = COMPONENT_DEFS.battery.height / 2;
+  const def = COMPONENT_DEFS.battery;
+  const hw = def.width / 2;
+  const hh = def.height / 2;
 
-  // Rect around component (invisible, for dragging hit area)
-  g.appendChild(svg('rect', { x: -hw, y: -hh, width: COMPONENT_DEFS.battery.width, height: COMPONENT_DEFS.battery.height, fill: 'transparent', stroke: 'none' }));
+  g.appendChild(svg('rect', { x: -hw, y: -hh, width: def.width, height: def.height, fill: 'transparent', stroke: 'none' }));
 
   // Battery body
-  g.appendChild(svg('rect', { x: -8, y: -18, width: 16, height: 36, class: 'battery-body', rx: 2 }));
-  g.appendChild(svg('line', { x1: 0, y1: -18, x2: 0, y2: -14, stroke: 'var(--text-secondary)', 'stroke-width': 2 }));
-  g.appendChild(svg('line', { x1: 0, y1: 18, x2: 0, y2: 14, stroke: 'var(--text-secondary)', 'stroke-width': 2 }));
+  g.appendChild(svg('rect', { x: -12, y: -20, width: 24, height: 40, rx: 4, fill: 'url(#battFill)', stroke: '#1a5c35', 'stroke-width': 1.5 }));
 
-  // Big plate (-)
-  g.appendChild(svg('line', { x1: -8, y1: 8, x2: 8, y2: 8, stroke: 'var(--text-primary)', 'stroke-width': 3 }));
-  // Small plate (+)
-  g.appendChild(svg('line', { x1: -5, y1: -8, x2: 5, y2: -8, stroke: 'var(--text-primary)', 'stroke-width': 2 }));
+  // Top cap (+ terminal)
+  g.appendChild(svg('rect', { x: -4, y: -24, width: 8, height: 5, rx: 1.5, fill: '#555', stroke: '#444', 'stroke-width': 1 }));
 
-  // Label
-  const lbl = svg('text', { class: 'battery-label', x: 0, y: hh + 12 });
-  lbl.textContent = 'BAT';
+  // Bottom cap (- terminal, flat)
+  g.appendChild(svg('rect', { x: -5, y: 20, width: 10, height: 4, rx: 1, fill: '#555', stroke: '#444', 'stroke-width': 1 }));
+
+  // + sign
+  const plus = svg('text', { x: 0, y: -10, 'text-anchor': 'middle', fill: '#fff', 'font-size': '10px', 'font-weight': 'bold', 'font-family': 'monospace' });
+  plus.textContent = '+';
+  g.appendChild(plus);
+
+  // - sign  
+  const minus = svg('text', { x: 0, y: 16, 'text-anchor': 'middle', fill: '#fff', 'font-size': '10px', 'font-weight': 'bold', 'font-family': 'monospace' });
+  minus.textContent = '\u2212';
+  g.appendChild(minus);
+
+  // Voltage label
+  const lbl = svg('text', { x: 0, y: hh + 10, 'text-anchor': 'middle', fill: 'var(--text-tertiary)', 'font-size': '7px', 'font-family': 'monospace', 'font-weight': 'bold' });
+  lbl.textContent = '5V';
   g.appendChild(lbl);
 
-  // Terminals
   renderTerminals(g, comp, 'battery');
   return g;
 }
@@ -135,22 +143,36 @@ function renderBulb(comp) {
   const g = svg('g', { class: 'component-group bulb-group', 'data-comp-id': comp.id });
   g.style.cursor = 'grab';
 
-  const hw = COMPONENT_DEFS.bulb.width / 2;
-  const hh = COMPONENT_DEFS.bulb.height / 2;
+  const def = COMPONENT_DEFS.bulb;
+  const hw = def.width / 2;
+  const hh = def.height / 2;
 
-  g.appendChild(svg('rect', { x: -hw, y: -hh, width: COMPONENT_DEFS.bulb.width, height: COMPONENT_DEFS.bulb.height, fill: 'transparent', stroke: 'none' }));
+  g.appendChild(svg('rect', { x: -hw, y: -hh, width: def.width, height: def.height, fill: 'transparent', stroke: 'none' }));
 
-  // Glass
-  const glass = svg('circle', { class: 'bulb-glass', cx: 0, cy: -4, r: 14 });
+  // Glow ring (behind bulb, visible when on)
+  const glowRing = svg('circle', { cx: 0, cy: -6, r: 22, fill: 'url(#bulbGlow)', class: 'bulb-glow-ring', opacity: 0 });
+  g.appendChild(glowRing);
+
+  // Glass dome
+  const glass = svg('circle', { cx: 0, cy: -6, r: 15, fill: 'url(#bulbGlass)', stroke: 'var(--text-secondary)', 'stroke-width': 1.2, class: 'bulb-glass' });
   g.appendChild(glass);
 
-  // Filament (X shape)
-  const fil = svg('path', { class: 'bulb-filament', d: 'M-8,-8 L8,0 M-8,0 L8,-8' });
+  // Filament (zigzag)
+  const fil = svg('path', { d: 'M-6,-10 L-3,-4 L0,-10 L3,-4 L6,-10', class: 'bulb-filament', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
   g.appendChild(fil);
 
-  // Base
-  g.appendChild(svg('line', { x1: -6, y1: 10, x2: 6, y2: 10, stroke: 'var(--text-secondary)', 'stroke-width': 2 }));
-  g.appendChild(svg('line', { x1: 0, y1: 10, x2: 0, y2: 18, stroke: 'var(--text-secondary)', 'stroke-width': 1.5 }));
+  // Filament support wires
+  g.appendChild(svg('line', { x1: -6, y1: -10, x2: -6, y2: -1, stroke: 'var(--text-tertiary)', 'stroke-width': 1 }));
+  g.appendChild(svg('line', { x1: 6, y1: -10, x2: 6, y2: -1, stroke: 'var(--text-tertiary)', 'stroke-width': 1 }));
+
+  // Screw base
+  g.appendChild(svg('rect', { x: -7, y: 7, width: 14, height: 4, rx: 1, fill: '#666', stroke: '#555', 'stroke-width': 1 }));
+  g.appendChild(svg('rect', { x: -6, y: 11, width: 12, height: 3, rx: 1, fill: '#777', stroke: '#555', 'stroke-width': 0.5 }));
+  g.appendChild(svg('rect', { x: -5, y: 14, width: 10, height: 3, rx: 1, fill: '#666', stroke: '#555', 'stroke-width': 1 }));
+  g.appendChild(svg('line', { x1: 0, y1: 17, x2: 0, y2: 20, stroke: 'var(--text-secondary)', 'stroke-width': 1.5 }));
+
+  // Bottom terminal connector
+  g.appendChild(svg('circle', { cx: 0, cy: 21, r: 2, fill: '#888' }));
 
   renderTerminals(g, comp, 'bulb');
   return g;
@@ -166,17 +188,49 @@ function renderChip(comp) {
 
   g.appendChild(svg('rect', { x: -hw, y: -hh, width: def.width, height: def.height, fill: 'transparent', stroke: 'none' }));
 
-  // Chip body
-  const body = svg('rect', { class: 'chip-body', x: -hw + 8, y: -hh + 6, width: def.width - 16, height: def.height - 12 });
-  g.appendChild(body);
+  // Draw pins (behind body)
+  const pinH = 8, pinW = 5, pinGap = 22;
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = -1; i <= 1; i++) {
+      const px = side * (hw - 3);
+      const py = i * pinGap;
+      g.appendChild(svg('rect', { x: side === -1 ? px - pinW : px, y: py - pinH / 2, width: pinW, height: pinH, rx: 1, fill: 'url(#pinFill)', stroke: '#666', 'stroke-width': 0.5 }));
+    }
+  }
 
-  // Notch
-  g.appendChild(svg('path', { d: `M-6,${-hh + 6} L6,${-hh + 6}`, stroke: 'var(--text-tertiary)', 'stroke-width': 1.5 }));
+  // Chip body
+  g.appendChild(svg('rect', { x: -hw + 7, y: -hh + 5, width: def.width - 14, height: def.height - 10, rx: 3, fill: 'url(#chipFill)', stroke: '#444', 'stroke-width': 1.5 }));
+
+  // Inner highlight
+  g.appendChild(svg('rect', { x: -hw + 9, y: -hh + 7, width: def.width - 18, height: def.height - 14, rx: 2, fill: 'none', stroke: 'rgba(255,255,255,0.05)', 'stroke-width': 1 }));
+
+  // Notch (circle)
+  g.appendChild(svg('circle', { cx: 0, cy: -hh + 9, r: 3, fill: '#555' }));
 
   // Label
-  const lbl = svg('text', { class: 'chip-label', x: 0, y: 4 });
+  const lbl = svg('text', { x: 0, y: 3, 'text-anchor': 'middle', fill: '#8af', 'font-size': '9px', 'font-family': 'monospace', 'font-weight': 'bold' });
   lbl.textContent = 'CHIP';
   g.appendChild(lbl);
+
+  // Sub-label
+  const sub = svg('text', { x: 0, y: 13, 'text-anchor': 'middle', fill: '#666', 'font-size': '6px', 'font-family': 'monospace' });
+  sub.textContent = 'ATmega';
+  g.appendChild(sub);
+
+  // Pin labels
+  const labelData = [
+    { dx: -hw - 10, dy: -22, text: 'D0' },
+    { dx: -hw - 10, dy: 0, text: 'VCC' },
+    { dx: -hw - 10, dy: 22, text: 'GND' },
+    { dx: hw + 10, dy: -22, text: 'D1' },
+    { dx: hw + 10, dy: 0, text: 'D2' },
+    { dx: hw + 10, dy: 22, text: 'D3' },
+  ];
+  labelData.forEach(({ dx, dy, text }) => {
+    const l = svg('text', { x: dx, y: dy + 3, 'text-anchor': dx < 0 ? 'end' : 'start', fill: 'var(--text-tertiary)', 'font-size': '7px', 'font-family': 'monospace' });
+    l.textContent = text;
+    g.appendChild(l);
+  });
 
   renderTerminals(g, comp, 'chip');
   return g;
@@ -192,11 +246,6 @@ function renderTerminals(g, comp, type) {
       'data-pin-idx': i,
     });
     g.appendChild(circ);
-
-    // Label
-    const lbl = svg('text', { class: `pin-text ${type === 'chip' && (t.role === 'vcc' || t.role === 'gnd' || t.role === 'pin') && state.chipPins[t.pinIndex]?.value > 0 ? 'high' : ''}`, x: t.dx, y: t.dy + (t.dy < 0 ? -8 : 16) });
-    lbl.textContent = t.label;
-    g.appendChild(lbl);
   });
 }
 
@@ -251,21 +300,356 @@ function renderAll() {
   updatePinUI();
 }
 
+// --- Pathfinding ---
+
+const GRID_SIZE = 10;
+const OBSTACLE_MARGIN = 8;
+
+// --- Wire crossing detection ---
+
+function getWireSegments(pts) {
+  const segs = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5) continue;
+    segs.push({
+      x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+      horiz: Math.abs(a.y - b.y) < 0.5,
+      minX: Math.min(a.x, b.x), maxX: Math.max(a.x, b.x),
+      minY: Math.min(a.y, b.y), maxY: Math.max(a.y, b.y),
+    });
+  }
+  return segs;
+}
+
+function segsIntersect(a, b) {
+  if (a.horiz === b.horiz) return null;
+  const h = a.horiz ? a : b;
+  const v = a.horiz ? b : a;
+  if (h.minX <= v.x1 && h.maxX >= v.x1 && v.minY <= h.y1 && v.maxY >= h.y1) {
+    return { x: v.x1, y: h.y1 };
+  }
+  return null;
+}
+
+function findWireCrossings() {
+  const crossings = [];
+  const active = state.wires.filter(w => w.storedPath);
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const segsI = getWireSegments(active[i].storedPath);
+      const segsJ = getWireSegments(active[j].storedPath);
+      for (const si of segsI) {
+        for (const sj of segsJ) {
+          const pt = segsIntersect(si, sj);
+          if (pt) crossings.push({ x: pt.x, y: pt.y, id1: active[i].id, id2: active[j].id });
+        }
+      }
+    }
+  }
+  return crossings;
+}
+
+function isBridgeMarked(cross, wire) {
+  const marks = wire._bridges || {};
+  const key = `${Math.round(cross.x)},${Math.round(cross.y)}`;
+  return marks[key] === true;
+}
+
+function toggleBridge(wire, key) {
+  if (!wire._bridges) wire._bridges = {};
+  wire._bridges[key] = !wire._bridges[key];
+}
+
+
+function getObstacles(skipWireId) {
+  const obs = [];
+  for (const id in state.components) {
+    const comp = state.components[id];
+    const def = COMPONENT_DEFS[comp.type];
+    const hw = def.width / 2;
+    const hh = def.height / 2;
+    obs.push({ x: comp.x - hw - OBSTACLE_MARGIN, y: comp.y - hh - OBSTACLE_MARGIN, w: def.width + OBSTACLE_MARGIN * 2, h: def.height + OBSTACLE_MARGIN * 2 });
+  }
+  // Existing wire paths as soft obstacles (skip first/last segments near terminals)
+  const WR = 5;
+  for (const w of state.wires) {
+    if (!w.storedPath || w.id === skipWireId) continue;
+    const pts = w.storedPath;
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (i === 0 || i === pts.length - 2) continue;
+      const a = pts[i], b = pts[i + 1];
+      const pad = WR;
+      if (Math.abs(a.x - b.x) < 0.5) {
+        const minY = Math.min(a.y, b.y) - pad;
+        const maxY = Math.max(a.y, b.y) + pad;
+        obs.push({ x: a.x - pad, y: minY, w: pad * 2, h: maxY - minY });
+      } else {
+        const minX = Math.min(a.x, b.x) - pad;
+        const maxX = Math.max(a.x, b.x) + pad;
+        obs.push({ x: minX, y: a.y - pad, w: maxX - minX, h: pad * 2 });
+      }
+    }
+  }
+  return obs;
+}
+
+function segOverlapsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+  const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+  const rRight = rx + rw, rBot = ry + rh;
+  if (maxX < rx || minX > rRight || maxY < ry || minY > rBot) return false;
+  if (x1 === x2) return true;
+  if (y1 === y2) return true;
+  return !(minX >= rx && maxX <= rRight && minY >= ry && maxY <= rBot);
+}
+
+const TURN_PENALTY = 8;
+
+function aStarPath(sx, sy, ex, ey, obstacles, GS) {
+  const margin = 35 + Math.max(Math.abs(ex - sx), Math.abs(ey - sy));
+  const minGX = Math.min(sx, ex) - margin;
+  const maxGX = Math.max(sx, ex) + margin;
+  const minGY = Math.min(sy, ey) - margin;
+  const maxGY = Math.max(sy, ey) + margin;
+
+  function blocked(gx, gy) {
+    if (gx < minGX || gx > maxGX || gy < minGY || gy > maxGY) return true;
+    if (gx === sx && gy === sy) return false;
+    if (gx === ex && gy === ey) return false;
+    const px = gx * GS;
+    const py = gy * GS;
+    for (const o of obstacles) {
+      if (px > o.x && px < o.x + o.w && py > o.y && py < o.y + o.h) return true;
+    }
+    return false;
+  }
+
+  const start = { gx: sx, gy: sy, g: 0, f: Math.abs(sx - ex) + Math.abs(sy - ey), c: null, dir: 's' };
+  let open = [start];
+  const om = new Map([[`${sx},${sy},s`, start]]);
+  const cl = new Set();
+
+  while (open.length) {
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+    const cur = open.splice(bi, 1)[0];
+    const curKey = `${cur.gx},${cur.gy},${cur.dir}`;
+    om.delete(curKey);
+    if (cur.gx === ex && cur.gy === ey) {
+      const p = [];
+      let n = cur;
+      while (n) { p.unshift({ x: n.gx * GS, y: n.gy * GS }); n = n.c; }
+      return p;
+    }
+    cl.add(curKey);
+    const dd = [[0,-1],[0,1],[-1,0],[1,0]];
+    for (const [dx, dy] of dd) {
+      const ngx = cur.gx + dx, ngy = cur.gy + dy;
+      const nkey = `${ngx},${ngy},${dx ? 'h' : 'v'}`;
+      if (cl.has(nkey)) continue;
+      if (blocked(ngx, ngy)) continue;
+      const newDir = dx ? 'h' : 'v';
+      const turnCost = (cur.dir !== 's' && cur.dir !== newDir) ? TURN_PENALTY : 0;
+      const ng = cur.g + 1 + turnCost;
+      const nf = ng + Math.abs(ngx - ex) + Math.abs(ngy - ey);
+      const exst = om.get(nkey);
+      if (exst) { if (ng < exst.g) { exst.g = ng; exst.f = nf; exst.c = cur; } }
+      else { const no = { gx: ngx, gy: ngy, g: ng, f: nf, c: cur, dir: newDir }; open.push(no); om.set(nkey, no); }
+    }
+  }
+  return null;
+}
+
+function simplifyWaypoints(pts) {
+  if (pts.length <= 2) return pts;
+  const r = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i - 1], c = pts[i], n = pts[i + 1];
+    if ((c.x - p.x === 0 && n.x - c.x === 0) || (c.y - p.y === 0 && n.y - c.y === 0)) continue;
+    r.push(c);
+  }
+  r.push(pts[pts.length - 1]);
+  return r;
+}
+
+function roundCorners(pts, r) {
+  if (pts.length < 2) return '';
+  const wps = simplifyWaypoints(pts);
+  if (wps.length < 2) return `M ${pts[0].x} ${pts[0].y}`;
+
+  let d = `M ${wps[0].x} ${wps[0].y}`;
+  for (let i = 1; i < wps.length - 1; i++) {
+    const p0 = wps[i - 1], p1 = wps[i], p2 = wps[i + 1];
+    const dx0 = Math.sign(p1.x - p0.x) || 0, dy0 = Math.sign(p1.y - p0.y) || 0;
+    const dx1 = Math.sign(p2.x - p1.x) || 0, dy1 = Math.sign(p2.y - p1.y) || 0;
+    const di = Math.abs(p1.x - p0.x) + Math.abs(p1.y - p0.y);
+    const dOut = Math.abs(p2.x - p1.x) + Math.abs(p2.y - p1.y);
+    const cr = Math.min(r, di / 2, dOut / 2);
+
+    const preX = p1.x - cr * dx0, preY = p1.y - cr * dy0;
+    const postX = p1.x + cr * dx1, postY = p1.y + cr * dy1;
+    const dirIn = dx0 || dy0, dirOut = dx1 || dy1;
+    const sweep = dirIn !== dirOut ? 1 : 0;
+    d += ` L ${preX} ${preY} A ${cr} ${cr} 0 0 ${sweep} ${postX} ${postY}`;
+  }
+  d += ` L ${wps[wps.length-1].x} ${wps[wps.length-1].y}`;
+  return d;
+}
+
+function computeRoutePoints(x1, y1, x2, y2, skipWireId) {
+  const GS = GRID_SIZE;
+  const sx = Math.round(x1 / GS), sy = Math.round(y1 / GS);
+  const ex = Math.round(x2 / GS), ey = Math.round(y2 / GS);
+
+  if (Math.abs(sx - ex) <= 1 && Math.abs(sy - ey) <= 1) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    if (adx < 1 || ady < 1) return [{ x: x1, y: y1 }, { x: x2, y: y2 }];
+    if (adx >= ady) return [{ x: x1, y: y1 }, { x: x2, y: y1 }, { x: x2, y: y2 }];
+    return [{ x: x1, y: y1 }, { x: x1, y: y2 }, { x: x2, y: y2 }];
+  }
+
+  const obstacles = getObstacles(skipWireId);
+
+  const simple = [
+    { x: x2, y: y1 },
+    { x: x1, y: y2 },
+  ];
+  for (const c of simple) {
+    const clear = !obstacles.some(o =>
+      segOverlapsRect(x1, y1, c.x, c.y, o.x, o.y, o.w, o.h) ||
+      segOverlapsRect(c.x, c.y, x2, y2, o.x, o.y, o.w, o.h)
+    );
+    if (clear) return [{ x: x1, y: y1 }, c, { x: x2, y: y2 }];
+  }
+
+  const gp = aStarPath(sx, sy, ex, ey, obstacles, GS);
+  if (gp) return [{ x: x1, y: y1 }, ...gp, { x: x2, y: y2 }];
+
+  const dx = x2 - x1, dy = y2 - y1;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (adx < 1 || ady < 1) return [{ x: x1, y: y1 }, { x: x2, y: y2 }];
+  if (adx >= ady) return [{ x: x1, y: y1 }, { x: x2, y: y1 }, { x: x2, y: y2 }];
+  return [{ x: x1, y: y1 }, { x: x1, y: y2 }, { x: x2, y: y2 }];
+}
+
+function routeWirePoints(wire) {
+  const fromComp = state.components[wire.from.compId];
+  const toComp = state.components[wire.to.compId];
+  const from = getTerminalAbsolute(fromComp, wire.from.pinIdx);
+  const to = getTerminalAbsolute(toComp, wire.to.pinIdx);
+
+  const wps = wire.waypoints || [];
+  if (wps.length === 0) {
+    return computeRoutePoints(from.x, from.y, to.x, to.y, wire.id);
+  }
+
+  const allPts = computeRoutePoints(from.x, from.y, wps[0].x, wps[0].y, wire.id);
+  for (let i = 0; i < wps.length - 1; i++) {
+    const seg = computeRoutePoints(wps[i].x, wps[i].y, wps[i+1].x, wps[i+1].y, wire.id);
+    for (let j = 1; j < seg.length; j++) allPts.push(seg[j]);
+  }
+  const finalSeg = computeRoutePoints(wps[wps.length-1].x, wps[wps.length-1].y, to.x, to.y, wire.id);
+  for (let j = 1; j < finalSeg.length; j++) allPts.push(finalSeg[j]);
+  return allPts;
+}
+
+function routeOrthogonal(x1, y1, x2, y2, r) {
+  return roundCorners(computeRoutePoints(x1, y1, x2, y2), r);
+}
+
+function routeWire(wire, r) {
+  return roundCorners(routeWirePoints(wire), r);
+}
+
+function buildOrthoPath(x1, y1, x2, y2, r) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+  if (adx < 1 || ady < 1) {
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+  r = Math.min(r, Math.min(adx, ady) / 2);
+  const hDir = dx > 0 ? 1 : -1;
+  const vDir = dy > 0 ? 1 : -1;
+  if (adx >= ady) {
+    const sweep = hDir !== vDir ? 1 : 0;
+    return `M ${x1} ${y1} L ${x2 - r * hDir} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y1 + r * vDir} L ${x2} ${y2}`;
+  } else {
+    const sweep = vDir !== hDir ? 1 : 0;
+    return `M ${x1} ${y1} L ${x1} ${y2 - r * vDir} A ${r} ${r} 0 0 ${sweep} ${x1 + r * hDir} ${y2} L ${x2} ${y2}`;
+  }
+}
+
 function renderWires() {
   wiresLayer.innerHTML = '';
-  // Highlight existing wires
-  const existing = new Set(state.wires.map(w => wireKey(w.from, w.to)));
-
   for (const wire of state.wires) {
-    const from = getTerminalAbsolute(state.components[wire.from.compId], wire.from.pinIdx);
-    const to = getTerminalAbsolute(state.components[wire.to.compId], wire.to.pinIdx);
-    const line = svg('line', {
-      class: 'wire',
-      x1: from.x, y1: from.y, x2: to.x, y2: to.y,
-      'data-wire-id': wire.id,
+    if (wire._dirty || !wire.storedPath) {
+      wire.storedPath = routeWirePoints(wire);
+      wire._dirty = false;
+    }
+
+    const fromComp = state.components[wire.from.compId];
+    const toComp = state.components[wire.to.compId];
+    const from = getTerminalAbsolute(fromComp, wire.from.pinIdx);
+    const to = getTerminalAbsolute(toComp, wire.to.pinIdx);
+    wire.storedPath[0] = { x: from.x, y: from.y };
+    wire.storedPath[wire.storedPath.length - 1] = { x: to.x, y: to.y };
+
+    const pathStr = roundCorners(wire.storedPath, 14);
+    const path = svg('path', { class: 'wire', d: pathStr, 'data-wire-id': wire.id });
+    path.addEventListener('dblclick', () => deleteWire(wire.id));
+    path.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = board.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const w = state.wires.find(x => x.id === wire.id);
+      if (!w) return;
+      if (!w.waypoints) w.waypoints = [];
+      w.waypoints.push({ x: mx, y: my });
+      w._dirty = true;
+      renderAll();
+      runSimulation();
     });
-    line.addEventListener('dblclick', () => deleteWire(wire.id));
-    wiresLayer.appendChild(line);
+    wiresLayer.appendChild(path);
+
+    // Waypoint handles
+    const wps = wire.waypoints || [];
+    for (let i = 0; i < wps.length; i++) {
+      const h = svg('circle', { class: 'waypoint-handle', cx: wps[i].x, cy: wps[i].y, r: 5, 'data-wire-id': wire.id, 'data-wp-idx': i });
+      h.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const w = state.wires.find(x => x.id === wire.id);
+        if (!w || !w.waypoints) return;
+        w.waypoints.splice(parseInt(h.dataset.wpIdx), 1);
+        w._dirty = true;
+        renderAll();
+        runSimulation();
+      });
+      wiresLayer.appendChild(h);
+    }
+  }
+
+  // Wire crossing bridges
+  const crossings = findWireCrossings();
+  for (const cross of crossings) {
+    const w1 = state.wires.find(w => w.id === cross.id1);
+    const w2 = state.wires.find(w => w.id === cross.id2);
+    const key = `${Math.round(cross.x)},${Math.round(cross.y)}`;
+    if (isBridgeMarked(cross, w1) || isBridgeMarked(cross, w2)) continue;
+    const br = svg('path', {
+      class: 'wire-bridge',
+      d: `M ${cross.x - 6} ${cross.y} A 6 6 0 0 1 ${cross.x + 6} ${cross.y}`,
+    });
+    br.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleBridge(w1, key);
+      renderAll();
+    });
+    wiresLayer.appendChild(br);
   }
 }
 
@@ -319,8 +703,10 @@ function updateBulbStates() {
 
     const glass = g.querySelector('.bulb-glass');
     const fil = g.querySelector('.bulb-filament');
+    const glowRing = g.querySelector('.bulb-glow-ring');
     if (glass) glass.classList.toggle('on', on);
     if (fil) fil.classList.toggle('on', on);
+    if (glowRing) glowRing.classList.toggle('on', on);
   });
 }
 
@@ -592,6 +978,7 @@ let dragCompId = null;
 let dragStartX = 0, dragStartY = 0;
 let compStartX = 0, compStartY = 0;
 let hasMoved = false;
+let wpDragging = null; // { wireId, wpIdx, startX, startY, origX, origY }
 
 board.addEventListener('mousedown', e => {
   const rect = board.getBoundingClientRect();
@@ -608,6 +995,17 @@ board.addEventListener('mousedown', e => {
     state.selectedCompId = compId;
     state.rotateStartAngle = Math.atan2(my - comp.y, mx - comp.x) * 180 / Math.PI;
     renderAll();
+    return;
+  }
+
+  // Waypoint handle drag
+  const wpHandle = e.target.closest('.waypoint-handle');
+  if (wpHandle) {
+    const wireId = wpHandle.dataset.wireId;
+    const wpIdx = parseInt(wpHandle.dataset.wpIdx);
+    const w = state.wires.find(x => x.id === wireId);
+    if (!w || !w.waypoints || !w.waypoints[wpIdx]) return;
+    wpDragging = { wireId, wpIdx, startX: e.clientX, startY: e.clientY, origX: w.waypoints[wpIdx].x, origY: w.waypoints[wpIdx].y };
     return;
   }
 
@@ -655,6 +1053,18 @@ board.addEventListener('mousemove', e => {
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
 
+  // Waypoint drag
+  if (wpDragging) {
+    const w = state.wires.find(x => x.id === wpDragging.wireId);
+    if (w && w.waypoints) {
+      w.waypoints[wpDragging.wpIdx] = { x: wpDragging.origX + (e.clientX - wpDragging.startX), y: wpDragging.origY + (e.clientY - wpDragging.startY) };
+      w._dirty = true;
+      renderAll();
+      runSimulation();
+    }
+    return;
+  }
+
   // Rotation
   if (state.rotating && state.selectedCompId) {
     const comp = state.components[state.selectedCompId];
@@ -671,10 +1081,8 @@ board.addEventListener('mousemove', e => {
   // Wire preview
   if (state.wireStart && wireModeCheck.checked) {
     const from = getTerminalAbsolute(state.components[state.wireStart.compId], state.wireStart.pinIdx);
-    wirePreview.setAttribute('x1', from.x);
-    wirePreview.setAttribute('y1', from.y);
-    wirePreview.setAttribute('x2', mx);
-    wirePreview.setAttribute('y2', my);
+    const pathStr = routeOrthogonal(from.x, from.y, mx, my, 14);
+    wirePreview.setAttribute('d', pathStr);
     wirePreview.setAttribute('display', '');
     return;
   }
@@ -695,6 +1103,10 @@ board.addEventListener('mouseup', () => {
     state.rotating = false;
     return;
   }
+  if (wpDragging) {
+    wpDragging = null;
+    return;
+  }
   if (isBoardDragging && dragCompId && hasMoved) {
     updateStatus('Component moved');
   }
@@ -704,6 +1116,7 @@ board.addEventListener('mouseup', () => {
 
 board.addEventListener('mouseleave', () => {
   if (state.rotating) state.rotating = false;
+  wpDragging = null;
   isBoardDragging = false;
   dragCompId = null;
 });
@@ -731,7 +1144,7 @@ function handleWireClick(compId, pinIdx) {
     }
 
     const wireId = `wire-${state.nextWireId++}`;
-    state.wires.push({ id: wireId, from: { ...start }, to: { compId, pinIdx } });
+    state.wires.push({ id: wireId, from: { ...start }, to: { compId, pinIdx }, waypoints: [], _dirty: true, _dirty: true });
     state.wireStart = null;
     wirePreview.setAttribute('display', 'none');
     renderAll();
@@ -889,13 +1302,13 @@ const bulbId = 'comp-3';
 
 state.wires.push(
   // Battery (+) to Chip VCC (pin 0 = VCC on chip)
-  { id: `wire-${state.nextWireId++}`, from: { compId: batteryId, pinIdx: 0 }, to: { compId: chipId, pinIdx: 1 } },
+  { id: `wire-${state.nextWireId++}`, from: { compId: batteryId, pinIdx: 0 }, to: { compId: chipId, pinIdx: 1 }, waypoints: [], _dirty: true },
   // Battery (-) to Chip GND (pin 2 = GND on chip)
-  { id: `wire-${state.nextWireId++}`, from: { compId: batteryId, pinIdx: 1 }, to: { compId: chipId, pinIdx: 2 } },
+  { id: `wire-${state.nextWireId++}`, from: { compId: batteryId, pinIdx: 1 }, to: { compId: chipId, pinIdx: 2 }, waypoints: [], _dirty: true },
   // Chip D0 (pin 0) to Bulb (+) (pin 0)
-  { id: `wire-${state.nextWireId++}`, from: { compId: chipId, pinIdx: 0 }, to: { compId: bulbId, pinIdx: 0 } },
+  { id: `wire-${state.nextWireId++}`, from: { compId: chipId, pinIdx: 0 }, to: { compId: bulbId, pinIdx: 0 }, waypoints: [], _dirty: true },
   // Bulb (-) (pin 1) to Chip GND (pin 2)
-  { id: `wire-${state.nextWireId++}`, from: { compId: bulbId, pinIdx: 1 }, to: { compId: chipId, pinIdx: 2 } },
+  { id: `wire-${state.nextWireId++}`, from: { compId: bulbId, pinIdx: 1 }, to: { compId: chipId, pinIdx: 2 }, waypoints: [], _dirty: true },
 );
 
 renderAll();
