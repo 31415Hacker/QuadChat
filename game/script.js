@@ -372,7 +372,7 @@ function getObstacles(skipWireId) {
     obs.push({ x: comp.x - hw - OBSTACLE_MARGIN, y: comp.y - hh - OBSTACLE_MARGIN, w: def.width + OBSTACLE_MARGIN * 2, h: def.height + OBSTACLE_MARGIN * 2 });
   }
   // Existing wire paths as soft obstacles (skip first/last segments near terminals)
-  const WR = 5;
+  const WR = 25;
   for (const w of state.wires) {
     if (!w.storedPath || w.id === skipWireId) continue;
     const pts = w.storedPath;
@@ -489,8 +489,9 @@ function roundCorners(pts, r) {
 
     const preX = p1.x - cr * dx0, preY = p1.y - cr * dy0;
     const postX = p1.x + cr * dx1, postY = p1.y + cr * dy1;
-    const dirIn = dx0 || dy0, dirOut = dx1 || dy1;
-    const sweep = dirIn !== dirOut ? 1 : 0;
+    const sweep = dx0 !== 0
+      ? (dx0 === dy1 ? 1 : 0)
+      : (dy0 !== dx1 ? 1 : 0);
     d += ` L ${preX} ${preY} A ${cr} ${cr} 0 0 ${sweep} ${postX} ${postY}`;
   }
   d += ` L ${wps[wps.length-1].x} ${wps[wps.length-1].y}`;
@@ -575,7 +576,7 @@ function buildOrthoPath(x1, y1, x2, y2, r) {
   const hDir = dx > 0 ? 1 : -1;
   const vDir = dy > 0 ? 1 : -1;
   if (adx >= ady) {
-    const sweep = hDir !== vDir ? 1 : 0;
+    const sweep = hDir === vDir ? 1 : 0;
     return `M ${x1} ${y1} L ${x2 - r * hDir} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y1 + r * vDir} L ${x2} ${y2}`;
   } else {
     const sweep = vDir !== hDir ? 1 : 0;
