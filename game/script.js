@@ -526,7 +526,24 @@ function computeRoutePoints(x1, y1, x2, y2, skipWireId) {
   }
 
   const gp = aStarPath(sx, sy, ex, ey, obstacles, GS);
-  if (gp) return [{ x: x1, y: y1 }, ...gp, { x: x2, y: y2 }];
+  if (gp) {
+    const pts = [];
+    if (gp[0].x !== x1 || gp[0].y !== y1) {
+      pts.push({ x: x1, y: y1 });
+      if (gp[0].x !== x1 && gp[0].y !== y1) {
+        pts.push({ x: gp[0].x, y: y1 });
+      }
+    }
+    pts.push(...gp);
+    const last = gp[gp.length - 1];
+    if (last.x !== x2 || last.y !== y2) {
+      if (last.x !== x2 && last.y !== y2) {
+        pts.push({ x: last.x, y: y2 });
+      }
+      pts.push({ x: x2, y: y2 });
+    }
+    return pts;
+  }
 
   const dx = x2 - x1, dy = y2 - y1;
   const adx = Math.abs(dx), ady = Math.abs(dy);
