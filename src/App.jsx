@@ -280,6 +280,13 @@ function getStatusLabel(mode) {
   }
 }
 
+const ONLINE_THRESHOLD = 60000; // 60 seconds — if lastOnline is within this window, consider online
+
+function isRecentlyOnline(timestamp) {
+  if (!timestamp?.toDate) return false;
+  return Date.now() - timestamp.toDate() < ONLINE_THRESHOLD;
+}
+
 function getRelativeTime(timestamp) {
   if (!timestamp?.toDate) return "";
   const diff = Date.now() - timestamp.toDate();
@@ -772,7 +779,7 @@ export default function App() {
     setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true });
     const id = setInterval(() => {
       setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true });
-    }, 300000);
+    }, 30000);
     return () => clearInterval(id);
   }, [user, sessionUserId]);
 
@@ -1064,8 +1071,10 @@ export default function App() {
     const nextKnownIds = new Set(messages.map((item) => item.id));
 
     if (!hasLoadedMessagesRef.current) {
-      knownMessageIdsRef.current = nextKnownIds;
-      hasLoadedMessagesRef.current = true;
+      if (messages.length > 0) {
+        knownMessageIdsRef.current = nextKnownIds;
+        hasLoadedMessagesRef.current = true;
+      }
       return;
     }
 
@@ -3231,10 +3240,12 @@ export default function App() {
                 const muted = isProfileMuted(profile);
                 const theirMode = profile.status?.mode;
                 const isSelf = profile.id === sessionUserId;
-                const statusMode = (isSelf || onlineUsers.has(profile.id)) ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
+                const staleOnline = isRecentlyOnline(profile.lastOnline);
+                const userActive = isSelf || onlineUsers.has(profile.id) || staleOnline;
+                const statusMode = userActive ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
                 return (
                   <div
-                    className={`user-item ${isSelf || onlineUsers.has(profile.id) ? "online" : ""}`}
+                    className={`user-item ${userActive ? "online" : ""}`}
                     key={profile.id}
                   >
                     <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
@@ -3251,10 +3262,10 @@ export default function App() {
                         ) : null}
                       </span>
                       <span className="user-last-online">
-                        {isSelf || onlineUsers.has(profile.id) ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
+                        {userActive ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
                       </span>
                     </div>
-                    {profile.id !== sessionUserId && onlineUsers.has(profile.id) && callStatus === "idle" ? (
+                    {profile.id !== sessionUserId && userActive && callStatus === "idle" ? (
                       <button
                         className="user-call-btn"
                         type="button"
