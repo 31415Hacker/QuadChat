@@ -524,6 +524,8 @@ export default function App() {
   const isNearBottomRef = useRef(true);
   const knownMessageIdsRef = useRef(new Set());
   const hasLoadedMessagesRef = useRef(false);
+  const prevOnlineRef = useRef({});
+  const hasSyncedOnlineRef = useRef(false);
 
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserDeveloper =
@@ -707,50 +709,61 @@ export default function App() {
 
     const presenceListRef = rtdbRef(rtdb, "presence");
     const onlineSet = new Set();
-    const initSyncRef = { current: true };
 
     const unsubAdded = onChildAdded(presenceListRef, (snap) => {
       const uid = snap.key;
       if (uid === sessionUserId) return;
       onlineSet.add(uid);
       setOnlineUsers(new Set(onlineSet));
-
-      if (!initSyncRef.current) {
-        const name = getProfileName(profilesRef.current[uid], uid);
-        if (notificationsEnabled && notificationPermission === "granted") {
-          new Notification("QuadChat", {
-            body: `${name} is online`,
-            icon: notificationIcon,
-            tag: `online-${uid}`,
-          });
-        }
-      }
     });
 
     const unsubRemoved = onChildRemoved(presenceListRef, (snap) => {
       const uid = snap.key;
       onlineSet.delete(uid);
       setOnlineUsers(new Set(onlineSet));
-
-      if (!initSyncRef.current) {
-        const name = getProfileName(profilesRef.current[uid], uid);
-        if (notificationsEnabled && notificationPermission === "granted") {
-          new Notification("QuadChat", {
-            body: `${name} is offline`,
-            icon: notificationIcon,
-            tag: `offline-${uid}`,
-          });
-        }
-      }
     });
-
-    setTimeout(() => { initSyncRef.current = false; }, 2000);
 
     return () => {
       unsubAdded();
       unsubRemoved();
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      hasSyncedOnlineRef.current = false;
+      prevOnlineRef.current = {};
+      return;
+    }
+
+    const uids = Object.keys(profiles);
+    if (uids.length === 0) return;
+
+    if (!hasSyncedOnlineRef.current) {
+      for (const [uid, profile] of Object.entries(profiles)) {
+        prevOnlineRef.current[uid] = isRecentlyOnline(profile.lastOnline);
+      }
+      hasSyncedOnlineRef.current = true;
+      return;
+    }
+
+    for (const [uid, profile] of Object.entries(profiles)) {
+      if (uid === sessionUserId) continue;
+      const nowOnline = isRecentlyOnline(profile.lastOnline);
+      const wasOnline = prevOnlineRef.current[uid] ?? false;
+      if (nowOnline === wasOnline) continue;
+
+      if (notificationsEnabled && notificationPermission === "granted") {
+        const name = getProfileName(profile, uid);
+        new Notification("QuadChat", {
+          body: `${name} is ${nowOnline ? "online" : "offline"}`,
+          icon: notificationIcon,
+          tag: `${nowOnline ? "online" : "offline"}-${uid}`,
+        });
+      }
+      prevOnlineRef.current[uid] = nowOnline;
+    }
+  }, [user, profiles, sessionUserId, notificationsEnabled, notificationPermission]);
 
   useEffect(() => {
     if (!user || !sessionUserId) return;
