@@ -839,6 +839,13 @@ export default function App() {
 
         if (currentStatus === "calling" && callStatusRef.current === "idle" && Date.now() - data.startedAt < 20000) {
           console.log(`[CALL-STATUS] showing incoming call modal for key=${callKey}`);
+          if (notificationsEnabled && notificationPermission === "granted") {
+            new Notification("QuadChat", {
+              body: `${data.callerName} is calling you`,
+              icon: notificationIcon,
+              tag: `incoming-call-${callKey}`,
+            });
+          }
           setIncomingCall({ key: callKey, ...data });
         } else {
           console.log(`[CALL-STATUS] clearing incoming call for key=${callKey} reason=${!currentStatus ? "no-status" : currentStatus !== "calling" ? "not-calling" : "busy-or-expired"}`);
@@ -1389,6 +1396,13 @@ export default function App() {
           console.log("[CALL-START] received answer, setting remote description");
           const ans = snap.val();
           await pc.setRemoteDescription(new RTCSessionDescription(ans));
+          if (notificationsEnabled && notificationPermission === "granted") {
+            new Notification("QuadChat", {
+              body: `${calleeName} picked up your call`,
+              icon: notificationIcon,
+              tag: `call-picked-${callRef.key}`,
+            });
+          }
           setCallStatus("connected");
         }
       });
@@ -1625,6 +1639,14 @@ export default function App() {
             isMuted: participant.isMuted || false,
           },
         }));
+        if (notificationsEnabled && notificationPermission === "granted") {
+          const name = participant.name || participant.identity;
+          new Notification("QuadChat", {
+            body: `${name} joined the group call`,
+            icon: notificationIcon,
+            tag: `group-join-${participant.identity}`,
+          });
+        }
       });
 
       room.on(RoomEvent.ParticipantDisconnected, (participant) => {
