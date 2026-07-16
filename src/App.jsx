@@ -3544,32 +3544,24 @@ export default function App() {
       </section>
       )}
       {isSettingsOpen && user ? (
-        <div className="modal-backdrop" role="presentation">
+        <div className="settings-page">
           <section
-            className="settings-modal"
+            className="settings-page-content"
             aria-label="Account settings"
-            role="dialog"
-            aria-modal="true"
           >
-            <header className="settings-header">
+            <header className="settings-page-header">
+              <button
+                className="settings-back-btn"
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+              >
+                <X size={18} />
+                <span>Back</span>
+              </button>
               <div>
                 <h2>Settings</h2>
                 <p>{user.email}</p>
-                <p>ID: {sessionUserId}</p>
-                {isCurrentUserDeveloper ? (
-                  <p>Role: developer</p>
-                ) : isCurrentUserAdmin ? (
-                  <p>Role: admin</p>
-                ) : null}
               </div>
-              <button
-                className="modal-close"
-                type="button"
-                onClick={() => setIsSettingsOpen(false)}
-                title="Close settings"
-              >
-                X
-              </button>
             </header>
 
             <form className="settings-form" onSubmit={saveSettings}>
