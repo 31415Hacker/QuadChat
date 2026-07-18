@@ -3738,8 +3738,7 @@ export default function App() {
 
                     <div className="settings-actions">
                       <button type="submit" disabled={isSavingSettings}>
-                        <span>Save changes</span>
-                        <span className="tag tag-safe">Safe</span>
+                        Save changes
                       </button>
                     </div>
                   </>
@@ -3851,8 +3850,7 @@ export default function App() {
 
                     <div className="settings-actions">
                       <button type="submit" disabled={isSavingSettings}>
-                        <span>Save changes</span>
-                        <span className="tag tag-safe">Safe</span>
+                        Save changes
                       </button>
                       <button
                         className="danger-button"
