@@ -2595,8 +2595,8 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      {!isAuthReady ? (
+    <main className={`app-shell${isSettingsOpen && user ? " app-shell--settings" : ""}`}>
+      {isSettingsOpen && user ? null : !isAuthReady ? (
         <section className="signin-panel" aria-label="Loading QuadChat">
           <div className="signin-brand">
             <div className="brand-mark" aria-hidden="true">

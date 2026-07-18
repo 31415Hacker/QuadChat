@@ -843,20 +843,30 @@ button:disabled {
   margin-top: 8px;
 }
 
+.app-shell--settings {
+  align-items: stretch;
+  padding: 0 !important;
+}
+
+.app-shell--settings .commit-fineprint {
+  display: none;
+}
+
 .settings-page {
-  background: var(--bg-app);
-  inset: 0;
-  overflow-y: auto;
-  position: fixed;
-  z-index: 40;
+  background: var(--bg-page);
+  display: flex;
+  height: 100%;
+  width: 100%;
 }
 
 .settings-page-inner {
   display: flex;
+  flex: 1;
   margin: 0 auto;
   max-width: 1000px;
-  min-height: 100vh;
+  min-height: 0;
   padding: 0 24px;
+  width: 100%;
 }
 
 .settings-nav {
@@ -914,6 +924,7 @@ button:disabled {
 .settings-content {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
   padding: 40px 40px 60px;
 }
 
