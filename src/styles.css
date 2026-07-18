@@ -862,7 +862,7 @@ button:disabled {
 .settings-page-inner {
   display: flex;
   flex: 1;
-  margin: 0 auto;
+  margin: 0 auto 0 0;
   max-width: 1000px;
   min-height: 100vh;
   padding: 0 24px;
