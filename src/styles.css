@@ -953,9 +953,9 @@ button:disabled {
 
 .settings-close-btn {
   align-items: center;
-  background: none;
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
   display: flex;
@@ -963,12 +963,16 @@ button:disabled {
   justify-content: center;
   min-height: 0;
   padding: 0;
+  position: fixed;
+  right: 20px;
+  top: 20px;
   transition: background 0.15s, color 0.15s;
   width: 36px;
+  z-index: 50;
 }
 
 .settings-close-btn:hover {
-  background: var(--bg-hover);
+  background: var(--bg-hover-alt);
   color: var(--text-primary);
 }
 

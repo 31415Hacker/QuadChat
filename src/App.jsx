@@ -3562,6 +3562,13 @@ export default function App() {
       )}
       {isSettingsOpen && user ? (
         <div className="settings-page">
+          <button
+            className="settings-close-btn"
+            type="button"
+            onClick={() => setIsSettingsOpen(false)}
+          >
+            <X size={20} />
+          </button>
           <div className="settings-page-inner">
             <nav className="settings-nav">
               <button
@@ -3615,13 +3622,6 @@ export default function App() {
                           ? "Accessibility"
                           : "Admin"}
                 </h2>
-                <button
-                  className="settings-close-btn"
-                  type="button"
-                  onClick={() => setIsSettingsOpen(false)}
-                >
-                  <X size={20} />
-                </button>
               </div>
               <form className="settings-form" onSubmit={saveSettings}>
                 {settingsTab === "account" ? (
