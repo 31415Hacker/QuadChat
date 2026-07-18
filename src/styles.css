@@ -866,11 +866,20 @@ button:disabled {
   max-width: 1000px;
   min-height: 0;
   padding: 0 24px;
+  position: relative;
   width: 100%;
 }
 
-.settings-nav {
+.settings-page-inner::before {
   border-right: 1px solid var(--border-color);
+  content: "";
+  left: 244px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.settings-nav {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
