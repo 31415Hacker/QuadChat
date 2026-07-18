@@ -1298,6 +1298,31 @@ export default function App() {
     }
   }
 
+  async function unlinkPassword() {
+    if (!user || !hasEmailProvider) return;
+
+    const confirmed = window.confirm(
+      "Remove password sign-in from this account? You will no longer be able to sign in with a password."
+    );
+    if (!confirmed) return;
+
+    setIsSavingSettings(true);
+    setSettingsMessage("");
+
+    try {
+      await unlink(user, "password");
+      await user.reload();
+      setUser(auth.currentUser);
+      setSettingsCurrentPassword("");
+      setSettingsPassword("");
+      setSettingsMessage("Password sign-in removed.");
+    } catch (firebaseError) {
+      setSettingsMessage(getAuthErrorMessage(firebaseError));
+    } finally {
+      setIsSavingSettings(false);
+    }
+  }
+
   function cleanupCall() {
     console.log("[CALL-CLEANUP] start");
     callCleanupsRef.current.forEach(fn => fn());
@@ -3792,6 +3817,25 @@ export default function App() {
                         </button>
                       </section>
                     )}
+
+                    {hasEmailProvider ? (
+                      <section className="settings-section-box">
+                        <div>
+                          <h3>Password sign-in</h3>
+                          <p>Remove password as a sign-in method.</p>
+                        </div>
+                        <button
+                          className="danger-button"
+                          disabled={isSavingSettings || !hasGoogleProvider}
+                          onClick={unlinkPassword}
+                          title={!hasGoogleProvider ? "Connect Google first to remove password" : ""}
+                          type="button"
+                        >
+                          <KeyRound size={18} />
+                          <span>Remove password</span>
+                        </button>
+                      </section>
+                    ) : null}
 
                     <div className="settings-actions">
                       <button type="submit" disabled={isSavingSettings}>
