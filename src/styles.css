@@ -773,12 +773,16 @@ button:disabled {
 }
 
 .ghost-button {
+  align-items: center;
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
+  gap: 8px;
+  min-height: 0;
   padding: 8px 12px;
 }
 
