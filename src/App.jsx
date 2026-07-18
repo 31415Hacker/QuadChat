@@ -3700,6 +3700,7 @@ export default function App() {
                               >
                                 <Upload size={17} />
                                 <span>{isUploadingPhoto ? "Uploading..." : "Upload"}</span>
+                                <span className="tag tag-safe">Safe</span>
                               </button>
                               <button
                                 className="ghost-button"
@@ -3719,6 +3720,7 @@ export default function App() {
                             >
                               <Trash2 size={17} />
                               <span>Remove picture</span>
+                              <span className="tag tag-danger">Dangerous</span>
                             </button>
                           ) : null}
                         </div>
@@ -3736,7 +3738,8 @@ export default function App() {
 
                     <div className="settings-actions">
                       <button type="submit" disabled={isSavingSettings}>
-                        Save changes
+                        <span>Save changes</span>
+                        <span className="tag tag-safe">Safe</span>
                       </button>
                     </div>
                   </>
@@ -3788,7 +3791,10 @@ export default function App() {
                     {!hasGoogleProvider ? (
                       <section className="settings-section-box">
                         <div>
-                          <h3>Google account</h3>
+                          <h3>
+                            Google account
+                            <span className="tag tag-safe">Safe</span>
+                          </h3>
                           <p>Connect Google as another way to sign in.</p>
                         </div>
                         <button
@@ -3804,7 +3810,10 @@ export default function App() {
                     ) : (
                       <section className="settings-section-box">
                         <div>
-                          <h3>Google account</h3>
+                          <h3>
+                            Google account
+                            <span className="tag tag-danger">Dangerous</span>
+                          </h3>
                           <p>Google sign-in is connected.</p>
                         </div>
                         <button
@@ -3821,7 +3830,10 @@ export default function App() {
                     {hasEmailProvider ? (
                       <section className="settings-section-box">
                         <div>
-                          <h3>Password sign-in</h3>
+                          <h3>
+                            Password sign-in
+                            <span className="tag tag-danger">Dangerous</span>
+                          </h3>
                           <p>Remove password as a sign-in method.</p>
                         </div>
                         <button
@@ -3839,7 +3851,8 @@ export default function App() {
 
                     <div className="settings-actions">
                       <button type="submit" disabled={isSavingSettings}>
-                        Save changes
+                        <span>Save changes</span>
+                        <span className="tag tag-safe">Safe</span>
                       </button>
                       <button
                         className="danger-button"
@@ -3849,6 +3862,7 @@ export default function App() {
                       >
                         <Trash2 size={17} />
                         <span>Remove account</span>
+                        <span className="tag tag-danger">Dangerous</span>
                       </button>
                     </div>
                   </>
@@ -3862,7 +3876,10 @@ export default function App() {
 
                     <section className="settings-section-box">
                       <div>
-                        <h3>Theme</h3>
+                        <h3>
+                          Theme
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
                         <p>Switch between dark and light mode.</p>
                       </div>
                       <label className="toggle-row">
@@ -3885,7 +3902,10 @@ export default function App() {
 
                     <section className="settings-section-box">
                       <div>
-                        <h3>Reduced motion</h3>
+                        <h3>
+                          Reduced motion
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
                         <p>Minimize animations and transitions throughout the app.</p>
                       </div>
                       <label className="toggle-row">
@@ -3899,7 +3919,10 @@ export default function App() {
                     </section>
                     <section className="settings-section-box">
                       <div>
-                        <h3>Desktop notifications</h3>
+                        <h3>
+                          Desktop notifications
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
                         <p>Receive browser notifications when you get a new message or call.</p>
                       </div>
                       <button
@@ -3927,7 +3950,10 @@ export default function App() {
 
                     <section className="settings-section-box">
                       <div>
-                        <h3>Sign up</h3>
+                        <h3>
+                          Sign up
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
                         <p>Control whether new users can create accounts.</p>
                       </div>
                       <label className="toggle-row">
@@ -3941,7 +3967,10 @@ export default function App() {
                     </section>
                     <section className="settings-section-box">
                       <div>
-                        <h3>Magic link</h3>
+                        <h3>
+                          Magic link
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
                         <p>Generate a one-time sign-in link for any user.</p>
                       </div>
                       <div className="magic-link-form">

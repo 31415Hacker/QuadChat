@@ -606,14 +606,38 @@ button:disabled {
 }
 
 .settings-section-box h3 {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   font-size: 0.875rem;
   font-weight: 600;
+  gap: 6px;
 }
 
 .settings-section-box p {
   color: var(--text-tertiary);
   font-size: 0.8rem;
   margin-top: 4px;
+}
+
+.tag {
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tag-safe {
+  background: color-mix(in srgb, var(--accent-green) 18%, transparent);
+  color: var(--accent-green);
+}
+
+.tag-danger {
+  background: color-mix(in srgb, var(--accent-red) 18%, transparent);
+  color: var(--accent-red);
 }
 
 .magic-link-form {
