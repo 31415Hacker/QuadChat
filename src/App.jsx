@@ -3848,10 +3848,14 @@ export default function App() {
                       </section>
                     ) : null}
 
-                    <div className="settings-actions">
-                      <button type="submit" disabled={isSavingSettings}>
-                        Save changes
-                      </button>
+                    <section className="settings-section-box">
+                      <div>
+                        <h3>
+                          Remove account
+                          <span className="tag tag-danger">Dangerous</span>
+                        </h3>
+                        <p>Permanently delete your account and all associated data.</p>
+                      </div>
                       <button
                         className="danger-button"
                         type="button"
@@ -3860,7 +3864,12 @@ export default function App() {
                       >
                         <Trash2 size={17} />
                         <span>Remove account</span>
-                        <span className="tag tag-danger">Dangerous</span>
+                      </button>
+                    </section>
+
+                    <div className="settings-actions">
+                      <button type="submit" disabled={isSavingSettings}>
+                        Save changes
                       </button>
                     </div>
                   </>
