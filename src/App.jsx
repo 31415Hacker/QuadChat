@@ -1894,7 +1894,7 @@ export default function App() {
       return;
     }
 
-    if (cleanPassword && !cleanCurrentPassword) {
+    if (cleanPassword && !cleanCurrentPassword && hasEmailProvider) {
       setSettingsMessage("Enter your current password to set a new password.");
       return;
     }
@@ -1912,12 +1912,13 @@ export default function App() {
       }
 
       if (cleanPassword) {
-        const credential = EmailAuthProvider.credential(
-          user.email,
-          cleanCurrentPassword
-        );
-
-        await reauthenticateWithCredential(user, credential);
+        if (hasEmailProvider) {
+          const credential = EmailAuthProvider.credential(
+            user.email,
+            cleanCurrentPassword
+          );
+          await reauthenticateWithCredential(user, credential);
+        }
         await updatePassword(user, cleanPassword);
       }
 
