@@ -3852,6 +3852,25 @@ export default function App() {
                         <span>{reduceMotion ? "On" : "Off"}</span>
                       </label>
                     </section>
+                    <section className="settings-section-box">
+                      <div>
+                        <h3>Desktop notifications</h3>
+                        <p>Receive browser notifications when you get a new message or call.</p>
+                      </div>
+                      <button
+                        className="ghost-button"
+                        disabled={isSavingSettings}
+                        onClick={toggleNotifications}
+                        type="button"
+                      >
+                        {notificationsEnabled ? (
+                          <BellOff size={18} />
+                        ) : (
+                          <Bell size={18} />
+                        )}
+                        <span>{notificationsEnabled ? "Disable" : "Enable"}</span>
+                      </button>
+                    </section>
                   </>
                 ) : null}
 
