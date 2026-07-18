@@ -83,7 +83,8 @@ import {
   Upload,
   UserRound,
   Users,
-  Copy
+  Copy,
+  Eye
 } from "lucide-react";
 import { Room, RoomEvent } from "livekit-client";
 import { auth, db, rtdb } from "../firebase.js";
@@ -482,6 +483,10 @@ export default function App() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("account");
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    const stored = localStorage.getItem("quadchat-reduce-motion");
+    return stored === "true";
+  });
   const [settingsName, setSettingsName] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
@@ -632,6 +637,16 @@ export default function App() {
     }
     localStorage.setItem("quadchat-theme", isDarkTheme ? "dark" : "light");
   }, [isDarkTheme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (reduceMotion) {
+      root.setAttribute("data-reduce-motion", "");
+    } else {
+      root.removeAttribute("data-reduce-motion");
+    }
+    localStorage.setItem("quadchat-reduce-motion", reduceMotion ? "true" : "false");
+  }, [reduceMotion]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -3570,6 +3585,13 @@ export default function App() {
                 <Moon size={18} />
                 <span>Appearance</span>
               </button>
+              <button
+                className={`settings-nav-item ${settingsTab === "accessibility" ? "active" : ""}`}
+                onClick={() => setSettingsTab("accessibility")}
+              >
+                <Eye size={18} />
+                <span>Accessibility</span>
+              </button>
               {isCurrentUserAdmin ? (
                 <button
                   className={`settings-nav-item ${settingsTab === "admin" ? "active" : ""}`}
@@ -3589,7 +3611,9 @@ export default function App() {
                       ? "Security"
                       : settingsTab === "appearance"
                         ? "Appearance"
-                        : "Admin"}
+                        : settingsTab === "accessibility"
+                          ? "Accessibility"
+                          : "Admin"}
                 </h2>
                 <button
                   className="settings-close-btn"
@@ -3803,6 +3827,29 @@ export default function App() {
                           type="checkbox"
                         />
                         <span>{isDarkTheme ? "Dark mode" : "Light mode"}</span>
+                      </label>
+                    </section>
+                  </>
+                  ) : null}
+
+                {settingsTab === "accessibility" ? (
+                  <>
+                    <p className="settings-section-desc">
+                      Options for a more accessible experience.
+                    </p>
+
+                    <section className="settings-section-box">
+                      <div>
+                        <h3>Reduced motion</h3>
+                        <p>Minimize animations and transitions throughout the app.</p>
+                      </div>
+                      <label className="toggle-row">
+                        <input
+                          checked={reduceMotion}
+                          onChange={() => setReduceMotion((prev) => !prev)}
+                          type="checkbox"
+                        />
+                        <span>{reduceMotion ? "On" : "Off"}</span>
                       </label>
                     </section>
                   </>
