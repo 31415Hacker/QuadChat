@@ -540,6 +540,73 @@ export default function App() {
   const [analyticsTarget, setAnalyticsTarget] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  async function openUserAnalytics(profile) {
+    if (!profile) return;
+    setAnalyticsTarget(profile);
+    setAnalyticsLoading(true);
+    setAnalyticsData(null);
+
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const startStr = thirtyDaysAgo.toISOString().slice(0, 10);
+
+      const q = query(
+        collection(db, "users", profile.id, "sessions"),
+        where("date", ">=", startStr),
+        orderBy("date", "desc"),
+        limit(500)
+      );
+      const snap = await getDocs(q);
+      const sessions = snap.docs.map((d) => d.data());
+
+      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const dayDurations = {};
+      const hourlyCounts = new Array(24).fill(0);
+      let sessionCount = 0;
+
+      for (const s of sessions) {
+        const start = s.start?.toDate?.();
+        const end = s.end?.toDate?.();
+        if (!start || !end) continue;
+        sessionCount++;
+
+        const day = start.toLocaleDateString("en-CA");
+        dayDurations[day] = (dayDurations[day] || 0) + (end - start);
+
+        let cursor = new Date(start);
+        while (cursor < end) {
+          const localHour = new Date(cursor.toLocaleString("en-US", { timeZone: viewerTz })).getHours();
+          hourlyCounts[localHour]++;
+          cursor.setTime(cursor.getTime() + 3600000);
+        }
+      }
+
+      const days = Object.keys(dayDurations);
+      const avgPlayTime = days.length > 0
+        ? days.reduce((sum, d) => sum + dayDurations[d], 0) / days.length
+        : 0;
+
+      const top3 = hourlyCounts
+        .map((count, hour) => ({ hour, count }))
+        .sort((a, b) => b.count - a.count || a.hour - b.hour)
+        .slice(0, 3)
+        .filter((h) => h.count > 0)
+        .map((h) => {
+          const startStr = `${String(h.hour).padStart(2, "0")}:00`;
+          const endStr = `${String((h.hour + 1) % 24).padStart(2, "0")}:00`;
+          return `${startStr}–${endStr}`;
+        });
+
+      setAnalyticsData({ avgPlayTime, top3, sessionCount, days: days.length });
+    } catch (e) {
+      console.error("analytics error:", e);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }
+
   const sentinelRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -3626,73 +3693,7 @@ export default function App() {
                   const isMine = item.userId === sessionUserId;
                   const isMenuOpen = openMessageMenuId === item.id;
 
-  async function openUserAnalytics(profile) {
-    if (!profile) return;
-    setAnalyticsTarget(profile);
-    setAnalyticsLoading(true);
-    setAnalyticsData(null);
-
-    try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const startStr = thirtyDaysAgo.toISOString().slice(0, 10);
-
-      const q = query(
-        collection(db, "users", profile.id, "sessions"),
-        where("date", ">=", startStr),
-        orderBy("date", "desc"),
-        limit(500)
-      );
-      const snap = await getDocs(q);
-      const sessions = snap.docs.map((d) => d.data());
-
-      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const dayDurations = {};
-      const hourlyCounts = new Array(24).fill(0);
-      let sessionCount = 0;
-
-      for (const s of sessions) {
-        const start = s.start?.toDate?.();
-        const end = s.end?.toDate?.();
-        if (!start || !end) continue;
-        sessionCount++;
-
-        const day = start.toLocaleDateString("en-CA");
-        dayDurations[day] = (dayDurations[day] || 0) + (end - start);
-
-        let cursor = new Date(start);
-        while (cursor < end) {
-          const localHour = new Date(cursor.toLocaleString("en-US", { timeZone: viewerTz })).getHours();
-          hourlyCounts[localHour]++;
-          cursor.setTime(cursor.getTime() + 3600000);
-        }
-      }
-
-      const days = Object.keys(dayDurations);
-      const avgPlayTime = days.length > 0
-        ? days.reduce((sum, d) => sum + dayDurations[d], 0) / days.length
-        : 0;
-
-      const top3 = hourlyCounts
-        .map((count, hour) => ({ hour, count }))
-        .sort((a, b) => b.count - a.count || a.hour - b.hour)
-        .slice(0, 3)
-        .filter((h) => h.count > 0)
-        .map((h) => {
-          const startStr = `${String(h.hour).padStart(2, "0")}:00`;
-          const endStr = `${String((h.hour + 1) % 24).padStart(2, "0")}:00`;
-          return `${startStr}–${endStr}`;
-        });
-
-      setAnalyticsData({ avgPlayTime, top3, sessionCount, days: days.length });
-    } catch (e) {
-      console.error("analytics error:", e);
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  }
-
-  return (
+                  return (
                     <article
                       className={`message ${isMine ? "message-mine" : ""}`}
                       key={item.id}
