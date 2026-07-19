@@ -2172,9 +2172,9 @@ button:disabled {
   align-items: center;
   background: var(--bg-accent);
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: space-between;
-  padding: 10px 18px;
+  padding: 8px 14px;
 }
 
 .active-call-info {
@@ -2195,7 +2195,7 @@ button:disabled {
 .active-call-actions {
   align-items: center;
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .call-action-btn {
@@ -2207,11 +2207,11 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 34px;
-  height: 34px;
-  min-height: 34px;
+  flex: 0 0 30px;
+  height: 30px;
+  min-height: 30px;
   padding: 0;
-  width: 34px;
+  width: 30px;
   transition: background 0.15s ease;
 }
 
