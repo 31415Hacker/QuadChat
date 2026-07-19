@@ -117,6 +117,17 @@ const supportsRecording = typeof MediaRecorder !== "undefined";
 const rtcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
+const OPUS_BITRATE = 25000;
+
+function applyOpusBitrate(description, bitrate) {
+  return new RTCSessionDescription({
+    type: description.type,
+    sdp: description.sdp.replace(
+      /a=fmtp:111\s*(.*)/g,
+      (_, params) => `a=fmtp:111 ${params.replace(/;maxaveragebitrate=\d+/g, '')};maxaveragebitrate=${bitrate}`
+    )
+  });
+}
 
 function computeCapability() {
   const cpu = navigator.hardwareConcurrency || 1;
@@ -1439,7 +1450,7 @@ export default function App() {
 
       const pc = await createPeerConnection(callRef, true);
 
-      const offer = await pc.createOffer();
+      const offer = applyOpusBitrate(await pc.createOffer(), OPUS_BITRATE);
       await pc.setLocalDescription(offer);
       console.log("[CALL-START] created and set local offer");
 
@@ -1555,7 +1566,7 @@ export default function App() {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       console.log("[CALL-ANSWER] remote description set");
 
-      const answer = await pc.createAnswer();
+      const answer = applyOpusBitrate(await pc.createAnswer(), OPUS_BITRATE);
       await pc.setLocalDescription(answer);
       console.log("[CALL-ANSWER] local description set (answer)");
 
@@ -1765,7 +1776,7 @@ export default function App() {
           if (!data.offer) {
             const pc = createP2PConnection(remoteUid, callKey);
             listenForRemoteCandidates(remoteUid, callKey, pc);
-            const offer = await pc.createOffer();
+            const offer = applyOpusBitrate(await pc.createOffer(), OPUS_BITRATE);
             await pc.setLocalDescription(offer);
             await update(connRef, { offer: { type: offer.type, sdp: offer.sdp } });
           }
@@ -1774,7 +1785,7 @@ export default function App() {
             const pc = createP2PConnection(remoteUid, callKey);
             listenForRemoteCandidates(remoteUid, callKey, pc);
             await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pc.createAnswer();
+            const answer = applyOpusBitrate(await pc.createAnswer(), OPUS_BITRATE);
             await pc.setLocalDescription(answer);
             await update(connRef, { answer: { type: answer.type, sdp: answer.sdp } });
           }
@@ -2019,7 +2030,15 @@ export default function App() {
       groupCallRoomRef.current = room;
 
       for (const track of stream.getAudioTracks()) {
-        await room.localParticipant.publishTrack(track);
+        const pub = await room.localParticipant.publishTrack(track, { dtx: true });
+        try {
+          const sender = pub.track?.sender;
+          if (sender) {
+            const params = sender.getParameters();
+            params.encodings = [{ maxBitrate: OPUS_BITRATE }];
+            sender.setParameters(params);
+          }
+        } catch (_e) { /* some LiveKit versions ignore setParameters for audio */ }
       }
 
       const participants = {};
