@@ -1822,7 +1822,8 @@ export default function App() {
         (allCaps[uid]?.capability || 0) > (allCaps[best]?.capability || 0) ? uid : best
       );
       setP2pGroupCallHostId(hostUid);
-      setP2pGroupCallParticipants(existingParticipants);
+      const { [sessionUserId]: _self, ...otherParticipants } = existingParticipants;
+      setP2pGroupCallParticipants(otherParticipants);
 
       if (otherUids.length === 0) {
         setP2pGroupCallStatus("connected");
@@ -1834,7 +1835,7 @@ export default function App() {
         setP2pGroupCallStatus("connected");
       }
 
-      const unsub = onChildAdded(
+      const unsubAdded = onChildAdded(
         rtdbRef(rtdb, `group-calls/${callKey}/participants`),
         (snap) => {
           const uid = snap.key;
@@ -1845,7 +1846,27 @@ export default function App() {
           connectToPeer(uid, callKey);
         }
       );
-      p2pGroupCallUnsubsRef.current.push(unsub);
+      p2pGroupCallUnsubsRef.current.push(unsubAdded);
+
+      const unsubRemoved = onChildRemoved(
+        rtdbRef(rtdb, `group-calls/${callKey}/participants`),
+        (snap) => {
+          const uid = snap.key;
+          setP2pGroupCallParticipants((prev) => {
+            const { [uid]: _, ...rest } = prev;
+            return rest;
+          });
+          if (p2pGroupCallConnectionsRef.current[uid]) {
+            p2pGroupCallConnectionsRef.current[uid].close();
+            delete p2pGroupCallConnectionsRef.current[uid];
+          }
+          const el = p2pGroupCallAudioContainerRef.current?.querySelector(
+            `[data-p2p-participant="${uid}"]`
+          );
+          if (el) { el.srcObject = null; el.remove(); }
+        }
+      );
+      p2pGroupCallUnsubsRef.current.push(unsubRemoved);
     } catch (e) {
       console.error("[P2P-GROUP-CALL] join error:", e);
       cleanupP2PGroupCall();
