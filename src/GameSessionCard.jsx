@@ -4,7 +4,6 @@ import { ExternalLink, Plus, GripHorizontal, Check, X, Minus } from "lucide-reac
 const EMPTY_CARD = {
   type: "game_session_card",
   title: "",
-  googleMeetLink: "",
   note: "",
   tableData: {
     headers: ["Details", "Information"],
@@ -65,26 +64,6 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
     updateTable({ ...card.tableData, rows });
   }
 
-  function renderMeetButton() {
-    return (
-      <a
-        href={card.googleMeetLink || "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={
-          "inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl font-bold text-base " +
-          "bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] " +
-          "text-white transition-all duration-150 " +
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-800 " +
-          (!card.googleMeetLink ? "opacity-40 pointer-events-none" : "")
-        }
-      >
-        <ExternalLink size={18} />
-        Join Google Meet
-      </a>
-    );
-  }
-
   function renderGroupCallButton() {
     return (
       <button
@@ -114,14 +93,6 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
           value={card.title}
           onChange={(e) => update("title", e.target.value)}
           placeholder="Session title"
-        />
-
-        {/* Google Meet link */}
-        <input
-          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          value={card.googleMeetLink}
-          onChange={(e) => update("googleMeetLink", e.target.value)}
-          placeholder="Google Meet link"
         />
 
         {/* Note textarea */}
@@ -212,8 +183,6 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
           </button>
         </div>
 
-        {/* Meet button (preview) */}
-        {renderMeetButton()}
       </div>
     );
   }
