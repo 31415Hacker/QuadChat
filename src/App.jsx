@@ -91,6 +91,7 @@ import { Room, RoomEvent } from "livekit-client";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
 import GameSessionCard from "./GameSessionCard.jsx";
+import { version as APP_VERSION } from "../package.json";
 
 function messagesRef(channelId) {
   return collection(db, "messages", channelId, "messages");
@@ -3946,6 +3947,7 @@ export default function App() {
                   <span>Admin</span>
                 </button>
               ) : null}
+              <div className="settings-nav-version">v{APP_VERSION}</div>
             </nav>
             <main className="settings-content">
               <div className="settings-content-header">

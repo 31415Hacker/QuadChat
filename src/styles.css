@@ -911,6 +911,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  flex-grow: 1;
   gap: 2px;
   padding: 40px 16px 40px 0;
   position: sticky;
@@ -956,6 +957,13 @@ button:disabled {
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
+}
+
+.settings-nav-version {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  margin-top: auto;
+  padding: 20px 12px 0;
 }
 
 .settings-content {
