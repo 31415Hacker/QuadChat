@@ -2931,6 +2931,56 @@ export default function App() {
     }
   }
 
+  async function toggleUserMute(profile) {
+    if (!isCurrentUserAdmin || !profile) return;
+
+    const targetName = getProfileName(profile, profile.email || "");
+    const isMuted = isProfileMuted(profile);
+
+    try {
+      if (isMuted) {
+        await setDoc(
+          doc(db, "users", profile.id),
+          {
+            muted: false,
+            mutedUntil: null,
+            mutedBy: sessionUserId,
+            mutedUpdatedAt: serverTimestamp()
+          },
+          { merge: true }
+        );
+      } else {
+        await setDoc(
+          doc(db, "users", profile.id),
+          {
+            muted: true,
+            mutedUntil: null,
+            mutedBy: sessionUserId,
+            mutedUpdatedAt: serverTimestamp()
+          },
+          { merge: true }
+        );
+      }
+
+      const notificationText = isMuted
+        ? `🔇 @${targetName} was unmuted`
+        : `🔇 @${targetName} was muted`;
+
+      await addDoc(messagesRef(activeChannel), {
+        text: notificationText,
+        adminCommand: true,
+        command: isMuted ? "?unmute" : "?mute",
+        commandTarget: targetName,
+        notificationText,
+        targetUserId: profile.id,
+        userId: sessionUserId,
+        createdAt: serverTimestamp()
+      });
+    } catch (firebaseError) {
+      console.error("toggleUserMute failed:", firebaseError);
+    }
+  }
+
   return (
     <main className={`app-shell${isSettingsOpen && user ? " app-shell--settings" : ""}`}>
       {isSettingsOpen && user ? null : !isAuthReady ? (
@@ -3674,7 +3724,28 @@ export default function App() {
                         <Phone size={13} />
                       </button>
                     ) : null}
-                    {muted ? (
+                    {isCurrentUserAdmin ? (
+                      <button
+                        className="user-mic-btn"
+                        type="button"
+                        onClick={() => toggleUserMute(profile)}
+                        title={muted ? `Unmute ${name}` : `Mute ${name}`}
+                      >
+                        {muted ? (
+                          <MicOff
+                            aria-label={`${name} is muted`}
+                            className="user-mic user-mic-muted"
+                            size={14}
+                          />
+                        ) : (
+                          <Mic
+                            aria-label={`${name} can speak`}
+                            className="user-mic"
+                            size={14}
+                          />
+                        )}
+                      </button>
+                    ) : muted ? (
                       <MicOff
                         aria-label={`${name} is muted`}
                         className="user-mic user-mic-muted"
