@@ -2004,6 +2004,14 @@ export default function App() {
           el.srcObject = null;
           el.remove();
         }
+        if (notificationsEnabled && notificationPermission === "granted") {
+          const name = participant.name || participant.identity;
+          new Notification("QuadChat", {
+            body: `${name} left the group call`,
+            icon: notificationIcon,
+            tag: `group-leave-${participant.identity}`,
+          });
+        }
       });
 
       room.on(RoomEvent.AudioMuted, (participant) => {
