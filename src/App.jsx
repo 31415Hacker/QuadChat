@@ -495,6 +495,10 @@ export default function App() {
     const stored = localStorage.getItem("quadchat-reduce-motion");
     return stored === "true";
   });
+  const [showVersionInHeader, setShowVersionInHeader] = useState(() => {
+    const stored = localStorage.getItem("quadchat-show-version");
+    return stored === "true";
+  });
   const [settingsName, setSettingsName] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
@@ -666,6 +670,10 @@ export default function App() {
     }
     localStorage.setItem("quadchat-reduce-motion", reduceMotion ? "true" : "false");
   }, [reduceMotion]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-show-version", showVersionInHeader ? "true" : "false");
+  }, [showVersionInHeader]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -3129,7 +3137,7 @@ export default function App() {
               <MessageCircle size={26} strokeWidth={2.3} />
             </div>
             <div>
-              <h1>QuadChat</h1>
+              <h1>{showVersionInHeader ? `QuadChat v${APP_VERSION}` : "QuadChat"}</h1>
               <p>
                 Signed in as {activeName} · {messages.length} message
                 {messages.length === 1 ? "" : "s"} in{" "}
@@ -3938,6 +3946,13 @@ export default function App() {
                 <Eye size={18} />
                 <span>Accessibility</span>
               </button>
+              <button
+                className={`settings-nav-item ${settingsTab === "advanced" ? "active" : ""}`}
+                onClick={() => setSettingsTab("advanced")}
+              >
+                <Settings size={18} />
+                <span>Advanced</span>
+              </button>
               {isCurrentUserAdmin ? (
                 <button
                   className={`settings-nav-item ${settingsTab === "admin" ? "active" : ""}`}
@@ -3960,7 +3975,9 @@ export default function App() {
                         ? "Appearance"
                         : settingsTab === "accessibility"
                           ? "Accessibility"
-                          : "Admin"}
+                          : settingsTab === "advanced"
+                            ? "Advanced"
+                            : "Admin"}
                 </h2>
               </div>
               <form className="settings-form" onSubmit={saveSettings}>
@@ -4258,6 +4275,31 @@ export default function App() {
                         )}
                         <span>{notificationsEnabled ? "Disable" : "Enable"}</span>
                       </button>
+                    </section>
+                  </>
+                ) : null}
+
+                {settingsTab === "advanced" ? (
+                  <>
+                    <p className="settings-section-desc">
+                      Experimental and power-user options.
+                    </p>
+
+                    <section className="settings-section-box">
+                      <div>
+                        <h3>
+                          Show version in header
+                        </h3>
+                        <p>Display the app version next to "QuadChat" in the header bar.</p>
+                      </div>
+                      <label className="toggle-row">
+                        <input
+                          checked={showVersionInHeader}
+                          onChange={() => setShowVersionInHeader((prev) => !prev)}
+                          type="checkbox"
+                        />
+                        <span>{showVersionInHeader ? "On" : "Off"}</span>
+                      </label>
                     </section>
                   </>
                 ) : null}
