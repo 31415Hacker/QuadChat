@@ -1684,12 +1684,21 @@ button:disabled {
 }
 
 .user-name {
+  background: none;
+  border: none;
   color: var(--text-primary);
+  cursor: pointer;
   font-size: 0.9rem;
   min-width: 0;
   overflow: hidden;
+  padding: 0;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-name:hover {
+  color: var(--accent-primary);
 }
 
 .user-last-online {
@@ -1950,6 +1959,70 @@ button:disabled {
 
 .save-status-btn:hover:not(:disabled) {
   background: var(--bg-accent);
+}
+
+.analytics-modal {
+  background: var(--bg-surface);
+  border-radius: 10px;
+  box-shadow: 0 26px 80px var(--shadow-modal);
+  max-width: 400px;
+  padding: 20px;
+  width: min(100%, 400px);
+}
+
+.analytics-modal-header {
+  align-items: center;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 800;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.analytics-modal-header .modal-close {
+  margin-left: auto;
+}
+
+.analytics-status-note {
+  background: var(--bg-hover);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+}
+
+.analytics-body {
+  display: grid;
+  gap: 12px;
+}
+
+.analytics-stat {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analytics-stat-label {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.analytics-stat-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.analytics-top-hours {
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+}
+
+.analytics-loading {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  text-align: center;
 }
 
 .avatar-wrapper {

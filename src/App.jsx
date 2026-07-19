@@ -33,7 +33,8 @@ import {
   setDoc,
   startAfter,
   Timestamp,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
 import {
   get as rtdbGet,
@@ -536,6 +537,9 @@ export default function App() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const endRef = useRef(null);
+  const [analyticsTarget, setAnalyticsTarget] = useState(null);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const sentinelRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -593,6 +597,7 @@ export default function App() {
   const remoteAudioRef = useRef(null);
   const callStatusRef = useRef(callStatus);
   const profilesRef = useRef(profiles);
+  const currentSessionDocRef = useRef(null);
 
   const [groupCallStatus, setGroupCallStatus] = useState("idle");
   const groupCallRoomRef = useRef(null);
@@ -860,6 +865,18 @@ export default function App() {
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
+
+  useEffect(() => {
+    if (!user || !sessionUserId) return;
+    const sessionRef = doc(collection(db, "users", sessionUserId, "sessions"));
+    currentSessionDocRef.current = sessionRef;
+    setDoc(sessionRef, { start: serverTimestamp(), date: new Date().toISOString().slice(0, 10) });
+    return () => {
+      if (currentSessionDocRef.current) {
+        updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
+      }
+    };
+  }, [user, sessionUserId]);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
@@ -3422,6 +3439,60 @@ export default function App() {
           </div>
         ) : null}
 
+        {analyticsTarget ? (
+          <div className="modal-backdrop" onClick={() => { setAnalyticsTarget(null); setAnalyticsData(null); }}>
+            <div className="analytics-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="analytics-modal-header">
+                <UserRound size={18} />
+                <span>{getProfileName(analyticsTarget, analyticsTarget.email || "")}</span>
+                <button className="modal-close" type="button" onClick={() => { setAnalyticsTarget(null); setAnalyticsData(null); }}>
+                  <X size={18} />
+                </button>
+              </div>
+              {analyticsTarget.status?.mode === "busy" || analyticsTarget.status?.mode === "away" ? (
+                <div className="analytics-status-note">
+                  {analyticsTarget.status.mode === "busy" ? "⚠️" : "🟡"} Currently <strong>{getStatusLabel(analyticsTarget.status.mode)}</strong>
+                  {analyticsTarget.status.text ? ` — ${analyticsTarget.status.text}` : ""}
+                </div>
+              ) : null}
+              <div className="analytics-body">
+                {analyticsLoading ? (
+                  <p className="analytics-loading">Loading...</p>
+                ) : analyticsData ? (
+                  <>
+                    <div className="analytics-stat">
+                      <span className="analytics-stat-label">Active days (30d)</span>
+                      <span className="analytics-stat-value">{analyticsData.days}</span>
+                    </div>
+                    <div className="analytics-stat">
+                      <span className="analytics-stat-label">Sessions tracked</span>
+                      <span className="analytics-stat-value">{analyticsData.sessionCount}</span>
+                    </div>
+                    <div className="analytics-stat">
+                      <span className="analytics-stat-label">Avg time per day</span>
+                      <span className="analytics-stat-value">
+                        {analyticsData.avgPlayTime > 0
+                          ? `${Math.floor(analyticsData.avgPlayTime / 3600000)}h ${Math.round((analyticsData.avgPlayTime % 3600000) / 60000)}m`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="analytics-stat">
+                      <span className="analytics-stat-label">Best times to catch them</span>
+                      <span className="analytics-stat-value analytics-top-hours">
+                        {analyticsData.top3.length > 0
+                          ? analyticsData.top3.join(" · ")
+                          : "Not enough data"}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="analytics-loading">No data available.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {incomingCall ? (
           <div className="modal-backdrop">
             <div className="incoming-call">
@@ -3555,7 +3626,73 @@ export default function App() {
                   const isMine = item.userId === sessionUserId;
                   const isMenuOpen = openMessageMenuId === item.id;
 
-                  return (
+  async function openUserAnalytics(profile) {
+    if (!profile) return;
+    setAnalyticsTarget(profile);
+    setAnalyticsLoading(true);
+    setAnalyticsData(null);
+
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const startStr = thirtyDaysAgo.toISOString().slice(0, 10);
+
+      const q = query(
+        collection(db, "users", profile.id, "sessions"),
+        where("date", ">=", startStr),
+        orderBy("date", "desc"),
+        limit(500)
+      );
+      const snap = await getDocs(q);
+      const sessions = snap.docs.map((d) => d.data());
+
+      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const dayDurations = {};
+      const hourlyCounts = new Array(24).fill(0);
+      let sessionCount = 0;
+
+      for (const s of sessions) {
+        const start = s.start?.toDate?.();
+        const end = s.end?.toDate?.();
+        if (!start || !end) continue;
+        sessionCount++;
+
+        const day = start.toLocaleDateString("en-CA");
+        dayDurations[day] = (dayDurations[day] || 0) + (end - start);
+
+        let cursor = new Date(start);
+        while (cursor < end) {
+          const localHour = new Date(cursor.toLocaleString("en-US", { timeZone: viewerTz })).getHours();
+          hourlyCounts[localHour]++;
+          cursor.setTime(cursor.getTime() + 3600000);
+        }
+      }
+
+      const days = Object.keys(dayDurations);
+      const avgPlayTime = days.length > 0
+        ? days.reduce((sum, d) => sum + dayDurations[d], 0) / days.length
+        : 0;
+
+      const top3 = hourlyCounts
+        .map((count, hour) => ({ hour, count }))
+        .sort((a, b) => b.count - a.count || a.hour - b.hour)
+        .slice(0, 3)
+        .filter((h) => h.count > 0)
+        .map((h) => {
+          const startStr = `${String(h.hour).padStart(2, "0")}:00`;
+          const endStr = `${String((h.hour + 1) % 24).padStart(2, "0")}:00`;
+          return `${startStr}–${endStr}`;
+        });
+
+      setAnalyticsData({ avgPlayTime, top3, sessionCount, days: days.length });
+    } catch (e) {
+      console.error("analytics error:", e);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }
+
+  return (
                     <article
                       className={`message ${isMine ? "message-mine" : ""}`}
                       key={item.id}
@@ -3725,7 +3862,11 @@ export default function App() {
                   >
                     <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
                     <div className="user-info">
-                      <span className="user-name">
+                      <button
+                        className="user-name"
+                        type="button"
+                        onClick={() => openUserAnalytics(profile)}
+                      >
                         {name}
                         {profile.status?.text ? (
                           <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
@@ -3736,7 +3877,7 @@ export default function App() {
                             <Users size={12} />
                           </span>
                         ) : null}
-                      </span>
+                      </button>
                       <span className="user-last-online">
                         {userActive ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
                       </span>
