@@ -1813,7 +1813,22 @@ export default function App() {
       p2pGroupCallNodeRef.current = callRef;
 
       const snap = await rtdbGet(callRef);
-      const existingParticipants = snap.val()?.participants || {};
+      const rawParticipants = snap.val()?.participants || {};
+      const staleCutoff = now - 30000;
+
+      const cleanups = Object.entries(rawParticipants)
+        .filter(([uid, p]) => uid !== sessionUserId && (p?.joinedAt || 0) < staleCutoff)
+        .map(([uid]) => remove(rtdbRef(rtdb, `group-calls/${callKey}/participants/${uid}`)));
+
+      for (const uid of Object.keys(rawParticipants).filter(
+        (u) => u !== sessionUserId && (rawParticipants[u]?.joinedAt || 0) < staleCutoff
+      )) {
+        delete rawParticipants[uid];
+      }
+
+      await Promise.allSettled(cleanups);
+
+      const existingParticipants = rawParticipants;
       const otherUids = Object.keys(existingParticipants).filter((uid) => uid !== sessionUserId);
 
       const allCaps = { ...existingParticipants };
