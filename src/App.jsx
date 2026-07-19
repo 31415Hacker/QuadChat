@@ -717,19 +717,30 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const presenceRef = rtdbRef(rtdb, `presence/${user.uid}`);
+    const uid = user.uid;
+    const presenceRef = rtdbRef(rtdb, `presence/${uid}`);
 
     set(presenceRef, true);
     onDisconnect(presenceRef).remove();
 
+    const sessionRef = doc(collection(db, "users", uid, "sessions"));
+    currentSessionDocRef.current = sessionRef;
+    setDoc(sessionRef, { start: serverTimestamp(), date: new Date().toISOString().slice(0, 10) });
+
     const handleBeforeUnload = () => {
-      setDoc(doc(db, "users", user.uid), { lastOnline: serverTimestamp() }, { merge: true });
+      setDoc(doc(db, "users", uid), { lastOnline: serverTimestamp() }, { merge: true });
+      if (currentSessionDocRef.current) {
+        updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
+      }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      setDoc(doc(db, "users", user.uid), { lastOnline: serverTimestamp() }, { merge: true });
+      setDoc(doc(db, "users", uid), { lastOnline: serverTimestamp() }, { merge: true });
+      if (currentSessionDocRef.current) {
+        updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
+      }
       remove(presenceRef);
     };
   }, [user]);
@@ -932,18 +943,6 @@ export default function App() {
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
-
-  useEffect(() => {
-    if (!user || !sessionUserId) return;
-    const sessionRef = doc(collection(db, "users", sessionUserId, "sessions"));
-    currentSessionDocRef.current = sessionRef;
-    setDoc(sessionRef, { start: serverTimestamp(), date: new Date().toISOString().slice(0, 10) });
-    return () => {
-      if (currentSessionDocRef.current) {
-        updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
-      }
-    };
-  }, [user, sessionUserId]);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
