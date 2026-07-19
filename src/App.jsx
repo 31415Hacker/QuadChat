@@ -3652,7 +3652,7 @@ export default function App() {
                           </a>
                         )
                       ) : item.type === "game_session_card" ? (
-                        <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} />
+                        <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} onJoinGroupCall={joinGroupCall} />
                       ) : item.text ? (
                         <p>
                           {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId)}

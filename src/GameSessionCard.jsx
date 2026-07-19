@@ -12,7 +12,7 @@ const EMPTY_CARD = {
   }
 };
 
-export default function GameSessionCard({ data, isEditingMode, onChange, sessionUserId, sessionUserName, onRsvp }) {
+export default function GameSessionCard({ data, isEditingMode, onChange, sessionUserId, sessionUserName, onRsvp, onJoinGroupCall }) {
   const card = data || EMPTY_CARD;
   const [newLabel, setNewLabel] = useState("");
   const [newDetail, setNewDetail] = useState("");
@@ -82,6 +82,24 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
         <ExternalLink size={18} />
         Join Google Meet
       </a>
+    );
+  }
+
+  function renderGroupCallButton() {
+    return (
+      <button
+        type="button"
+        onClick={onJoinGroupCall}
+        className={
+          "inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl font-bold text-base " +
+          "bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] " +
+          "text-white transition-all duration-150 " +
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-800"
+        }
+      >
+        <ExternalLink size={18} />
+        Join group call
+      </button>
     );
   }
 
@@ -248,9 +266,9 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
         ) : null}
       </div>
 
-      {/* Meet button */}
+      {/* Group call button */}
       <div className="px-5 pb-5">
-        {renderMeetButton()}
+        {renderGroupCallButton()}
       </div>
 
       {/* RSVP section */}
