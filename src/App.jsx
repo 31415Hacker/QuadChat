@@ -1779,14 +1779,17 @@ export default function App() {
     await negotiateP2PConnection(uid, callKey);
   }
 
-  function ensureP2PAudioStream() {
+  async function ensureP2PAudioStream() {
     if (p2pGroupCallStreamRef.current) return;
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       p2pGroupCallStreamRef.current = stream;
       Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       });
-    }).catch(() => {});
+    } catch (e) {
+      console.error("[P2P] getUserMedia failed:", e);
+    }
   }
 
   async function joinP2PGroupCall() {
@@ -1843,7 +1846,7 @@ export default function App() {
       if (otherUids.length === 0) {
         setP2pGroupCallStatus("connected");
       } else {
-        ensureP2PAudioStream();
+        await ensureP2PAudioStream();
         for (const uid of otherUids) {
           await connectToPeer(uid, callKey);
         }
@@ -1852,12 +1855,12 @@ export default function App() {
 
       const unsubAdded = onChildAdded(
         rtdbRef(rtdb, `group-calls/${callKey}/participants`),
-        (snap) => {
+        async (snap) => {
           const uid = snap.key;
           if (uid === sessionUserId || p2pGroupCallConnectionsRef.current[uid]) return;
           const pData = snap.val();
           setP2pGroupCallParticipants((prev) => ({ ...prev, [uid]: pData }));
-          ensureP2PAudioStream();
+          await ensureP2PAudioStream();
           connectToPeer(uid, callKey);
         }
       );
