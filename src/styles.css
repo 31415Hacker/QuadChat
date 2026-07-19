@@ -1537,6 +1537,58 @@ button:disabled {
   display: flex;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.screen-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.screen-view-header {
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  font-size: 0.85rem;
+  font-weight: 800;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.screen-view-header span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-view-close-btn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-height: 0;
+  padding: 4px 12px;
+}
+
+.screen-view-close-btn:hover {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.screen-view-video {
+  background: #000;
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
+  width: 100%;
 }
 
 .users-sidebar {

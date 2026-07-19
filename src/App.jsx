@@ -86,7 +86,9 @@ import {
   UserRound,
   Users,
   Copy,
-  Eye
+  Eye,
+  Monitor,
+  MonitorOff
 } from "lucide-react";
 import { Room, RoomEvent } from "livekit-client";
 import { auth, db, rtdb } from "../firebase.js";
@@ -662,6 +664,12 @@ export default function App() {
   const startCallLockRef = useRef(false);
   const answerCallLockRef = useRef(false);
   const remoteAudioRef = useRef(null);
+  const screenVideoRef = useRef(null);
+  const screenStreamRef = useRef(null);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [remoteScreenStream, setRemoteScreenStream] = useState(null);
+  const [viewingScreen, setViewingScreen] = useState(false);
+  const [screenSharedByName, setScreenSharedByName] = useState(null);
   const callStatusRef = useRef(callStatus);
   const profilesRef = useRef(profiles);
   const currentSessionDocRef = useRef(null);
@@ -950,6 +958,15 @@ export default function App() {
       remoteAudioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream, callStatus]);
+
+  useEffect(() => {
+    if (screenVideoRef.current && remoteScreenStream) {
+      screenVideoRef.current.srcObject = remoteScreenStream;
+    }
+    if (!remoteScreenStream && viewingScreen) {
+      setViewingScreen(false);
+    }
+  }, [remoteScreenStream]);
 
   useEffect(() => {
     if (callStatus !== "idle") return;
@@ -1473,6 +1490,9 @@ export default function App() {
     }
     console.log("[CALL-CLEANUP] resetting state variables");
     setRemoteStream(null);
+    setRemoteScreenStream(null);
+    setScreenSharedByName(null);
+    stopScreenShare();
     setCallStatus("idle");
     setCallPartnerId(null);
     setCallPartnerName("");
@@ -1501,8 +1521,14 @@ export default function App() {
     };
 
     pc.ontrack = (e) => {
-      console.log("[CALL] ontrack — remote stream received");
-      setRemoteStream(e.streams[0]);
+      if (e.track.kind === "video") {
+        console.log("[CALL] ontrack — screen video received");
+        setRemoteScreenStream(e.streams[0]);
+        e.track.onmute = () => setRemoteScreenStream(null);
+      } else {
+        console.log("[CALL] ontrack — remote audio received");
+        setRemoteStream(e.streams[0]);
+      }
     };
 
     if (localStreamRef.current) {
@@ -1585,6 +1611,13 @@ export default function App() {
       const calleeMuteRef = rtdbRef(rtdb, `calls/${callRef.key}/calleeMuted`);
       const unsubMute = onValue(calleeMuteRef, (snap) => { console.log(`[CALL-START] remote mute changed: ${!!snap.val()}`); setRemoteMuted(!!snap.val()); });
       callCleanupsRef.current.push(unsubMute);
+
+      const screenShareRef = rtdbRef(rtdb, `calls/${callRef.key}/screenShareActive`);
+      const unsubScreen = onValue(screenShareRef, (snap) => {
+        const val = snap.val();
+        setScreenSharedByName(val && typeof val === "object" ? val.name : null);
+      });
+      callCleanupsRef.current.push(unsubScreen);
 
       const cancelRef = rtdbRef(rtdb, `calls/${callRef.key}/status`);
       let cleaningUp = false;
@@ -1677,6 +1710,13 @@ export default function App() {
       const unsubMute = onValue(callerMuteRef, (snap) => { console.log(`[CALL-ANSWER] remote mute changed: ${!!snap.val()}`); setRemoteMuted(!!snap.val()); });
       callCleanupsRef.current.push(unsubMute);
 
+      const screenShareRef = rtdbRef(rtdb, `calls/${callRef.key}/screenShareActive`);
+      const unsubScreen = onValue(screenShareRef, (snap) => {
+        const val = snap.val();
+        setScreenSharedByName(val && typeof val === "object" ? val.name : null);
+      });
+      callCleanupsRef.current.push(unsubScreen);
+
       const cancelRef2 = rtdbRef(rtdb, `calls/${callRef.key}/status`);
       let cleaningUp2 = false;
       const unsubCancel = onValue(cancelRef2, (snap) => {
@@ -1724,6 +1764,64 @@ export default function App() {
     }
   }
 
+  async function toggleScreenShare() {
+    if (isSharingScreen) {
+      stopScreenShare();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenStreamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      if (!track) return;
+
+      track.onended = () => stopScreenShare();
+
+      const addToAll = (track, stream) => {
+        if (callStatus === "connected" && peerRef.current) {
+          peerRef.current.addTrack(track, stream);
+        }
+        Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
+          try { pc.addTrack(track, stream); } catch (_) {}
+        });
+        if (groupCallRoomRef.current) {
+          groupCallRoomRef.current.localParticipant.publishTrack(track, {
+            source: "screen_share",
+          }).catch((e) => console.error("[SCREEN] publish to LiveKit failed:", e));
+        }
+      };
+
+      addToAll(track, stream);
+
+      if (callNodeRef.current) {
+        set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), { name: activeName }).catch(() => {});
+      }
+      if (p2pGroupCallNodeRef.current) {
+        set(rtdbRef(rtdb, `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareActive`), { name: activeName }).catch(() => {});
+      }
+
+      setIsSharingScreen(true);
+    } catch (e) {
+      if (e.name !== "NotAllowedError" && e.name !== "AbortError") {
+        console.error("[SCREEN] share failed:", e);
+      }
+    }
+  }
+
+  function stopScreenShare() {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    if (callNodeRef.current) {
+      set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), false).catch(() => {});
+    }
+    if (p2pGroupCallNodeRef.current) {
+      set(rtdbRef(rtdb, `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareActive`), false).catch(() => {});
+    }
+    setIsSharingScreen(false);
+  }
+
   function cleanupGroupCall() {
     if (groupCallCleaningRef.current) return;
     groupCallCleaningRef.current = true;
@@ -1743,6 +1841,9 @@ export default function App() {
     }
     setGroupCallParticipants({});
     setGroupCallLocalMuted(false);
+    setRemoteScreenStream(null);
+    setScreenSharedByName(null);
+    stopScreenShare();
     setGroupCallStatus("idle");
     groupCallCleaningRef.current = false;
   }
@@ -1779,6 +1880,9 @@ export default function App() {
     setP2pGroupCallParticipants({});
     setP2pGroupCallHostId(null);
     setP2pGroupCallLocalMuted(false);
+    setRemoteScreenStream(null);
+    setScreenSharedByName(null);
+    stopScreenShare();
     setP2pGroupCallStatus("idle");
     p2pGroupCallCleaningRef.current = false;
   }
@@ -1801,11 +1905,17 @@ export default function App() {
     };
 
     pc.ontrack = (e) => {
-      const audio = document.createElement("audio");
-      audio.srcObject = e.streams[0];
-      audio.autoplay = true;
-      audio.setAttribute("data-p2p-participant", remoteUid);
-      p2pGroupCallAudioContainerRef.current?.appendChild(audio);
+      if (e.track.kind === "video") {
+        console.log("[P2P] ontrack — screen video from", remoteUid);
+        setRemoteScreenStream(e.streams[0]);
+        e.track.onmute = () => setRemoteScreenStream(null);
+      } else {
+        const audio = document.createElement("audio");
+        audio.srcObject = e.streams[0];
+        audio.autoplay = true;
+        audio.setAttribute("data-p2p-participant", remoteUid);
+        p2pGroupCallAudioContainerRef.current?.appendChild(audio);
+      }
     };
 
     pc.onconnectionstatechange = () => {
@@ -1988,6 +2098,13 @@ export default function App() {
         }
       );
       p2pGroupCallUnsubsRef.current.push(unsubRemoved);
+
+      const p2pScreenShareRef = rtdbRef(rtdb, `group-calls/${callKey}/screenShareActive`);
+      const unsubP2pScreen = onValue(p2pScreenShareRef, (snap) => {
+        const val = snap.val();
+        setScreenSharedByName(val && typeof val === "object" ? val.name : null);
+      });
+      p2pGroupCallUnsubsRef.current.push(unsubP2pScreen);
     } catch (e) {
       console.error("[P2P-GROUP-CALL] join error:", e);
       cleanupP2PGroupCall();
@@ -2036,7 +2153,15 @@ export default function App() {
       const room = new Room({ adaptiveStream: true, dynacast: true });
 
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-        if (track.kind === "audio") {
+        if (track.kind === "video") {
+          console.log("[LIVEKIT] subscribed to screen video from", participant.identity);
+          setRemoteScreenStream(new MediaStream([track.mediaStreamTrack]));
+          setScreenSharedByName(participant.name || participant.identity);
+          track.onMuted = () => {
+            setRemoteScreenStream(null);
+            setScreenSharedByName(null);
+          };
+        } else {
           const audio = document.createElement("audio");
           audio.srcObject = new MediaStream([track.mediaStreamTrack]);
           audio.autoplay = true;
@@ -3587,6 +3712,11 @@ export default function App() {
             </div>
             <div className="active-call-actions">
               {remoteMuted ? <MicOff size={14} className="remote-muted-icon" title="Other party is muted" /> : null}
+              {remoteScreenStream && !isSharingScreen ? (
+                <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
+                  {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}
+                </button>
+              ) : null}
               <button
                 className="call-action-btn"
                 type="button"
@@ -3594,6 +3724,14 @@ export default function App() {
                 title={callMuted ? "Unmute" : "Mute"}
               >
                 {callMuted ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button
+                className="call-action-btn"
+                type="button"
+                onClick={toggleScreenShare}
+                title={isSharingScreen ? "Stop sharing" : "Share screen"}
+              >
+                {isSharingScreen ? <MonitorOff size={16} /> : <Monitor size={16} />}
               </button>
               <button className="call-action-btn call-end-btn" type="button" onClick={hangUp} title="End call">
                 <PhoneOff size={16} />
@@ -3610,6 +3748,11 @@ export default function App() {
               <span>Group call — <strong>{Object.keys(groupCallParticipants).length + 1}</strong> participant{Object.keys(groupCallParticipants).length + 1 === 1 ? "" : "s"}</span>
             </div>
             <div className="active-call-actions">
+              {remoteScreenStream && !isSharingScreen ? (
+                <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
+                  {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}
+                </button>
+              ) : null}
               <button
                 className="call-action-btn"
                 type="button"
@@ -3617,6 +3760,14 @@ export default function App() {
                 title={groupCallLocalMuted ? "Unmute" : "Mute"}
               >
                 {groupCallLocalMuted ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button
+                className="call-action-btn"
+                type="button"
+                onClick={toggleScreenShare}
+                title={isSharingScreen ? "Stop sharing" : "Share screen"}
+              >
+                {isSharingScreen ? <MonitorOff size={16} /> : <Monitor size={16} />}
               </button>
               <button className="call-action-btn call-end-btn" type="button" onClick={leaveGroupCall} title="Leave group call">
                 <PhoneOff size={16} />
@@ -3632,6 +3783,11 @@ export default function App() {
               <span>Group call — <strong>{Object.keys(p2pGroupCallParticipants).length + 1}</strong> participant{Object.keys(p2pGroupCallParticipants).length + 1 === 1 ? "" : "s"}</span>
             </div>
             <div className="active-call-actions">
+              {remoteScreenStream && !isSharingScreen ? (
+                <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
+                  {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}
+                </button>
+              ) : null}
               <button
                 className="call-action-btn"
                 type="button"
@@ -3639,6 +3795,14 @@ export default function App() {
                 title={p2pGroupCallLocalMuted ? "Unmute" : "Mute"}
               >
                 {p2pGroupCallLocalMuted ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button
+                className="call-action-btn"
+                type="button"
+                onClick={toggleScreenShare}
+                title={isSharingScreen ? "Stop sharing" : "Share screen"}
+              >
+                {isSharingScreen ? <MonitorOff size={16} /> : <Monitor size={16} />}
               </button>
               <button className="call-action-btn call-end-btn" type="button" onClick={leaveP2PGroupCall} title="Leave group call">
                 <PhoneOff size={16} />
@@ -3648,6 +3812,17 @@ export default function App() {
         ) : null}
 
         <div className="chat-body">
+          {viewingScreen && remoteScreenStream ? (
+            <div className="screen-view-container">
+              <div className="screen-view-header">
+                <span>{screenSharedByName ? `${screenSharedByName}'s screen` : "Screen share"}</span>
+                <button className="screen-view-close-btn" type="button" onClick={() => setViewingScreen(false)}>
+                  Back to chat
+                </button>
+              </div>
+              <video ref={screenVideoRef} className="screen-view-video" autoPlay playsInline />
+            </div>
+          ) : (
           <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
             {activeChannel === "suggestions" ? (
               <div className="channel-description">
@@ -3841,6 +4016,7 @@ export default function App() {
               </>
             )}
           </div>
+          )}
           <aside className="users-sidebar">
             <div className="users-sidebar-header">
               <Users size={16} />
