@@ -36,6 +36,7 @@ import {
   updateDoc
 } from "firebase/firestore";
 import {
+  get as rtdbGet,
   onValue,
   ref as rtdbRef,
   set,
@@ -115,6 +116,12 @@ const supportsRecording = typeof MediaRecorder !== "undefined";
 const rtcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
+
+function computeCapability() {
+  const cpu = navigator.hardwareConcurrency || 1;
+  const downlink = navigator.connection?.downlink || 10;
+  return Math.round(cpu * 1000 + downlink * 100);
+}
 
 function formatTime(timestamp) {
   if (!timestamp?.toDate) {
@@ -578,6 +585,17 @@ export default function App() {
   const groupCallLocalStreamRef = useRef(null);
   const groupCallAudioContainerRef = useRef(null);
   const groupCallCleaningRef = useRef(false);
+
+  const [p2pGroupCallStatus, setP2pGroupCallStatus] = useState("idle");
+  const [p2pGroupCallHostId, setP2pGroupCallHostId] = useState(null);
+  const [p2pGroupCallParticipants, setP2pGroupCallParticipants] = useState({});
+  const [p2pGroupCallLocalMuted, setP2pGroupCallLocalMuted] = useState(false);
+  const p2pGroupCallStreamRef = useRef(null);
+  const p2pGroupCallConnectionsRef = useRef({});
+  const p2pGroupCallAudioContainerRef = useRef(null);
+  const p2pGroupCallNodeRef = useRef(null);
+  const p2pGroupCallCleaningRef = useRef(false);
+  const p2pGroupCallUnsubsRef = useRef([]);
 
   const attachMenuRef = useRef(null);
   const canPostInActiveChannel =
@@ -1626,6 +1644,230 @@ export default function App() {
     groupCallCleaningRef.current = false;
   }
 
+  function cleanupP2PGroupCall() {
+    if (p2pGroupCallCleaningRef.current) return;
+    p2pGroupCallCleaningRef.current = true;
+
+    p2pGroupCallUnsubsRef.current.forEach((fn) => fn());
+    p2pGroupCallUnsubsRef.current = [];
+
+    Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
+      pc.close();
+    });
+    p2pGroupCallConnectionsRef.current = {};
+
+    if (p2pGroupCallStreamRef.current) {
+      p2pGroupCallStreamRef.current.getTracks().forEach((t) => t.stop());
+      p2pGroupCallStreamRef.current = null;
+    }
+
+    if (p2pGroupCallAudioContainerRef.current) {
+      p2pGroupCallAudioContainerRef.current.querySelectorAll("audio").forEach((el) => {
+        el.srcObject = null;
+        el.remove();
+      });
+    }
+
+    if (p2pGroupCallNodeRef.current) {
+      remove(p2pGroupCallNodeRef.current).catch(() => {});
+      p2pGroupCallNodeRef.current = null;
+    }
+
+    setP2pGroupCallParticipants({});
+    setP2pGroupCallHostId(null);
+    setP2pGroupCallLocalMuted(false);
+    setP2pGroupCallStatus("idle");
+    p2pGroupCallCleaningRef.current = false;
+  }
+
+  function createP2PConnection(remoteUid, callKey) {
+    const pc = new RTCPeerConnection(rtcConfig);
+    const connId = [sessionUserId, remoteUid].sort().join("_");
+
+    if (p2pGroupCallStreamRef.current) {
+      p2pGroupCallStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, p2pGroupCallStreamRef.current));
+    }
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        set(
+          rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}/candidates_${sessionUserId}/${Date.now()}`),
+          e.candidate.toJSON()
+        ).catch(() => {});
+      }
+    };
+
+    pc.ontrack = (e) => {
+      const audio = document.createElement("audio");
+      audio.srcObject = e.streams[0];
+      audio.autoplay = true;
+      audio.setAttribute("data-p2p-participant", remoteUid);
+      p2pGroupCallAudioContainerRef.current?.appendChild(audio);
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        const el = p2pGroupCallAudioContainerRef.current?.querySelector(
+          `[data-p2p-participant="${remoteUid}"]`
+        );
+        if (el) { el.srcObject = null; el.remove(); }
+        delete p2pGroupCallConnectionsRef.current[remoteUid];
+      }
+    };
+
+    p2pGroupCallConnectionsRef.current[remoteUid] = pc;
+    return pc;
+  }
+
+  function listenForRemoteCandidates(remoteUid, callKey, pc) {
+    const connId = [sessionUserId, remoteUid].sort().join("_");
+    const candidatePath = `group-calls/${callKey}/connections/${connId}/candidates_${remoteUid}`;
+    const unsub = onChildAdded(rtdbRef(rtdb, candidatePath), (snap) => {
+      if (pc.remoteDescription && snap.val()) {
+        pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
+      }
+    });
+    p2pGroupCallUnsubsRef.current.push(unsub);
+  }
+
+  async function negotiateP2PConnection(remoteUid, callKey) {
+    const connId = [sessionUserId, remoteUid].sort().join("_");
+    const connRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}`);
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("negotiation timeout")), 20000);
+
+      let done = false;
+
+      const unsub = onValue(connRef, async (snap) => {
+        if (done) return;
+        const data = snap.val();
+        if (!data) return;
+
+        if (data.offer && data.answer && !done) {
+          done = true;
+          clearTimeout(timeout);
+          unsub();
+          resolve();
+          return;
+        }
+
+        if (sessionUserId > remoteUid) {
+          if (!data.offer) {
+            const pc = createP2PConnection(remoteUid, callKey);
+            listenForRemoteCandidates(remoteUid, callKey, pc);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await update(connRef, { offer: { type: offer.type, sdp: offer.sdp } });
+          }
+        } else {
+          if (data.offer && !data.answer) {
+            const pc = createP2PConnection(remoteUid, callKey);
+            listenForRemoteCandidates(remoteUid, callKey, pc);
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await update(connRef, { answer: { type: answer.type, sdp: answer.sdp } });
+          }
+        }
+      });
+    });
+  }
+
+  async function connectToPeer(uid, callKey) {
+    if (uid === sessionUserId || p2pGroupCallConnectionsRef.current[uid]) return;
+    await negotiateP2PConnection(uid, callKey);
+  }
+
+  function ensureP2PAudioStream() {
+    if (p2pGroupCallStreamRef.current) return;
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
+      p2pGroupCallStreamRef.current = stream;
+      Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
+        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      });
+    }).catch(() => {});
+  }
+
+  async function joinP2PGroupCall() {
+    if (p2pGroupCallStatus !== "idle" || p2pGroupCallCleaningRef.current) return;
+    setP2pGroupCallStatus("connecting");
+
+    try {
+      if (callStatus !== "idle") cleanupCall();
+
+      const callKey = "global_p2p";
+      const capability = computeCapability();
+      const now = Date.now();
+
+      const callRef = rtdbRef(rtdb, `group-calls/${callKey}`);
+      const myParticipantRef = rtdbRef(rtdb, `group-calls/${callKey}/participants/${sessionUserId}`);
+
+      await update(callRef, { createdAt: now });
+      await set(myParticipantRef, {
+        name: activeName,
+        capability,
+        joinedAt: now,
+      });
+      onDisconnect(myParticipantRef).remove();
+      p2pGroupCallNodeRef.current = callRef;
+
+      const snap = await rtdbGet(callRef);
+      const existingParticipants = snap.val()?.participants || {};
+      const otherUids = Object.keys(existingParticipants).filter((uid) => uid !== sessionUserId);
+
+      const allCaps = { ...existingParticipants };
+      allCaps[sessionUserId] = { capability, name: activeName };
+      const hostUid = Object.keys(allCaps).reduce((best, uid) =>
+        (allCaps[uid]?.capability || 0) > (allCaps[best]?.capability || 0) ? uid : best
+      );
+      setP2pGroupCallHostId(hostUid);
+      setP2pGroupCallParticipants(existingParticipants);
+
+      if (otherUids.length === 0) {
+        setP2pGroupCallStatus("connected");
+      } else {
+        ensureP2PAudioStream();
+        for (const uid of otherUids) {
+          await connectToPeer(uid, callKey);
+        }
+        setP2pGroupCallStatus("connected");
+      }
+
+      const unsub = onChildAdded(
+        rtdbRef(rtdb, `group-calls/${callKey}/participants`),
+        (snap) => {
+          const uid = snap.key;
+          if (uid === sessionUserId || p2pGroupCallConnectionsRef.current[uid]) return;
+          const pData = snap.val();
+          setP2pGroupCallParticipants((prev) => ({ ...prev, [uid]: pData }));
+          ensureP2PAudioStream();
+          connectToPeer(uid, callKey);
+        }
+      );
+      p2pGroupCallUnsubsRef.current.push(unsub);
+    } catch (e) {
+      console.error("[P2P-GROUP-CALL] join error:", e);
+      cleanupP2PGroupCall();
+    }
+  }
+
+  function leaveP2PGroupCall() {
+    cleanupP2PGroupCall();
+  }
+
+  function toggleP2PGroupCallMute() {
+    if (p2pGroupCallStreamRef.current) {
+      const audioTrack = p2pGroupCallStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setP2pGroupCallLocalMuted(!audioTrack.enabled);
+      }
+    } else {
+      setP2pGroupCallLocalMuted((prev) => !prev);
+    }
+  }
+
   async function joinGroupCall() {
     if (groupCallStatus !== "idle" || groupCallCleaningRef.current) return;
     setGroupCallStatus("connecting");
@@ -1746,10 +1988,18 @@ export default function App() {
     } catch (e) {
       console.error("[GROUP-CALL] join error:", e);
       cleanupGroupCall();
+      if (e.message?.includes("rate limit") || e.message?.includes("429")) {
+        setError("LiveKit rate-limited. Falling back to peer-to-peer group call.");
+        joinP2PGroupCall();
+      }
     }
   }
 
   function leaveGroupCall() {
+    if (p2pGroupCallStatus === "connected") {
+      leaveP2PGroupCall();
+      return;
+    }
     cleanupGroupCall();
   }
 
@@ -2855,18 +3105,20 @@ export default function App() {
             </div>
           </div>
           <button
-            className={`icon-text-button ${groupCallStatus === "connected" ? "group-call-active" : ""}`}
+            className={`icon-text-button ${groupCallStatus === "connected" || p2pGroupCallStatus === "connected" ? "group-call-active" : ""}`}
             type="button"
-            onClick={groupCallStatus === "idle" ? joinGroupCall : leaveGroupCall}
-            title={groupCallStatus === "connected" ? "Leave group call" : groupCallStatus === "connecting" ? "Connecting..." : "Join group call"}
+            onClick={groupCallStatus === "idle" && p2pGroupCallStatus === "idle" ? joinGroupCall : leaveGroupCall}
+            title={groupCallStatus === "connected" ? "Leave group call" : p2pGroupCallStatus === "connected" ? "Leave group call" : groupCallStatus === "connecting" || p2pGroupCallStatus === "connecting" ? "Connecting..." : "Join group call"}
           >
-            {groupCallStatus === "connected" ? <PhoneOff size={18} /> : <Users size={18} />}
+            {groupCallStatus === "connected" || p2pGroupCallStatus === "connected" ? <PhoneOff size={18} /> : <Users size={18} />}
             <span>
               {groupCallStatus === "connected"
                 ? `In call (${Object.keys(groupCallParticipants).length + 1})`
-                : groupCallStatus === "connecting"
-                  ? "Connecting..."
-                  : "Group call"}
+                : p2pGroupCallStatus === "connected"
+                  ? `In call (${Object.keys(p2pGroupCallParticipants).length + 1})`
+                  : groupCallStatus === "connecting" || p2pGroupCallStatus === "connecting"
+                    ? "Connecting..."
+                    : "Group call"}
             </span>
           </button>
           <button
@@ -3111,6 +3363,28 @@ export default function App() {
               </button>
             </div>
           </div>
+        ) : p2pGroupCallStatus === "connected" && Object.keys(p2pGroupCallParticipants).length >= 1 ? (
+          <div className="active-call-bar group-call-bar">
+            <div ref={p2pGroupCallAudioContainerRef} style={{ display: "none" }} />
+            <div className="active-call-info">
+              <Users size={15} />
+              {p2pGroupCallHostId ? <span className="p2p-call-host-indicator" title="P2P host">📡</span> : null}
+              <span>Group call — <strong>{Object.keys(p2pGroupCallParticipants).length + 1}</strong> participant{Object.keys(p2pGroupCallParticipants).length + 1 === 1 ? "" : "s"}</span>
+            </div>
+            <div className="active-call-actions">
+              <button
+                className="call-action-btn"
+                type="button"
+                onClick={toggleP2PGroupCallMute}
+                title={p2pGroupCallLocalMuted ? "Unmute" : "Mute"}
+              >
+                {p2pGroupCallLocalMuted ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button className="call-action-btn call-end-btn" type="button" onClick={leaveP2PGroupCall} title="Leave group call">
+                <PhoneOff size={16} />
+              </button>
+            </div>
+          </div>
         ) : null}
 
         <div className="chat-body">
@@ -3333,7 +3607,8 @@ export default function App() {
                         {profile.status?.text ? (
                           <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
                         ) : null}
-                        {groupCallStatus === "connected" && groupCallParticipants[profile.id] ? (
+                        {(groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
+                        (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]) ? (
                           <span className="group-call-indicator" title="In group call">
                             <Users size={12} />
                           </span>

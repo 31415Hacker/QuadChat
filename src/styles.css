@@ -2099,6 +2099,11 @@ button:disabled {
   vertical-align: middle;
 }
 
+.p2p-call-host-indicator {
+  font-size: 0.8rem;
+  margin-right: 4px;
+}
+
 .icon-text-button.group-call-active {
   background: var(--accent-teal);
   color: var(--text-on-accent);
