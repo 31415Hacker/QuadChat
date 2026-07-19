@@ -3962,7 +3962,6 @@ export default function App() {
                   <span>Admin</span>
                 </button>
               ) : null}
-              <div className="settings-nav-version">v{APP_VERSION}</div>
             </nav>
             <main className="settings-content">
               <div className="settings-content-header">
