@@ -3874,7 +3874,7 @@ export default function App() {
                         {(groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
                         (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]) ? (
                           <span className="group-call-indicator" title="In group call">
-                            <Users size={12} />
+                            <Users size={11} />
                           </span>
                         ) : null}
                       </button>
@@ -3889,7 +3889,7 @@ export default function App() {
                         onClick={() => startCall(profile.id, name)}
                         title={`Call ${name}`}
                       >
-                        <Phone size={13} />
+                        <Phone size={11} />
                       </button>
                     ) : null}
                     {isCurrentUserAdmin ? (
@@ -3903,13 +3903,13 @@ export default function App() {
                           <MicOff
                             aria-label={`${name} is muted`}
                             className="user-mic user-mic-muted"
-                            size={14}
+                            size={12}
                           />
                         ) : (
                           <Mic
                             aria-label={`${name} can speak`}
                             className="user-mic"
-                            size={14}
+                            size={12}
                           />
                         )}
                       </button>
@@ -3917,13 +3917,13 @@ export default function App() {
                       <MicOff
                         aria-label={`${name} is muted`}
                         className="user-mic user-mic-muted"
-                        size={14}
+                        size={12}
                       />
                     ) : (
                       <Mic
                         aria-label={`${name} can speak`}
                         className="user-mic"
-                        size={14}
+                        size={12}
                       />
                     )}
                   </div>
