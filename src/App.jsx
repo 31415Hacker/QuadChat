@@ -2271,7 +2271,7 @@ export default function App() {
     } catch (e) {
       console.error("[GROUP-CALL] join error:", e);
       cleanupGroupCall();
-      setError("LiveKit unavailable. Falling back to peer-to-peer group call.");
+      console.warn("LiveKit unavailable. Falling back to peer-to-peer group call.");
       joinP2PGroupCall();
     }
   }
