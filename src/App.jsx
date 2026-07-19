@@ -3889,7 +3889,7 @@ export default function App() {
                         onClick={() => startCall(profile.id, name)}
                         title={`Call ${name}`}
                       >
-                        <Phone size={11} />
+                        <Phone size={10} />
                       </button>
                     ) : null}
                     {isCurrentUserAdmin ? (
