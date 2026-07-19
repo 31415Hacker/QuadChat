@@ -3774,7 +3774,7 @@ export default function App() {
               </button>
             </div>
           </div>
-        ) : p2pGroupCallStatus === "connected" && Object.keys(p2pGroupCallParticipants).length >= 1 ? (
+        ) : p2pGroupCallStatus === "connected" ? (
           <div className="active-call-bar group-call-bar">
             <div ref={p2pGroupCallAudioContainerRef} style={{ display: "none" }} />
             <div className="active-call-info">
