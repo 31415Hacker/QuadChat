@@ -1691,6 +1691,7 @@ button:disabled {
   cursor: pointer;
   font-size: 0.8rem;
   line-height: 1.2;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   padding: 0;
@@ -1727,6 +1728,7 @@ button:disabled {
   border: none;
   cursor: pointer;
   display: flex;
+  min-height: 0;
   padding: 1px;
   border-radius: 3px;
   transition: background 0.15s;
@@ -2065,11 +2067,11 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 18px;
-  height: 18px;
-  min-height: 18px;
+  flex: 0 0 16px;
+  height: 16px;
+  min-height: 16px;
   padding: 0;
-  width: 18px;
+  width: 16px;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
