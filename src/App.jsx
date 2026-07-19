@@ -1988,10 +1988,8 @@ export default function App() {
     } catch (e) {
       console.error("[GROUP-CALL] join error:", e);
       cleanupGroupCall();
-      if (e.message?.includes("rate limit") || e.message?.includes("429")) {
-        setError("LiveKit rate-limited. Falling back to peer-to-peer group call.");
-        joinP2PGroupCall();
-      }
+      setError("LiveKit unavailable. Falling back to peer-to-peer group call.");
+      joinP2PGroupCall();
     }
   }
 
