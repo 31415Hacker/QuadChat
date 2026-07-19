@@ -3720,7 +3720,6 @@ export default function App() {
                             >
                               <Trash2 size={17} />
                               <span>Remove picture</span>
-                              <span className="tag tag-danger">Dangerous</span>
                             </button>
                           ) : null}
                         </div>
