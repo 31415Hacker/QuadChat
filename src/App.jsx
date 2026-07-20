@@ -667,9 +667,12 @@ export default function App() {
   const screenVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const isSharingScreenRef = useRef(false);
   const [remoteScreenStream, setRemoteScreenStream] = useState(null);
   const [viewingScreen, setViewingScreen] = useState(false);
   const [screenSharedByName, setScreenSharedByName] = useState(null);
+  const [screenShareRequest, setScreenShareRequest] = useState(null);
+  const screenShareRequestTimerRef = useRef(null);
   const callStatusRef = useRef(callStatus);
   const profilesRef = useRef(profiles);
   const currentSessionDocRef = useRef(null);
@@ -958,6 +961,10 @@ export default function App() {
       remoteAudioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream, callStatus]);
+
+  useEffect(() => {
+    isSharingScreenRef.current = isSharingScreen;
+  }, [isSharingScreen]);
 
   useEffect(() => {
     if (screenVideoRef.current && remoteScreenStream) {
@@ -1509,6 +1516,7 @@ export default function App() {
   async function createPeerConnection(callNodeRefVal, isCaller) {
     const pc = new RTCPeerConnection(rtcConfig);
     peerRef.current = pc;
+    let renegotiating = false;
 
     pc.onicecandidate = (e) => {
       if (e.candidate && callNodeRefVal) {
@@ -1528,6 +1536,34 @@ export default function App() {
       } else {
         console.log("[CALL] ontrack — remote audio received");
         setRemoteStream(e.streams[0]);
+      }
+    };
+
+    pc.onnegotiationneeded = async () => {
+      if (renegotiating) return;
+      renegotiating = true;
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const reofferRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/renego/offer`);
+        await set(reofferRef, { type: offer.type, sdp: offer.sdp });
+        const reanswerRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/renego/answer`);
+        const unsub = onValue(reanswerRef, async (snap) => {
+          const val = snap.val();
+          if (val && val.type) {
+            unsub();
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(val));
+            } catch (e) {
+              console.error("[CALL-RENEGO] setRemoteDescription failed:", e);
+            }
+            renegotiating = false;
+          }
+        });
+        callCleanupsRef.current.push(unsub);
+      } catch (e) {
+        console.error("[CALL-RENEGO] createOffer failed:", e);
+        renegotiating = false;
       }
     };
 
@@ -1619,6 +1655,23 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubScreen);
 
+      const screenShareReqRef = rtdbRef(rtdb, `calls/${callRef.key}/screenShareRequest`);
+      const unsubScreenReq = onValue(screenShareReqRef, (snap) => {
+        const val = snap.val();
+        if (val && val.uid && val.uid !== user.uid && isSharingScreenRef.current) {
+          setScreenShareRequest(val);
+          clearTimeout(screenShareRequestTimerRef.current);
+          screenShareRequestTimerRef.current = setTimeout(() => {
+            set(screenShareReqRef, null).catch(() => {});
+            setScreenShareRequest(null);
+          }, 5000);
+        } else if (!val) {
+          setScreenShareRequest(null);
+          clearTimeout(screenShareRequestTimerRef.current);
+        }
+      });
+      callCleanupsRef.current.push(unsubScreenReq);
+
       const cancelRef = rtdbRef(rtdb, `calls/${callRef.key}/status`);
       let cleaningUp = false;
       const unsubCancel = onValue(cancelRef, (snap) => {
@@ -1632,6 +1685,28 @@ export default function App() {
         }
       });
       callCleanupsRef.current.push(unsubCancel);
+
+      const renegoRef = rtdbRef(rtdb, `calls/${callRef.key}/renego/offer`);
+      let handlingRenego = false;
+      const unsubRenego = onValue(renegoRef, async (snap) => {
+        const val = snap.val();
+        if (!val || !val.type || handlingRenego) return;
+        handlingRenego = true;
+        try {
+          if (pc.signalingState !== "stable") {
+            console.log("[CALL-START] renego: rolling back stale signaling state");
+            await pc.setLocalDescription({ type: "rollback" });
+          }
+          await pc.setRemoteDescription(new RTCSessionDescription(val));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await set(rtdbRef(rtdb, `calls/${callRef.key}/renego/answer`), { type: answer.type, sdp: answer.sdp });
+        } catch (e) {
+          console.error("[CALL-START] renego handler failed:", e);
+        }
+        handlingRenego = false;
+      });
+      callCleanupsRef.current.push(unsubRenego);
 
       pc.oniceconnectionstatechange = () => {
         console.log(`[CALL-START] ICE state: ${pc.iceConnectionState}`);
@@ -1717,6 +1792,45 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubScreen);
 
+      const screenShareReqRef = rtdbRef(rtdb, `calls/${callRef.key}/screenShareRequest`);
+      const unsubScreenReq = onValue(screenShareReqRef, (snap) => {
+        const val = snap.val();
+        if (val && val.uid && val.uid !== user.uid && isSharingScreenRef.current) {
+          setScreenShareRequest(val);
+          clearTimeout(screenShareRequestTimerRef.current);
+          screenShareRequestTimerRef.current = setTimeout(() => {
+            set(screenShareReqRef, null).catch(() => {});
+            setScreenShareRequest(null);
+          }, 5000);
+        } else if (!val) {
+          setScreenShareRequest(null);
+          clearTimeout(screenShareRequestTimerRef.current);
+        }
+      });
+      callCleanupsRef.current.push(unsubScreenReq);
+
+      const renegoRef = rtdbRef(rtdb, `calls/${callRef.key}/renego/offer`);
+      let handlingRenego = false;
+      const unsubRenego = onValue(renegoRef, async (snap) => {
+        const val = snap.val();
+        if (!val || !val.type || handlingRenego) return;
+        handlingRenego = true;
+        try {
+          if (pc.signalingState !== "stable") {
+            console.log("[CALL-ANSWER] renego: rolling back stale signaling state");
+            await pc.setLocalDescription({ type: "rollback" });
+          }
+          await pc.setRemoteDescription(new RTCSessionDescription(val));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await set(rtdbRef(rtdb, `calls/${callRef.key}/renego/answer`), { type: answer.type, sdp: answer.sdp });
+        } catch (e) {
+          console.error("[CALL-ANSWER] renego handler failed:", e);
+        }
+        handlingRenego = false;
+      });
+      callCleanupsRef.current.push(unsubRenego);
+
       const cancelRef2 = rtdbRef(rtdb, `calls/${callRef.key}/status`);
       let cleaningUp2 = false;
       const unsubCancel = onValue(cancelRef2, (snap) => {
@@ -1769,6 +1883,19 @@ export default function App() {
       stopScreenShare();
       return;
     }
+    if (!isSharingScreen && screenSharedByName !== null) {
+      const reqPath = callNodeRef.current
+        ? `calls/${callNodeRef.current.key}/screenShareRequest`
+        : p2pGroupCallNodeRef.current
+          ? `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareRequest`
+          : null;
+      if (reqPath) {
+        const reqRef = rtdbRef(rtdb, reqPath);
+        set(reqRef, { uid: user.uid, name: activeName }).catch(() => {});
+        setTimeout(() => set(reqRef, null).catch(() => {}), 5000);
+      }
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       screenStreamRef.current = stream;
@@ -1815,10 +1942,14 @@ export default function App() {
     }
     if (callNodeRef.current) {
       set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), false).catch(() => {});
+      set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareRequest`), null).catch(() => {});
     }
     if (p2pGroupCallNodeRef.current) {
       set(rtdbRef(rtdb, `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareActive`), false).catch(() => {});
+      set(rtdbRef(rtdb, `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareRequest`), null).catch(() => {});
     }
+    clearTimeout(screenShareRequestTimerRef.current);
+    setScreenShareRequest(null);
     setIsSharingScreen(false);
   }
 
@@ -1890,6 +2021,7 @@ export default function App() {
   function createP2PConnection(remoteUid, callKey) {
     const pc = new RTCPeerConnection(rtcConfig);
     const connId = [sessionUserId, remoteUid].sort().join("_");
+    let renegotiating = false;
 
     if (p2pGroupCallStreamRef.current) {
       p2pGroupCallStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, p2pGroupCallStreamRef.current));
@@ -1918,6 +2050,34 @@ export default function App() {
       }
     };
 
+    pc.onnegotiationneeded = async () => {
+      if (renegotiating) return;
+      renegotiating = true;
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const reofferRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}/renego/offer_${sessionUserId}`);
+        await set(reofferRef, { type: offer.type, sdp: offer.sdp });
+        const reanswerRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}/renego/answer_${sessionUserId}`);
+        const unsub = onValue(reanswerRef, async (snap) => {
+          const val = snap.val();
+          if (val && val.type) {
+            unsub();
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(val));
+            } catch (e) {
+              console.error("[P2P-RENEGO] setRemoteDescription failed:", e);
+            }
+            renegotiating = false;
+          }
+        });
+        p2pGroupCallUnsubsRef.current.push(unsub);
+      } catch (e) {
+        console.error("[P2P-RENEGO] createOffer failed:", e);
+        renegotiating = false;
+      }
+    };
+
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         const el = p2pGroupCallAudioContainerRef.current?.querySelector(
@@ -1939,6 +2099,31 @@ export default function App() {
       if (pc.remoteDescription && snap.val()) {
         pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
       }
+    });
+    p2pGroupCallUnsubsRef.current.push(unsub);
+  }
+
+  function listenForP2PRenego(remoteUid, callKey, pc) {
+    const connId = [sessionUserId, remoteUid].sort().join("_");
+    const renegoOfferPath = `group-calls/${callKey}/connections/${connId}/renego/offer_${remoteUid}`;
+    let handlingRenego = false;
+    const unsub = onValue(rtdbRef(rtdb, renegoOfferPath), async (snap) => {
+      const val = snap.val();
+      if (!val || !val.type || handlingRenego) return;
+      handlingRenego = true;
+      try {
+        if (pc.signalingState !== "stable") {
+          await pc.setLocalDescription({ type: "rollback" });
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(val));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        const reanswerRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}/renego/answer_${sessionUserId}`);
+        await set(reanswerRef, { type: answer.type, sdp: answer.sdp });
+      } catch (e) {
+        console.error("[P2P-RENEGO] handling offer failed:", e);
+      }
+      handlingRenego = false;
     });
     p2pGroupCallUnsubsRef.current.push(unsub);
   }
@@ -1969,6 +2154,7 @@ export default function App() {
           if (!data.offer) {
             const pc = createP2PConnection(remoteUid, callKey);
             listenForRemoteCandidates(remoteUid, callKey, pc);
+            listenForP2PRenego(remoteUid, callKey, pc);
             const offer = applyOpusBitrate(await pc.createOffer(), OPUS_BITRATE);
             await pc.setLocalDescription(offer);
             await update(connRef, { offer: { type: offer.type, sdp: offer.sdp } });
@@ -1977,6 +2163,7 @@ export default function App() {
           if (data.offer && !data.answer) {
             const pc = createP2PConnection(remoteUid, callKey);
             listenForRemoteCandidates(remoteUid, callKey, pc);
+            listenForP2PRenego(remoteUid, callKey, pc);
             await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
             const answer = applyOpusBitrate(await pc.createAnswer(), OPUS_BITRATE);
             await pc.setLocalDescription(answer);
@@ -2105,6 +2292,23 @@ export default function App() {
         setScreenSharedByName(val && typeof val === "object" ? val.name : null);
       });
       p2pGroupCallUnsubsRef.current.push(unsubP2pScreen);
+
+      const p2pScreenShareReqRef = rtdbRef(rtdb, `group-calls/${callKey}/screenShareRequest`);
+      const unsubP2pScreenReq = onValue(p2pScreenShareReqRef, (snap) => {
+        const val = snap.val();
+        if (val && val.uid && val.uid !== user.uid && isSharingScreenRef.current) {
+          setScreenShareRequest(val);
+          clearTimeout(screenShareRequestTimerRef.current);
+          screenShareRequestTimerRef.current = setTimeout(() => {
+            set(p2pScreenShareReqRef, null).catch(() => {});
+            setScreenShareRequest(null);
+          }, 5000);
+        } else if (!val) {
+          setScreenShareRequest(null);
+          clearTimeout(screenShareRequestTimerRef.current);
+        }
+      });
+      p2pGroupCallUnsubsRef.current.push(unsubP2pScreenReq);
     } catch (e) {
       console.error("[P2P-GROUP-CALL] join error:", e);
       cleanupP2PGroupCall();
@@ -3515,6 +3719,21 @@ export default function App() {
         {error ? <div className="error-banner">{error}</div> : null}
         {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
         {warningLabel ? <div className="error-banner warning-banner">{warningLabel}</div> : null}
+
+        {screenShareRequest ? (
+          <div className="screen-share-request">
+            <span>{screenShareRequest.name} wants to share their screen. Stop sharing and let them share instead?</span>
+            <div className="screen-share-request-actions">
+              <button className="call-action-btn" type="button" onClick={() => {
+                clearTimeout(screenShareRequestTimerRef.current);
+                setScreenShareRequest(null);
+                stopScreenShare();
+              }}>
+                Stop sharing
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {statusModalOpen ? (
           <div className="modal-backdrop" onClick={() => setStatusModalOpen(false)}>
