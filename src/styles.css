@@ -2308,13 +2308,24 @@ button:disabled {
 [data-reduce-motion] *,
 [data-reduce-motion] *::before,
 .presence-message {
-  color: var(--text-tertiary);
-  font-size: 0.75rem;
-  opacity: 0.65;
-  padding: 2px 16px;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  padding: 2px 16px;
+  opacity: 0.45;
+}
+
+.presence-line {
+  flex: 1;
+  height: 1px;
+  background: var(--text-tertiary);
+  opacity: 0.3;
+}
+
+.presence-text {
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 [data-reduce-motion] *::after {

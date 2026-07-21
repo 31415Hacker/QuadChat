@@ -888,7 +888,7 @@ export default function App() {
         const name = getProfileName(profile, uid);
         addDoc(messagesRef(activeChannelRef.current), {
           type: "presence",
-          text: "went online",
+          text: "is online",
           userId: uid,
           name,
           createdAt: serverTimestamp()
@@ -909,7 +909,7 @@ export default function App() {
         const name = getProfileName(profile, uid);
         addDoc(messagesRef(activeChannelRef.current), {
           type: "presence",
-          text: "went offline",
+          text: "is offline",
           userId: uid,
           name,
           createdAt: serverTimestamp()
@@ -4202,8 +4202,9 @@ export default function App() {
 
                   return item.type === "presence" ? (
                     <div className="presence-message" key={item.id}>
-                      <span>{item.name} {item.text}</span>
-                      <span>{formatTime(item.createdAt)}</span>
+                      <span className="presence-line"></span>
+                      <span className="presence-text">{item.name} {item.text}</span>
+                      <span className="presence-line"></span>
                     </div>
                   ) : (
                     <article
