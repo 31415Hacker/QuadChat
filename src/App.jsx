@@ -2223,23 +2223,9 @@ export default function App() {
       p2pGroupCallNodeRef.current = callRef;
 
       const snap = await rtdbGet(callRef);
-      const rawParticipants = snap.val()?.participants || {};
-      const staleCutoff = now - 30000;
+      const existingParticipants = snap.val()?.participants || {};
 
-      const cleanups = Object.entries(rawParticipants)
-        .filter(([uid, p]) => uid !== sessionUserId && (p?.joinedAt || 0) < staleCutoff)
-        .map(([uid]) => remove(rtdbRef(rtdb, `group-calls/${callKey}/participants/${uid}`)));
-
-      for (const uid of Object.keys(rawParticipants).filter(
-        (u) => u !== sessionUserId && (rawParticipants[u]?.joinedAt || 0) < staleCutoff
-      )) {
-        delete rawParticipants[uid];
-      }
-
-      await Promise.allSettled(cleanups);
-
-      console.log(`[P2P-JOIN] rawParticipants keys=${Object.keys(rawParticipants)} staleCutoff=${staleCutoff} now=${now} gotStream=${!!p2pGroupCallStreamRef.current}`);
-      const existingParticipants = rawParticipants;
+      console.log(`[P2P-JOIN] participants keys=${Object.keys(existingParticipants)} now=${now} gotStream=${!!p2pGroupCallStreamRef.current}`);
       const otherUids = Object.keys(existingParticipants).filter((uid) => uid !== sessionUserId);
 
       const allCaps = { ...existingParticipants };
