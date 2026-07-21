@@ -1680,6 +1680,9 @@ export default function App() {
         if (cleaningUp) return;
         if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
           cleaningUp = true;
+          if (typeof Notification !== "undefined") {
+            try { new Notification("QuadChat", { body: `${calleeName} has ended the call.` }); } catch (_) {}
+          }
           console.log("[CALL-START] cancel listener → cleanupCall");
           cleanupCall();
         }
@@ -1713,8 +1716,11 @@ export default function App() {
         console.log(`[CALL-START] ICE state: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === "disconnected") {
           disconnectTimeout = setTimeout(() => {
-            if (pc.iceConnectionState === "disconnected") {
+            if (pc.iceConnectionState === "disconnected" && !cleaningUp) {
               console.log("[CALL-START] ICE still disconnected after 10s → cleanupCall");
+              if (typeof Notification !== "undefined") {
+                try { new Notification("QuadChat", { body: "You have disconnected from the private call. You may be lagging." }); } catch (_) {}
+              }
               cleanupCall();
             }
           }, 10000);
@@ -1722,8 +1728,13 @@ export default function App() {
           if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
         } else if (pc.iceConnectionState === "failed") {
           if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
-          console.log("[CALL-START] ICE failed → cleanupCall");
-          cleanupCall();
+          if (!cleaningUp) {
+            console.log("[CALL-START] ICE failed → cleanupCall");
+            if (typeof Notification !== "undefined") {
+              try { new Notification("QuadChat", { body: "You have disconnected from the private call. You may be lagging." }); } catch (_) {}
+            }
+            cleanupCall();
+          }
         }
       };
     } catch (e) {
@@ -1850,6 +1861,9 @@ export default function App() {
         if (cleaningUp2) return;
         if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
           cleaningUp2 = true;
+          if (typeof Notification !== "undefined") {
+            try { new Notification("QuadChat", { body: `${incomingCall.callerName} has ended the call.` }); } catch (_) {}
+          }
           console.log("[CALL-ANSWER] cancel listener → cleanupCall");
           cleanupCall();
         }
@@ -1861,8 +1875,11 @@ export default function App() {
         console.log(`[CALL-ANSWER] ICE state: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === "disconnected") {
           disconnectTimeout = setTimeout(() => {
-            if (pc.iceConnectionState === "disconnected") {
+            if (pc.iceConnectionState === "disconnected" && !cleaningUp2) {
               console.log("[CALL-ANSWER] ICE still disconnected after 10s → cleanupCall");
+              if (typeof Notification !== "undefined") {
+                try { new Notification("QuadChat", { body: "You have disconnected from the private call. You may be lagging." }); } catch (_) {}
+              }
               cleanupCall();
             }
           }, 10000);
@@ -1870,8 +1887,13 @@ export default function App() {
           if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
         } else if (pc.iceConnectionState === "failed") {
           if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
-          console.log("[CALL-ANSWER] ICE failed → cleanupCall");
-          cleanupCall();
+          if (!cleaningUp2) {
+            console.log("[CALL-ANSWER] ICE failed → cleanupCall");
+            if (typeof Notification !== "undefined") {
+              try { new Notification("QuadChat", { body: "You have disconnected from the private call. You may be lagging." }); } catch (_) {}
+            }
+            cleanupCall();
+          }
         }
       };
     } catch (e) {
@@ -2286,6 +2308,17 @@ export default function App() {
         rtdbRef(rtdb, `group-calls/${callKey}/participants`),
         (snap) => {
           const uid = snap.key;
+          const pData = snap.val();
+          if (uid === sessionUserId) {
+            if (!p2pGroupCallCleaningRef.current && typeof Notification !== "undefined") {
+              try { new Notification("QuadChat", { body: "You have disconnected from the group call. You may be lagging." }); } catch (_) {}
+            }
+            return;
+          }
+          const displayName = pData?.name || uid;
+          if (typeof Notification !== "undefined") {
+            try { new Notification("QuadChat", { body: `${displayName} has left the group call.` }); } catch (_) {}
+          }
           setP2pGroupCallParticipants((prev) => {
             const { [uid]: _, ...rest } = prev;
             return rest;
