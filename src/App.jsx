@@ -1708,10 +1708,21 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubRenego);
 
+      let disconnectTimeout;
       pc.oniceconnectionstatechange = () => {
         console.log(`[CALL-START] ICE state: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
-          console.log("[CALL-START] ICE disconnected/failed → cleanupCall");
+        if (pc.iceConnectionState === "disconnected") {
+          disconnectTimeout = setTimeout(() => {
+            if (pc.iceConnectionState === "disconnected") {
+              console.log("[CALL-START] ICE still disconnected after 5s → cleanupCall");
+              cleanupCall();
+            }
+          }, 5000);
+        } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
+        } else if (pc.iceConnectionState === "failed") {
+          if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
+          console.log("[CALL-START] ICE failed → cleanupCall");
           cleanupCall();
         }
       };
@@ -1845,10 +1856,21 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubCancel);
 
+      let disconnectTimeout;
       pc.oniceconnectionstatechange = () => {
         console.log(`[CALL-ANSWER] ICE state: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
-          console.log("[CALL-ANSWER] ICE disconnected/failed → cleanupCall");
+        if (pc.iceConnectionState === "disconnected") {
+          disconnectTimeout = setTimeout(() => {
+            if (pc.iceConnectionState === "disconnected") {
+              console.log("[CALL-ANSWER] ICE still disconnected after 5s → cleanupCall");
+              cleanupCall();
+            }
+          }, 5000);
+        } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
+        } else if (pc.iceConnectionState === "failed") {
+          if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
+          console.log("[CALL-ANSWER] ICE failed → cleanupCall");
           cleanupCall();
         }
       };
