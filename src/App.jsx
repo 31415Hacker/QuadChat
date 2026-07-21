@@ -1240,26 +1240,6 @@ export default function App() {
       }
     };
   }, [user, activeChannel]);
-
-  // Fallback listener: independently watches the active channel for new messages
-  // regardless of loadInitialMessages state. Picks up messages from self or others.
-  useEffect(() => {
-    if (!user || !activeChannel) return;
-    const ref = messagesRef(activeChannel);
-    const fallbackQ = query(ref, orderBy("createdAt", "asc"));
-    const unsub = onSnapshot(fallbackQ, (snap) => {
-      snap.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === change.doc.id)) return prev;
-            return [...prev, { id: change.doc.id, ...change.doc.data() }];
-          });
-        }
-      });
-    });
-    return () => unsub();
-  }, [user, activeChannel]);
-
   useEffect(() => {
     if (isNearBottomRef.current) {
       endRef.current?.scrollIntoView({ block: "end" });
