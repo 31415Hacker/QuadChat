@@ -1032,10 +1032,18 @@ export default function App() {
     const s = profile?.status;
     setEditStatus({ mode: s?.mode || "active", text: s?.text || "" });
     setScheduledBusy(
-      (s?.scheduledBusy || []).map((sb) => ({
+      ((s?.scheduledBusy || []).map((sb) => ({
         start: sb.start?.toDate(),
         end: sb.end?.toDate()
-      }))
+      })) || []).sort((a, b) => a.start - b.start).reduce((acc, cur) => {
+        if (acc.length === 0) return [cur];
+        const last = acc[acc.length - 1];
+        if (cur.start <= last.end) {
+          if (cur.end > last.end) last.end = cur.end;
+          return acc;
+        }
+        return [...acc, cur];
+      }, [])
     );
   }, [statusModalOpen, sessionUserId, profiles]);
 
@@ -3846,10 +3854,20 @@ export default function App() {
                       const start = new Date(editStatus.scheduleStart);
                       const end = new Date(editStatus.scheduleEnd);
                       if (end <= start) return;
-                      setScheduledBusy((prev) => [
-                        ...prev,
-                        { start, end }
-                      ]);
+                      setScheduledBusy((prev) => {
+                        const all = [...prev, { start, end }].sort((a, b) => a.start - b.start);
+                        const merged = [all[0]];
+                        for (let i = 1; i < all.length; i++) {
+                          const last = merged[merged.length - 1];
+                          const cur = all[i];
+                          if (cur.start <= last.end) {
+                            if (cur.end > last.end) last.end = cur.end;
+                          } else {
+                            merged.push(cur);
+                          }
+                        }
+                        return merged;
+                      });
                       setEditStatus((s) => ({ ...s, scheduleStart: "", scheduleEnd: "" }));
                     }}
                   >
