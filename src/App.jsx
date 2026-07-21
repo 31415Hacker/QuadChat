@@ -1545,9 +1545,9 @@ export default function App() {
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        const reofferRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/renego/offer`);
+        const reofferRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/renego/offer_${sessionUserId}`);
         await set(reofferRef, { type: offer.type, sdp: offer.sdp });
-        const reanswerRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/renego/answer`);
+        const reanswerRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/renego/answer_${sessionUserId}`);
         const unsub = onValue(reanswerRef, async (snap) => {
           const val = snap.val();
           if (val && val.type) {
@@ -1686,7 +1686,7 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubCancel);
 
-      const renegoRef = rtdbRef(rtdb, `calls/${callRef.key}/renego/offer`);
+      const renegoRef = rtdbRef(rtdb, `calls/${callRef.key}/renego/offer_${calleeId}`);
       let handlingRenego = false;
       const unsubRenego = onValue(renegoRef, async (snap) => {
         const val = snap.val();
@@ -1700,7 +1700,7 @@ export default function App() {
           await pc.setRemoteDescription(new RTCSessionDescription(val));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          await set(rtdbRef(rtdb, `calls/${callRef.key}/renego/answer`), { type: answer.type, sdp: answer.sdp });
+          await set(rtdbRef(rtdb, `calls/${callRef.key}/renego/answer_${calleeId}`), { type: answer.type, sdp: answer.sdp });
         } catch (e) {
           console.error("[CALL-START] renego handler failed:", e);
         }
@@ -1809,7 +1809,7 @@ export default function App() {
       });
       callCleanupsRef.current.push(unsubScreenReq);
 
-      const renegoRef = rtdbRef(rtdb, `calls/${callRef.key}/renego/offer`);
+      const renegoRef = rtdbRef(rtdb, `calls/${callRef.key}/renego/offer_${incomingCall.callerId}`);
       let handlingRenego = false;
       const unsubRenego = onValue(renegoRef, async (snap) => {
         const val = snap.val();
@@ -1823,7 +1823,7 @@ export default function App() {
           await pc.setRemoteDescription(new RTCSessionDescription(val));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          await set(rtdbRef(rtdb, `calls/${callRef.key}/renego/answer`), { type: answer.type, sdp: answer.sdp });
+          await set(rtdbRef(rtdb, `calls/${callRef.key}/renego/answer_${incomingCall.callerId}`), { type: answer.type, sdp: answer.sdp });
         } catch (e) {
           console.error("[CALL-ANSWER] renego handler failed:", e);
         }
@@ -2118,7 +2118,7 @@ export default function App() {
         await pc.setRemoteDescription(new RTCSessionDescription(val));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        const reanswerRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}/renego/answer_${sessionUserId}`);
+        const reanswerRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}/renego/answer_${remoteUid}`);
         await set(reanswerRef, { type: answer.type, sdp: answer.sdp });
       } catch (e) {
         console.error("[P2P-RENEGO] handling offer failed:", e);
@@ -2133,14 +2133,19 @@ export default function App() {
     const connRef = rtdbRef(rtdb, `group-calls/${callKey}/connections/${connId}`);
 
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("negotiation timeout")), 20000);
+      const timeout = setTimeout(() => {
+        console.error(`[P2P-NEGO] timeout ${sessionUserId}→${remoteUid}`);
+        reject(new Error("negotiation timeout"));
+      }, 20000);
 
       let done = false;
 
       const unsub = onValue(connRef, async (snap) => {
         if (done) return;
         const data = snap.val();
-        if (!data) return;
+        if (!data) { console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: no data`); return; }
+
+        console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: offer=${!!data.offer} answer=${!!data.answer} higher=${sessionUserId > remoteUid}`);
 
         if (data.offer && data.answer && !done) {
           done = true;
@@ -2155,12 +2160,14 @@ export default function App() {
             const pc = createP2PConnection(remoteUid, callKey);
             listenForRemoteCandidates(remoteUid, callKey, pc);
             listenForP2PRenego(remoteUid, callKey, pc);
+            console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: writing offer`);
             const offer = applyOpusBitrate(await pc.createOffer(), OPUS_BITRATE);
             await pc.setLocalDescription(offer);
             await update(connRef, { offer: { type: offer.type, sdp: offer.sdp } });
           }
         } else {
           if (data.offer && !data.answer) {
+            console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: writing answer`);
             const pc = createP2PConnection(remoteUid, callKey);
             listenForRemoteCandidates(remoteUid, callKey, pc);
             listenForP2PRenego(remoteUid, callKey, pc);
@@ -2231,6 +2238,7 @@ export default function App() {
 
       await Promise.allSettled(cleanups);
 
+      console.log(`[P2P-JOIN] rawParticipants keys=${Object.keys(rawParticipants)} staleCutoff=${staleCutoff} now=${now} gotStream=${!!p2pGroupCallStreamRef.current}`);
       const existingParticipants = rawParticipants;
       const otherUids = Object.keys(existingParticipants).filter((uid) => uid !== sessionUserId);
 
