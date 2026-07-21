@@ -876,19 +876,22 @@ export default function App() {
 
     const unsubAdded = onChildAdded(presenceListRef, (snap) => {
       const uid = snap.key;
-      if (uid === sessionUserId) return;
-      onlineSet.add(uid);
-      setOnlineUsers(new Set(onlineSet));
+      if (uid !== sessionUserId) {
+        onlineSet.add(uid);
+        setOnlineUsers(new Set(onlineSet));
+      }
 
       const now = Date.now();
       const key = `${uid}_online`;
       if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
         presenceMsgDebounceRef.current[key] = now;
         const profile = profilesRef.current[uid];
-        const name = getProfileName(profile, uid);
+        const rawName = getProfileName(profile, uid);
+        const isSelf = uid === sessionUserId;
+        const name = isSelf ? "You" : rawName;
         addDoc(messagesRef(activeChannelRef.current), {
           type: "presence",
-          text: "is online",
+          text: isSelf ? "are online" : "is online",
           userId: uid,
           name,
           createdAt: serverTimestamp()
@@ -906,10 +909,12 @@ export default function App() {
       if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
         presenceMsgDebounceRef.current[key] = now;
         const profile = profilesRef.current[uid];
-        const name = getProfileName(profile, uid);
+        const rawName = getProfileName(profile, uid);
+        const isSelf = uid === sessionUserId;
+        const name = isSelf ? "You" : rawName;
         addDoc(messagesRef(activeChannelRef.current), {
           type: "presence",
-          text: "is offline",
+          text: isSelf ? "are offline" : "is offline",
           userId: uid,
           name,
           createdAt: serverTimestamp()
