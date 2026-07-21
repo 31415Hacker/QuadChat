@@ -590,16 +590,30 @@ export default function App() {
         ? days.reduce((sum, d) => sum + dayDurations[d], 0) / days.length
         : 0;
 
-      const top3 = hourlyCounts
-        .map((count, hour) => ({ hour, count }))
-        .sort((a, b) => b.count - a.count || a.hour - b.hour)
-        .slice(0, 3)
-        .filter((h) => h.count > 0)
-        .map((h) => {
-          const startStr = `${String(h.hour).padStart(2, "0")}:00`;
-          const endStr = `${String((h.hour + 1) % 24).padStart(2, "0")}:00`;
-          return `${startStr}–${endStr}`;
-        });
+      const top3 = (() => {
+        const active = hourlyCounts
+          .map((count, hour) => ({ hour, count }))
+          .filter((h) => h.count > 0)
+          .sort((a, b) => a.hour - b.hour);
+        const groups = [];
+        for (const h of active) {
+          const last = groups[groups.length - 1];
+          if (last && last.end === h.hour) {
+            last.end = h.hour + 1;
+            last.count += h.count;
+          } else {
+            groups.push({ start: h.hour, end: h.hour + 1, count: h.count });
+          }
+        }
+        return groups
+          .sort((a, b) => b.count - a.count || a.start - b.start)
+          .slice(0, 3)
+          .map((g) => {
+            const startStr = `${String(g.start).padStart(2, "0")}:00`;
+            const endStr = `${String(g.end).padStart(2, "0")}:00`;
+            return `${startStr}–${endStr}`;
+          });
+      })();
 
       setAnalyticsData({ avgPlayTime, top3, sessionCount, days: days.length });
     } catch (e) {
