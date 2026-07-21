@@ -1714,10 +1714,10 @@ export default function App() {
         if (pc.iceConnectionState === "disconnected") {
           disconnectTimeout = setTimeout(() => {
             if (pc.iceConnectionState === "disconnected") {
-              console.log("[CALL-START] ICE still disconnected after 5s → cleanupCall");
+              console.log("[CALL-START] ICE still disconnected after 10s → cleanupCall");
               cleanupCall();
             }
-          }, 5000);
+          }, 10000);
         } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
         } else if (pc.iceConnectionState === "failed") {
@@ -1862,10 +1862,10 @@ export default function App() {
         if (pc.iceConnectionState === "disconnected") {
           disconnectTimeout = setTimeout(() => {
             if (pc.iceConnectionState === "disconnected") {
-              console.log("[CALL-ANSWER] ICE still disconnected after 5s → cleanupCall");
+              console.log("[CALL-ANSWER] ICE still disconnected after 10s → cleanupCall");
               cleanupCall();
             }
-          }, 5000);
+          }, 10000);
         } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (disconnectTimeout) { clearTimeout(disconnectTimeout); disconnectTimeout = null; }
         } else if (pc.iceConnectionState === "failed") {
