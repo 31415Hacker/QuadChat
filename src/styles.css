@@ -2307,25 +2307,26 @@ button:disabled {
 
 [data-reduce-motion] *,
 [data-reduce-motion] *::before,
-.presence-message {
+.system-message {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 2px 16px;
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
-.presence-line {
+.system-line {
   flex: 1;
   height: 1px;
   background: var(--text-tertiary);
-  opacity: 0.3;
+  opacity: 0.2;
 }
 
-.presence-text {
+.system-text {
   color: var(--text-tertiary);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   white-space: nowrap;
+  font-style: italic;
 }
 
 [data-reduce-motion] *::after {

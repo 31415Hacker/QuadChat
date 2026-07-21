@@ -82,7 +82,8 @@ service cloud.firestore {
           "title",
           "googleMeetLink",
           "note",
-          "tableData"
+          "tableData",
+          "name"
         ])
         && (
           channel != "updates"

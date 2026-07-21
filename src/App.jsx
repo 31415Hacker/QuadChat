@@ -690,7 +690,6 @@ export default function App() {
   const callStatusRef = useRef(callStatus);
   const profilesRef = useRef(profiles);
   const activeChannelRef = useRef(activeChannel);
-  const presenceMsgDebounceRef = useRef({});
   const currentSessionDocRef = useRef(null);
 
   const [groupCallStatus, setGroupCallStatus] = useState("idle");
@@ -745,10 +744,6 @@ export default function App() {
     if (!user) return;
 
     const uid = user.uid;
-    const presenceRef = rtdbRef(rtdb, `presence/${uid}`);
-
-    set(presenceRef, true);
-    onDisconnect(presenceRef).remove();
 
     const sessionRef = doc(collection(db, "users", uid, "sessions"));
     currentSessionDocRef.current = sessionRef;
@@ -759,13 +754,6 @@ export default function App() {
       if (currentSessionDocRef.current) {
         updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
       }
-      addDoc(messagesRef(activeChannelRef.current), {
-        type: "presence",
-        text: "are offline",
-        userId: uid,
-        name: "You",
-        createdAt: serverTimestamp()
-      }).catch(() => {});
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
@@ -775,7 +763,6 @@ export default function App() {
       if (currentSessionDocRef.current) {
         updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
       }
-      remove(presenceRef);
     };
   }, [user]);
 
@@ -878,59 +865,78 @@ export default function App() {
       return;
     }
 
-    const presenceListRef = rtdbRef(rtdb, "presence");
-    const onlineSet = new Set();
+    const wsUrl = `${import.meta.env.VITE_PRESENCE_WORKER_URL}?userId=${user.uid}`;
+    let ws = null;
+    let reconnectTimeout = null;
+    let reconnectAttempt = 0;
+    const maxReconnectDelay = 30000;
+    let closed = false;
 
-    const unsubAdded = onChildAdded(presenceListRef, (snap) => {
-      const uid = snap.key;
-      if (uid !== sessionUserId) {
-        onlineSet.add(uid);
-        setOnlineUsers(new Set(onlineSet));
-      }
+    function connect() {
+      if (closed) return;
+      ws = new WebSocket(wsUrl);
 
-      const now = Date.now();
-      const key = `${uid}_online`;
-      if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
-        presenceMsgDebounceRef.current[key] = now;
-        const profile = profilesRef.current[uid];
-        const rawName = getProfileName(profile, uid);
-        const isSelf = uid === sessionUserId;
-        const name = isSelf ? "You" : rawName;
-        addDoc(messagesRef(activeChannelRef.current), {
-          type: "presence",
-          text: isSelf ? "are online" : "is online",
-          userId: uid,
-          name,
-          createdAt: serverTimestamp()
-        }).catch(() => {});
-      }
-    });
+      ws.onopen = () => {
+        reconnectAttempt = 0;
+      };
 
-    const unsubRemoved = onChildRemoved(presenceListRef, (snap) => {
-      const uid = snap.key;
-      if (uid === sessionUserId) return;
-      onlineSet.delete(uid);
-      setOnlineUsers(new Set(onlineSet));
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
 
-      const now = Date.now();
-      const key = `${uid}_offline`;
-      if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
-        presenceMsgDebounceRef.current[key] = now;
-        const profile = profilesRef.current[uid];
-        const name = getProfileName(profile, uid);
-        addDoc(messagesRef(activeChannelRef.current), {
-          type: "presence",
-          text: "is offline",
-          userId: uid,
-          name,
-          createdAt: serverTimestamp()
-        }).catch(() => {});
-      }
-    });
+          if (data.type === "sync") {
+            setOnlineUsers(new Set(data.onlineUsers));
+          } else if (data.type === "presence") {
+            setOnlineUsers((prev) => {
+              const next = new Set(prev);
+              if (data.status === "online") {
+                next.add(data.userId);
+              } else {
+                next.delete(data.userId);
+              }
+              return next;
+            });
+
+            if (data.userId !== user.uid) {
+              const profile = profilesRef.current[data.userId];
+              const name = getProfileName(profile, data.userId);
+              const isOnline = data.status === "online";
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  type: "system",
+                  text: `${name} logged ${isOnline ? "on" : "off"}`,
+                  userId: data.userId,
+                  timestamp: new Date()
+                }
+              ]);
+            }
+          }
+        } catch (e) {
+          console.error("Presence WS parse error:", e);
+        }
+      };
+
+      ws.onclose = () => {
+        if (!closed) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), maxReconnectDelay);
+          reconnectAttempt++;
+          reconnectTimeout = setTimeout(connect, delay);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    connect();
 
     return () => {
-      unsubAdded();
-      unsubRemoved();
+      closed = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) ws.close();
     };
   }, [user]);
 
@@ -1198,14 +1204,14 @@ export default function App() {
         (snap) => {
           if (cancelled) return;
           snap.docChanges().forEach((change) => {
-            if (change.type === "modified") {
+            if (change.type === "added" || change.type === "modified") {
               const msg = {
                 id: change.doc.id,
                 ...change.doc.data()
               };
               setMessages((prev) => {
                 const idx = prev.findIndex((m) => m.id === msg.id);
-                if (idx === -1) return prev;
+                if (idx === -1) return [...prev, msg];
                 const next = prev.slice();
                 next[idx] = { ...next[idx], ...msg };
                 return next;
@@ -1233,6 +1239,25 @@ export default function App() {
         newMessagesUnsubRef.current = null;
       }
     };
+  }, [user, activeChannel]);
+
+  // Fallback listener: independently watches the active channel for new messages
+  // regardless of loadInitialMessages state. Picks up messages from self or others.
+  useEffect(() => {
+    if (!user || !activeChannel) return;
+    const ref = messagesRef(activeChannel);
+    const fallbackQ = query(ref, orderBy("createdAt", "asc"));
+    const unsub = onSnapshot(fallbackQ, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === change.doc.id)) return prev;
+            return [...prev, { id: change.doc.id, ...change.doc.data() }];
+          });
+        }
+      });
+    });
+    return () => unsub();
   }, [user, activeChannel]);
 
   useEffect(() => {
@@ -3422,7 +3447,7 @@ export default function App() {
 
       if (cleanMessage) {
         const messageText = commandResult?.metadata?.notificationText || cleanMessage;
-        await addDoc(messagesRef(activeChannel), {
+        const docRef = await addDoc(messagesRef(activeChannel), {
           text: messageText,
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
@@ -3438,11 +3463,19 @@ export default function App() {
           userId: sessionUserId,
           createdAt: serverTimestamp()
         });
+        setMessages((prev) => [...prev, {
+          id: docRef.id,
+          text: messageText,
+          ...(commandResult?.metadata || {}),
+          ...(replyTo && !commandResult?.metadata ? { replyTo: { id: replyTo.id, text: replyTo.text, userId: replyTo.userId, senderName: replyTo.senderName } } : {}),
+          userId: sessionUserId,
+          createdAt: null
+        }]);
       }
 
       for (const pendingFile of pendingFiles) {
         const url = await uploadToCloudinary(pendingFile.file);
-        await addDoc(messagesRef(activeChannel), {
+        const fileDocRef = await addDoc(messagesRef(activeChannel), {
           text: url,
           isFile: true,
           fileName: pendingFile.file.name,
@@ -3450,6 +3483,15 @@ export default function App() {
           userId: sessionUserId,
           createdAt: serverTimestamp()
         });
+        setMessages((prev) => [...prev, {
+          id: fileDocRef.id,
+          text: url,
+          isFile: true,
+          fileName: pendingFile.file.name,
+          fileType: pendingFile.file.type || "application/octet-stream",
+          userId: sessionUserId,
+          createdAt: null
+        }]);
       }
 
       setMessage("");
@@ -4211,11 +4253,11 @@ export default function App() {
                   const isMine = item.userId === sessionUserId;
                   const isMenuOpen = openMessageMenuId === item.id;
 
-                  return item.type === "presence" ? (
-                    <div className="presence-message" key={item.id}>
-                      <span className="presence-line"></span>
-                      <span className="presence-text">{item.name} {item.text}</span>
-                      <span className="presence-line"></span>
+                  return item.type === "system" ? (
+                    <div className="system-message" key={item.id}>
+                      <span className="system-line"></span>
+                      <span className="system-text">{item.text}</span>
+                      <span className="system-line"></span>
                     </div>
                   ) : (
                     <article
