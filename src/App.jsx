@@ -689,6 +689,8 @@ export default function App() {
   const screenShareRequestTimerRef = useRef(null);
   const callStatusRef = useRef(callStatus);
   const profilesRef = useRef(profiles);
+  const activeChannelRef = useRef(activeChannel);
+  const presenceMsgDebounceRef = useRef({});
   const currentSessionDocRef = useRef(null);
 
   const [groupCallStatus, setGroupCallStatus] = useState("idle");
@@ -877,12 +879,42 @@ export default function App() {
       if (uid === sessionUserId) return;
       onlineSet.add(uid);
       setOnlineUsers(new Set(onlineSet));
+
+      const now = Date.now();
+      const key = `${uid}_online`;
+      if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
+        presenceMsgDebounceRef.current[key] = now;
+        const profile = profilesRef.current[uid];
+        const name = getProfileName(profile, uid);
+        addDoc(messagesRef(activeChannelRef.current), {
+          type: "presence",
+          text: "went online",
+          userId: uid,
+          name,
+          createdAt: serverTimestamp()
+        }).catch(() => {});
+      }
     });
 
     const unsubRemoved = onChildRemoved(presenceListRef, (snap) => {
       const uid = snap.key;
       onlineSet.delete(uid);
       setOnlineUsers(new Set(onlineSet));
+
+      const now = Date.now();
+      const key = `${uid}_offline`;
+      if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
+        presenceMsgDebounceRef.current[key] = now;
+        const profile = profilesRef.current[uid];
+        const name = getProfileName(profile, uid);
+        addDoc(messagesRef(activeChannelRef.current), {
+          type: "presence",
+          text: "went offline",
+          userId: uid,
+          name,
+          createdAt: serverTimestamp()
+        }).catch(() => {});
+      }
     });
 
     return () => {
@@ -967,7 +999,8 @@ export default function App() {
 
   useEffect(() => {
     profilesRef.current = profiles;
-  }, [profiles]);
+    activeChannelRef.current = activeChannel;
+  }, [profiles, activeChannel]);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
@@ -4167,7 +4200,12 @@ export default function App() {
                   const isMine = item.userId === sessionUserId;
                   const isMenuOpen = openMessageMenuId === item.id;
 
-                  return (
+                  return item.type === "presence" ? (
+                    <div className="presence-message" key={item.id}>
+                      <span>{item.name} {item.text}</span>
+                      <span>{formatTime(item.createdAt)}</span>
+                    </div>
+                  ) : (
                     <article
                       className={`message ${isMine ? "message-mine" : ""}`}
                       key={item.id}
