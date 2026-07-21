@@ -1204,14 +1204,14 @@ export default function App() {
         (snap) => {
           if (cancelled) return;
           snap.docChanges().forEach((change) => {
-            if (change.type === "added" || change.type === "modified") {
+            if (change.type === "modified") {
               const msg = {
                 id: change.doc.id,
                 ...change.doc.data()
               };
               setMessages((prev) => {
                 const idx = prev.findIndex((m) => m.id === msg.id);
-                if (idx === -1) return [...prev, msg];
+                if (idx === -1) return prev;
                 const next = prev.slice();
                 next[idx] = { ...next[idx], ...msg };
                 return next;
