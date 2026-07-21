@@ -759,6 +759,13 @@ export default function App() {
       if (currentSessionDocRef.current) {
         updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
       }
+      addDoc(messagesRef(activeChannelRef.current), {
+        type: "presence",
+        text: "are offline",
+        userId: uid,
+        name: "You",
+        createdAt: serverTimestamp()
+      }).catch(() => {});
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
@@ -901,6 +908,7 @@ export default function App() {
 
     const unsubRemoved = onChildRemoved(presenceListRef, (snap) => {
       const uid = snap.key;
+      if (uid === sessionUserId) return;
       onlineSet.delete(uid);
       setOnlineUsers(new Set(onlineSet));
 
@@ -909,12 +917,10 @@ export default function App() {
       if (now - (presenceMsgDebounceRef.current[key] || 0) > 60000) {
         presenceMsgDebounceRef.current[key] = now;
         const profile = profilesRef.current[uid];
-        const rawName = getProfileName(profile, uid);
-        const isSelf = uid === sessionUserId;
-        const name = isSelf ? "You" : rawName;
+        const name = getProfileName(profile, uid);
         addDoc(messagesRef(activeChannelRef.current), {
           type: "presence",
-          text: isSelf ? "are offline" : "is offline",
+          text: "is offline",
           userId: uid,
           name,
           createdAt: serverTimestamp()
