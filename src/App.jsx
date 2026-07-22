@@ -3417,7 +3417,7 @@ export default function App() {
 
       if (cleanMessage) {
         const messageText = commandResult?.metadata?.notificationText || cleanMessage;
-        const docRef = await addDoc(messagesRef(activeChannel), {
+        await addDoc(messagesRef(activeChannel), {
           text: messageText,
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
@@ -3433,19 +3433,11 @@ export default function App() {
           userId: sessionUserId,
           createdAt: serverTimestamp()
         });
-        setMessages((prev) => [...prev, {
-          id: docRef.id,
-          text: messageText,
-          ...(commandResult?.metadata || {}),
-          ...(replyTo && !commandResult?.metadata ? { replyTo: { id: replyTo.id, text: replyTo.text, userId: replyTo.userId, senderName: replyTo.senderName } } : {}),
-          userId: sessionUserId,
-          createdAt: null
-        }]);
       }
 
       for (const pendingFile of pendingFiles) {
         const url = await uploadToCloudinary(pendingFile.file);
-        const fileDocRef = await addDoc(messagesRef(activeChannel), {
+        await addDoc(messagesRef(activeChannel), {
           text: url,
           isFile: true,
           fileName: pendingFile.file.name,
@@ -3453,15 +3445,6 @@ export default function App() {
           userId: sessionUserId,
           createdAt: serverTimestamp()
         });
-        setMessages((prev) => [...prev, {
-          id: fileDocRef.id,
-          text: url,
-          isFile: true,
-          fileName: pendingFile.file.name,
-          fileType: pendingFile.file.type || "application/octet-stream",
-          userId: sessionUserId,
-          createdAt: null
-        }]);
       }
 
       setMessage("");
