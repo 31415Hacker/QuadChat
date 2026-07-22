@@ -898,19 +898,6 @@ export default function App() {
             });
 
             if (data.userId !== user.uid) {
-              const profile = profilesRef.current[data.userId];
-              const name = getProfileName(profile, data.userId);
-              const isOnline = data.status === "online";
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: crypto.randomUUID(),
-                  type: "system",
-                  text: `${name} logged ${isOnline ? "on" : "off"}`,
-                  userId: data.userId,
-                  timestamp: new Date()
-                }
-              ]);
             }
           }
         } catch (e) {
@@ -4233,13 +4220,7 @@ export default function App() {
                   const isMine = item.userId === sessionUserId;
                   const isMenuOpen = openMessageMenuId === item.id;
 
-                  return item.type === "system" ? (
-                    <div className="system-message" key={item.id}>
-                      <span className="system-line"></span>
-                      <span className="system-text">{item.text}</span>
-                      <span className="system-line"></span>
-                    </div>
-                  ) : (
+                  return (
                     <article
                       className={`message ${isMine ? "message-mine" : ""}`}
                       key={item.id}
