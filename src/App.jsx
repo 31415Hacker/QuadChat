@@ -1186,8 +1186,11 @@ export default function App() {
         );
       }
 
+      const modQuery = oldestDocSnapRef.current
+        ? query(ref, orderBy("createdAt", "asc"), startAfter(oldestDocSnapRef.current))
+        : query(ref, orderBy("createdAt", "asc"));
       const modUnsub = onSnapshot(
-        query(ref, orderBy("createdAt", "asc")),
+        modQuery,
         (snap) => {
           if (cancelled) return;
           snap.docChanges().forEach((change) => {
