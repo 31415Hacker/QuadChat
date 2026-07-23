@@ -865,7 +865,10 @@ export default function App() {
       return;
     }
 
-    const wsUrl = `${import.meta.env.VITE_PRESENCE_WORKER_URL}?userId=${user.uid}`;
+    const presenceUrl = import.meta.env.VITE_PRESENCE_WORKER_URL;
+    if (!presenceUrl) return;
+
+    const wsUrl = `${presenceUrl}?userId=${user.uid}`;
     let ws = null;
     let reconnectTimeout = null;
     let reconnectAttempt = 0;
@@ -2240,6 +2243,7 @@ export default function App() {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         console.error(`[P2P-NEGO] timeout ${sessionUserId}→${remoteUid}`);
+        unsub();
         reject(new Error("negotiation timeout"));
       }, 20000);
 
@@ -2248,7 +2252,18 @@ export default function App() {
       const unsub = onValue(connRef, async (snap) => {
         if (done) return;
         const data = snap.val();
-        if (!data) { console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: no data`); return; }
+        if (!data) {
+          if (sessionUserId > remoteUid) {
+            const pc = createP2PConnection(remoteUid, callKey);
+            listenForRemoteCandidates(remoteUid, callKey, pc);
+            listenForP2PRenego(remoteUid, callKey, pc);
+            console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: writing offer (empty node)`);
+            const offer = applyOpusBitrate(await pc.createOffer(), OPUS_BITRATE);
+            await pc.setLocalDescription(offer);
+            await update(connRef, { offer: { type: offer.type, sdp: offer.sdp } });
+          }
+          return;
+        }
 
         console.log(`[P2P-NEGO] ${sessionUserId}→${remoteUid}: offer=${!!data.offer} answer=${!!data.answer} higher=${sessionUserId > remoteUid}`);
 
