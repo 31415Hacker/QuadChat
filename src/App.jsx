@@ -543,6 +543,10 @@ export default function App() {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  const [typingUsers, setTypingUsers] = useState({});
+  const typingTimeoutRef = useRef(null);
+  const typingWrittenRef = useRef(false);
+
   async function openUserAnalytics(profile) {
     if (!profile) return;
     setAnalyticsTarget(profile);
@@ -1233,6 +1237,35 @@ export default function App() {
       }
     };
   }, [user, activeChannel]);
+
+  useEffect(() => {
+    if (!user || !activeChannel) {
+      setTypingUsers({});
+      return;
+    }
+
+    const typingRef = rtdbRef(rtdb, `typing/${activeChannel}`);
+
+    const unsub = onValue(typingRef, (snap) => {
+      const val = snap.val() || {};
+      const others = {};
+      Object.entries(val).forEach(([uid, data]) => {
+        if (uid !== sessionUserId && data?.name) {
+          others[uid] = data.name;
+        }
+      });
+      setTypingUsers(others);
+    });
+
+    return () => {
+      unsub();
+      if (sessionUserId) {
+        remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
+      }
+      setTypingUsers({});
+    };
+  }, [user, activeChannel, sessionUserId]);
+
   useEffect(() => {
     if (isNearBottomRef.current) {
       endRef.current?.scrollIntoView({ block: "end" });
@@ -3463,6 +3496,10 @@ export default function App() {
       }
 
       setMessage("");
+      clearTimeout(typingTimeoutRef.current);
+      if (sessionUserId && activeChannel) {
+        remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
+      }
       setReplyTo(null);
       setPendingFiles((currentFiles) => {
         currentFiles.forEach((pendingFile) => {
@@ -4366,6 +4403,18 @@ export default function App() {
                     </article>
                   );
                 })}
+                {Object.keys(typingUsers).length > 0 && (
+                  <div className="typing-indicator">
+                    <span className="typing-text">
+                      {Object.values(typingUsers).join(", ")} {Object.keys(typingUsers).length === 1 ? "is" : "are"} typing
+                    </span>
+                    <span className="typing-dots">
+                      <span className="dot" />
+                      <span className="dot" />
+                      <span className="dot" />
+                    </span>
+                  </div>
+                )}
                 <div ref={endRef} />
               </>
             )}
@@ -4648,7 +4697,16 @@ export default function App() {
               <input
                 type="text"
                 value={message}
-                onChange={(event) => setMessage(event.target.value)}
+                onChange={(event) => {
+                  setMessage(event.target.value);
+                  if (!sessionUserId || !activeChannel) return;
+                  const typingRef = rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`);
+                  set(typingRef, { name: activeName, timestamp: Date.now() }).catch(() => {});
+                  clearTimeout(typingTimeoutRef.current);
+                  typingTimeoutRef.current = setTimeout(() => {
+                    remove(typingRef).catch(() => {});
+                  }, 3000);
+                }}
                 onPaste={handleComposerPaste}
                 placeholder="Type a message"
                 maxLength={500}
