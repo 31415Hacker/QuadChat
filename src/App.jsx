@@ -1145,6 +1145,9 @@ export default function App() {
       }));
 
       setMessages(msgs);
+      requestAnimationFrame(() => {
+        endRef.current?.scrollIntoView({ block: "end" });
+      });
       const hasMore = snapshot.docs.length >= PAGE_SIZE;
       setHasMoreMessages(hasMore);
       hasMoreMessagesRef.current = hasMore;
