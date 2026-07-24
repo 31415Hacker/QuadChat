@@ -956,19 +956,9 @@ export default function App() {
       if (uid === sessionUserId) continue;
       const nowOnline = isRecentlyOnline(profile.lastOnline);
       const wasOnline = prevOnlineRef.current[uid] ?? false;
-      if (nowOnline === wasOnline) continue;
-
-      if (notificationsEnabled && notificationPermission === "granted") {
-        const name = getProfileName(profile, uid);
-        new Notification("QuadChat", {
-          body: `${name} is ${nowOnline ? "online" : "offline"}`,
-          icon: notificationIcon,
-          tag: `${nowOnline ? "online" : "offline"}-${uid}`,
-        });
-      }
       prevOnlineRef.current[uid] = nowOnline;
     }
-  }, [user, profiles, sessionUserId, notificationsEnabled, notificationPermission]);
+  }, [user, profiles, sessionUserId]);
 
   useEffect(() => {
     if (!user || !sessionUserId) return;
