@@ -3,19 +3,7 @@
     "calls": {
       "$callId": {
         ".read": "auth != null",
-        ".write": "auth != null",
-        "candidates": {
-          "$role": {
-            "$timestamp": {
-              ".validate": "auth != null && newData.isNumber()"
-            }
-          }
-        },
-        "renego": {
-          "$type_uid": {
-            ".validate": "auth != null"
-          }
-        }
+        ".write": "auth != null"
       }
     },
     "group-calls": {
@@ -25,20 +13,6 @@
         "participants": {
           "$uid": {
             ".validate": "auth != null && auth.uid === $uid"
-          }
-        },
-        "connections": {
-          "$connId": {
-            "candidates_$uid": {
-              "$timestamp": {
-                ".validate": "auth != null && newData.isNumber()"
-              }
-            },
-            "renego": {
-              "$type_uid": {
-                ".validate": "auth != null"
-              }
-            }
           }
         }
       }
