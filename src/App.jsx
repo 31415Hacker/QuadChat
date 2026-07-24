@@ -1268,9 +1268,9 @@ export default function App() {
 
   useEffect(() => {
     if (isNearBottomRef.current) {
-      endRef.current?.scrollIntoView({ block: "end" });
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [messages]);
+  }, [messages, typingUsers]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
