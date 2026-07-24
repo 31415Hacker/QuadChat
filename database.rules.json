@@ -1,0 +1,64 @@
+{
+  "rules": {
+    "calls": {
+      "$callId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "candidates": {
+          "$role": {
+            "$timestamp": {
+              ".validate": "auth != null && newData.isNumber()"
+            }
+          }
+        },
+        "renego": {
+          "$type_uid": {
+            ".validate": "auth != null"
+          }
+        }
+      }
+    },
+    "group-calls": {
+      "$callKey": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "participants": {
+          "$uid": {
+            ".validate": "auth != null && auth.uid === $uid"
+          }
+        },
+        "connections": {
+          "$connId": {
+            "candidates_$uid": {
+              "$timestamp": {
+                ".validate": "auth != null && newData.isNumber()"
+              }
+            },
+            "renego": {
+              "$type_uid": {
+                ".validate": "auth != null"
+              }
+            }
+          }
+        }
+      }
+    },
+    "typing": {
+      ".read": "auth != null",
+      "$channel": {
+        ".read": "auth != null",
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['name', 'timestamp'])",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber()"
+          }
+        }
+      }
+    }
+  }
+}
