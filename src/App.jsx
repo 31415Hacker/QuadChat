@@ -545,7 +545,7 @@ export default function App() {
 
   const [typingUsers, setTypingUsers] = useState({});
   const typingTimeoutRef = useRef(null);
-  const typingWrittenRef = useRef(false);
+  const typingLastWriteRef = useRef(0);
 
   async function openUserAnalytics(profile) {
     if (!profile) return;
@@ -4700,12 +4700,14 @@ export default function App() {
                 onChange={(event) => {
                   setMessage(event.target.value);
                   if (!sessionUserId || !activeChannel) return;
-                  const typingRef = rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`);
-                  set(typingRef, { name: activeName, timestamp: Date.now() }).catch(() => {});
+                  const now = Date.now();
                   clearTimeout(typingTimeoutRef.current);
                   typingTimeoutRef.current = setTimeout(() => {
-                    remove(typingRef).catch(() => {});
+                    remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
                   }, 3000);
+                  if (now - typingLastWriteRef.current < 2000) return;
+                  typingLastWriteRef.current = now;
+                  set(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`), { name: activeName, timestamp: now }).catch(() => {});
                 }}
                 onPaste={handleComposerPaste}
                 placeholder="Type a message"
