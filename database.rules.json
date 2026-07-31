@@ -1,10 +1,34 @@
 {
   "rules": {
+    // -----------------------------------------------------------------
+    // TYPING INDICATORS (Used in App.jsx under /typing/$channel/$uid)
+    // -----------------------------------------------------------------
+    "typing": {
+      "$channel": {
+        // Anyone logged in can read who is typing in a channel
+        ".read": "auth != null",
+        ".indexOn": ["timestamp"],
+        "$uid": {
+          // Users can only update/remove their own typing status
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "!newData.exists() || newData.hasChildren(['isTyping', 'timestamp'])",
+          "isTyping": {
+            ".validate": "newData.isBoolean()"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber()"
+          }
+        }
+      }
+    },
+
+    // -----------------------------------------------------------------
+    // ONE-ON-ONE WEBRTC CALLS
+    // -----------------------------------------------------------------
     "calls": {
       "$callId": {
-        // Only authenticated users can see calls where they are the caller or callee
+        // Only caller or callee can view or interact with the call object
         ".read": "auth != null && (data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid || !data.exists())",
-        // Authenticated users can create a call if they set themselves as the caller, or update an existing call if they are a participant
         ".write": "auth != null && (!data.exists() && newData.child('callerId').val() === auth.uid || data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid)",
         
         "status": {
@@ -26,22 +50,25 @@
         }
       }
     },
-    
+
+    // -----------------------------------------------------------------
+    // P2P / GROUP CALL SIGNALING
+    // -----------------------------------------------------------------
     "group-calls": {
       "$groupCallId": {
-        // Authenticated users can read group call metadata and participants
         ".read": "auth != null",
         ".write": "auth != null",
         
         "participants": {
           "$uid": {
-            // Users can only write/remove their own participant entry
+            // Users can only add, modify, or remove their own participant entry
             ".write": "auth != null && auth.uid === $uid"
           }
         },
         "connections": {
           "$connId": {
-            // Connection keys are structured as 'uidA_uidB' (sorted); only those two UIDs can read/write candidates and renegotiation signals
+            // Peer connection keys follow the 'uidA_uidB' pattern
+            // Only participants in that pair can read/write candidates/SDP signals
             ".read": "auth != null && $connId.contains(auth.uid)",
             ".write": "auth != null && $connId.contains(auth.uid)"
           }
