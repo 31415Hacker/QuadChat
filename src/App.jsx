@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -149,6 +149,40 @@ function formatTime(timestamp) {
     hour: "numeric",
     minute: "2-digit"
   }).format(timestamp.toDate());
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dayKey(date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatDayLabel(timestamp) {
+  if (!timestamp?.toDate) return "Just now";
+
+  const date = timestamp.toDate();
+  const now = new Date();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return "1 week ago";
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (date.getFullYear() === now.getFullYear()) {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "long"
+    }).format(date);
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(date);
 }
 
 function getAuthErrorMessage(firebaseError) {
@@ -4279,17 +4313,29 @@ export default function App() {
                 {hasMoreMessages && !isLoadingMore ? (
                   <div className="sentinel" ref={sentinelRef} />
                 ) : null}
-                {messages.map((item) => {
+                {messages.map((item, index) => {
                   const senderProfile = profiles[item.userId];
                   const senderName = getProfileName(senderProfile, item.name);
                   const isMine = item.userId === sessionUserId;
                   const isMenuOpen = openMessageMenuId === item.id;
+                  const previous = index > 0 ? messages[index - 1] : null;
+                  const showDaySeparator =
+                    !previous ||
+                    (previous.createdAt?.toDate
+                      ? dayKey(previous.createdAt.toDate()) !==
+                        dayKey(item.createdAt?.toDate())
+                      : false);
 
                   return (
-                    <article
-                      className={`message ${isMine ? "message-mine" : ""}`}
-                      key={item.id}
-                    >
+                    <Fragment key={item.id}>
+                      {showDaySeparator ? (
+                        <div className="day-separator">
+                          {formatDayLabel(item.createdAt)}
+                        </div>
+                      ) : null}
+                      <article
+                        className={`message ${isMine ? "message-mine" : ""}`}
+                      >
                       <div className="message-meta">
                         <strong>{senderName}</strong>
                         <span>{formatTime(item.createdAt)}</span>
@@ -4427,7 +4473,8 @@ export default function App() {
                           )}
                         </div>
                       ) : null}
-                    </article>
+                      </article>
+                    </Fragment>
                   );
                 })}
                 {Object.keys(typingUsers).length > 0 && (

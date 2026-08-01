@@ -1108,6 +1108,20 @@ button:disabled {
   border-color: var(--border-color);
 }
 
+.day-separator {
+  align-self: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+  margin: 4px 0;
+  padding: 3px 12px;
+  position: sticky;
+  top: 4px;
+  z-index: 1;
+}
+
 .message-meta {
   align-items: center;
   color: var(--text-tertiary);
