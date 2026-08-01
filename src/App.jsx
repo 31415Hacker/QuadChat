@@ -22,6 +22,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  endAt,
   getDoc,
   getDocs,
   limit,
@@ -116,6 +117,7 @@ const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 const maxAttachments = 4;
 const maxAttachmentBytes = 10 * 1024 * 1024;
 const PAGE_SIZE = 30;
+const MAX_MESSAGES = 500;
 const supportsRecording = typeof MediaRecorder !== "undefined";
 const rtcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -361,7 +363,7 @@ function renderMessageText(text, profiles, isAdminCommand = false, sessionUserId
     normalizeName(getProfileName(profile, ""))
   );
 
-  return text.split(/(\s+)/).map((part, index) => {
+  return String(text || "").split(/(\s+)/).map((part, index) => {
     if (part.startsWith("@")) {
       const mention = normalizeName(part);
       const isMention =
@@ -402,7 +404,7 @@ function renderMessageText(text, profiles, isAdminCommand = false, sessionUserId
 }
 
 function getReplyPreview(text) {
-  const cleanText = (text || "").replace(/\s+/g, " ").trim();
+  const cleanText = String(text || "").replace(/\s+/g, " ").trim();
 
   if (cleanText.length <= 90) {
     return cleanText;
@@ -439,8 +441,10 @@ async function saveUserProfile(
 
   const profileRef = doc(db, "users", firebaseUser.uid);
   const profileSnapshot = await getDoc(profileRef);
-  const userIsAdmin = isAdminEmail(firebaseUser.email);
-  const userIsDeveloper = isDeveloperEmail(firebaseUser.email);
+  const userIsAdmin =
+    isAdminEmail(firebaseUser.email) && firebaseUser.emailVerified;
+  const userIsDeveloper =
+    isDeveloperEmail(firebaseUser.email) && firebaseUser.emailVerified;
   const profileData = {
     id: firebaseUser.uid,
     displayName,
@@ -1170,6 +1174,10 @@ export default function App() {
             if (cancelled) return;
 
             snap.docChanges().forEach((change) => {
+              if (change.type === "removed") {
+                setMessages((prev) => prev.filter((m) => m.id !== change.doc.id));
+                return;
+              }
               if (change.type !== "added" && change.type !== "modified") {
                 return;
               }
@@ -1180,7 +1188,10 @@ export default function App() {
               setMessages((prev) => {
                 const existingIndex = prev.findIndex((m) => m.id === msg.id);
                 if (existingIndex === -1) {
-                  return [...prev, msg];
+                  const next = [...prev, msg];
+                  return next.length > MAX_MESSAGES
+                    ? next.slice(next.length - MAX_MESSAGES)
+                    : next;
                 }
                 const next = prev.slice();
                 next[existingIndex] = { ...next[existingIndex], ...msg };
@@ -1197,9 +1208,15 @@ export default function App() {
         );
       }
 
-      const modQuery = oldestDocSnapRef.current
-        ? query(ref, orderBy("createdAt", "asc"), startAfter(oldestDocSnapRef.current))
-        : query(ref, orderBy("createdAt", "asc"));
+      const modQuery =
+        oldestDocSnapRef.current && newestDocSnapRef.current
+          ? query(
+              ref,
+              orderBy("createdAt", "asc"),
+              startAfter(oldestDocSnapRef.current),
+              endAt(newestDocSnapRef.current)
+            )
+          : query(ref, orderBy("createdAt", "asc"), limitToLast(PAGE_SIZE));
       const modUnsub = onSnapshot(
         modQuery,
         (snap) => {
@@ -1224,6 +1241,7 @@ export default function App() {
         }
       );
 
+      if (cancelled) return;
       newMessagesUnsubRef.current = () => {
         if (unsubNew) unsubNew();
         modUnsub();
@@ -3222,6 +3240,11 @@ export default function App() {
       type: "audio/webm"
     });
 
+    if (file.size > maxAttachmentBytes) {
+      setError("Voice message is too large (max 10 MB).");
+      return;
+    }
+
     if (activeChannel === "updates" && !isCurrentUserDeveloper) {
       setError("Only developers can post in Updates.");
       return;
@@ -4317,14 +4340,14 @@ export default function App() {
                           </div>
                         ) : null}
                       </div>
-                      {item.replyTo ? (
+                      {item.replyTo && typeof item.replyTo === "object" ? (
                         <div className="reply-card">
                           <strong>{item.replyTo.senderName || "Unknown"}</strong>
                           <span>{item.replyTo.text || "Message unavailable"}</span>
                         </div>
                       ) : null}
                       {item.isFile ? (
-                        item.fileType?.startsWith("video/") ? (
+                        typeof item.fileType === "string" && item.fileType.startsWith("video/") ? (
                           <video
                             controls
                             className="message-video"
@@ -4334,7 +4357,7 @@ export default function App() {
                               type={item.fileType}
                             />
                           </video>
-                        ) : item.fileType?.startsWith("audio/") ? (
+                        ) : typeof item.fileType === "string" && item.fileType.startsWith("audio/") ? (
                           <audio
                             controls
                             className="message-audio"
@@ -4360,15 +4383,15 @@ export default function App() {
                         )
                       ) : item.type === "game_session_card" ? (
                         <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} onJoinGroupCall={joinGroupCall} />
-                      ) : item.text ? (
+                      ) : typeof item.text === "string" && item.text ? (
                         <p>
                           {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId)}
                         </p>
                       ) : null}
-                      {item.attachments?.length > 0 ? (
+                      {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
                         <div className="message-attachments">
                           {item.attachments.map((attachment) =>
-                            attachment.type?.startsWith("image/") ? (
+                            attachment && typeof attachment.type === "string" && attachment.type.startsWith("image/") ? (
                               <a
                                 className="message-image-link"
                                 href={safeUrl(attachment.url)}
@@ -4378,7 +4401,7 @@ export default function App() {
                               >
                                 <img src={safeUrl(attachment.url)} alt={attachment.name} />
                               </a>
-                            ) : attachment.type?.startsWith("video/") ? (
+                            ) : attachment && typeof attachment.type === "string" && attachment.type.startsWith("video/") ? (
                               <video
                                 controls
                                 className="message-video"
@@ -4392,13 +4415,13 @@ export default function App() {
                             ) : (
                               <a
                                 className="message-file-link"
-                                href={safeUrl(attachment.viewUrl || attachment.url)}
-                                key={attachment.path || attachment.url}
+                                href={safeUrl(attachment?.viewUrl || attachment?.url)}
+                                key={attachment?.path || attachment?.url}
                                 rel="noreferrer"
                                 target="_blank"
                               >
                                 <FileText size={18} />
-                                <span>{attachment.name}</span>
+                                <span>{attachment?.name}</span>
                               </a>
                             )
                           )}
@@ -4711,7 +4734,7 @@ export default function App() {
                   }, 3000);
                   if (now - typingLastWriteRef.current < 2000) return;
                   typingLastWriteRef.current = now;
-                  set(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`), { name: activeName, timestamp: now }).catch(() => {});
+                  set(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`), { isTyping: true, name: activeName, timestamp: now }).catch(() => {});
                 }}
                 onPaste={handleComposerPaste}
                 placeholder="Type a message"

@@ -36,6 +36,7 @@ service cloud.firestore {
 
     function isAdminEmail() {
       return signedIn() && 'email' in request.auth.token &&
+        request.auth.token.email_verified == true &&
         request.auth.token.email.lower() in ['ariqipraditya@gmail.com'];
     }
 
@@ -68,6 +69,14 @@ service cloud.firestore {
           "title", "googleMeetLink", "note", "tableData", "name"
         ])
         && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin())
+        && (!("text" in request.resource.data) || request.resource.data.text is string)
+        && (!("attachments" in request.resource.data) || request.resource.data.attachments is list)
+        && (!("fileName" in request.resource.data) || request.resource.data.fileName is string)
+        && (!("fileType" in request.resource.data) || request.resource.data.fileType is string)
+        && (!("type" in request.resource.data) || request.resource.data.type is string)
+        && (!("title" in request.resource.data) || request.resource.data.title is string)
+        && (!("note" in request.resource.data) || request.resource.data.note is string)
+        && (!("googleMeetLink" in request.resource.data) || request.resource.data.googleMeetLink is string)
         && (channel != "updates" || isDeveloper());
 
       allow update: if signedIn()
