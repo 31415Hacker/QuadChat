@@ -5,6 +5,7 @@ on:
     paths:
       - 'firestore.rules'
       - 'database.rules.json'   # <--- Tracks changes to database.rules.json
+  workflow_dispatch:
 
 jobs:
   deploy_rules:
