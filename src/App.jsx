@@ -1034,8 +1034,10 @@ export default function App() {
       root.style.setProperty("--fit-scale", effective.toFixed(6));
       root.style.setProperty("--fit-width", `${window.innerWidth}px`);
       root.style.setProperty("--fit-height", `${window.innerHeight}px`);
-      document.body.classList.toggle("fit-scaled", fitScale < 1);
-      document.body.style.overflow = effective > 1 ? "auto" : "hidden";
+      document.body.classList.toggle(
+        "compact",
+        effective * DESIGN_WIDTH > window.innerWidth
+      );
     };
 
     applyFit();

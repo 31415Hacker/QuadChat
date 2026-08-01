@@ -128,7 +128,7 @@ input {
     var(--bg-page);
   display: flex;
   height: calc(var(--fit-height) / var(--fit-scale));
-  min-height: 100vh;
+  min-height: calc(var(--fit-height) / var(--fit-scale));
   padding: 28px;
   width: calc(var(--fit-width) / var(--fit-scale));
   zoom: var(--fit-scale);
@@ -155,12 +155,12 @@ input {
 
 .chat-panel {
   display: flex;
-  height: min(820px, calc(100vh - 56px));
+  height: calc(100% - 56px);
 }
 
 .chat-main {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -1325,6 +1325,7 @@ button:disabled {
   border-top: 1px solid var(--border-color);
   gap: 0;
   grid-template-columns: 1fr;
+  margin-top: auto;
 }
 
 .reply-composer {
@@ -1932,90 +1933,61 @@ button:disabled {
   background: var(--bg-hover);
 }
 
-@media (max-width: 640px) {
-  .app-shell {
-    padding: 0;
-  }
-
-  .chat-panel {
-    border: 0;
-    border-radius: 0;
-    height: 100vh;
-    max-width: none;
-    width: 100%;
-  }
-
-  .chat-header {
-    align-items: flex-start;
-    gap: 12px;
-    padding: 18px;
-  }
-
-  .chat-title {
-    gap: 12px;
-  }
-
-  .icon-text-button span {
-    display: none;
-  }
-
-  .profile-menu {
-    right: 0;
-  }
-
-  .settings-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .key-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .signin-panel {
-    border: 0;
-    border-radius: 0;
-    min-height: 100vh;
-    place-content: center;
-  }
-
-  .message {
-    max-width: 88%;
-  }
-
-  .message-menu-button {
-    opacity: 1;
-  }
-
-  .users-sidebar {
-    display: none;
-  }
+.compact .app-shell {
+  padding: 0;
 }
 
-body.fit-scaled .app-shell {
-  padding: 28px;
+.compact .chat-panel {
+  border: 0;
+  border-radius: 0;
+  height: 100%;
+  max-width: none;
+  width: 100%;
 }
 
-body.fit-scaled .chat-panel {
-  border: 1px solid var(--bg-panel-border);
-  border-radius: 8px;
-  height: calc(100% - 56px);
-  max-width: 960px;
-  width: min(100%, 960px);
+.compact .chat-header {
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
 }
 
-body.fit-scaled .signin-panel {
-  border: 1px solid var(--bg-panel-border);
-  border-radius: 8px;
-  min-height: 0;
-  place-content: unset;
+.compact .chat-title {
+  gap: 12px;
 }
 
-body.fit-scaled .users-sidebar {
-  display: flex;
+.compact .icon-text-button span {
+  display: none;
 }
 
-body.fit-scaled .icon-text-button span {
-  display: inline;
+.compact .profile-menu {
+  right: 0;
+}
+
+.compact .settings-actions {
+  grid-template-columns: 1fr;
+}
+
+.compact .key-actions {
+  grid-template-columns: 1fr;
+}
+
+.compact .signin-panel {
+  border: 0;
+  border-radius: 0;
+  min-height: 100%;
+  place-content: center;
+}
+
+.compact .message {
+  max-width: 88%;
+}
+
+.compact .message-menu-button {
+  opacity: 1;
+}
+
+.compact .users-sidebar {
+  display: none;
 }
 
 .status-modal {
