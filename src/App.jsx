@@ -325,6 +325,16 @@ function getRelativeTime(timestamp) {
 
 const VIDEO_EXT_REGEX = /\.(mp4|webm|mov|avi|mkv|ogg|wmv|flv)$/i;
 
+function safeUrl(str) {
+  if (typeof str !== "string" || !str.trim()) return "";
+  try {
+    const url = new URL(str);
+    return url.protocol === "http:" || url.protocol === "https:" ? str : "";
+  } catch {
+    return "";
+  }
+}
+
 function isVideoUrl(str) {
   try {
     const url = new URL(str);
@@ -4320,7 +4330,7 @@ export default function App() {
                             className="message-video"
                           >
                             <source
-                              src={item.text}
+                              src={safeUrl(item.text)}
                               type={item.fileType}
                             />
                           </video>
@@ -4328,22 +4338,22 @@ export default function App() {
                           <audio
                             controls
                             className="message-audio"
-                            src={item.text}
+                            src={safeUrl(item.text)}
                           >
                             <source
-                              src={item.text}
+                              src={safeUrl(item.text)}
                               type={item.fileType}
                             />
                           </audio>
                         ) : (
                           <a
                             className="message-image-link"
-                            href={item.text}
+                            href={safeUrl(item.text)}
                             rel="noreferrer"
                             target="_blank"
                           >
                             <img
-                              src={item.text}
+                              src={safeUrl(item.text)}
                               alt={item.fileName || "Uploaded image"}
                             />
                           </a>
@@ -4361,12 +4371,12 @@ export default function App() {
                             attachment.type?.startsWith("image/") ? (
                               <a
                                 className="message-image-link"
-                                href={attachment.url}
+                                href={safeUrl(attachment.url)}
                                 key={attachment.path || attachment.url}
                                 rel="noreferrer"
                                 target="_blank"
                               >
-                                <img src={attachment.url} alt={attachment.name} />
+                                <img src={safeUrl(attachment.url)} alt={attachment.name} />
                               </a>
                             ) : attachment.type?.startsWith("video/") ? (
                               <video
@@ -4375,14 +4385,14 @@ export default function App() {
                                 key={attachment.path || attachment.url}
                               >
                                 <source
-                                  src={attachment.url}
+                                  src={safeUrl(attachment.url)}
                                   type={attachment.type}
                                 />
                               </video>
                             ) : (
                               <a
                                 className="message-file-link"
-                                href={attachment.viewUrl || attachment.url}
+                                href={safeUrl(attachment.viewUrl || attachment.url)}
                                 key={attachment.path || attachment.url}
                                 rel="noreferrer"
                                 target="_blank"

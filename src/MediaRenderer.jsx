@@ -5,9 +5,21 @@ import { FileText, File, Download, X } from "lucide-react";
 pdfjs.GlobalWorkerOptions.workerSrc =
   `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
 
+function safeUrl(str) {
+  if (typeof str !== "string" || !str.trim()) return "";
+  try {
+    const url = new URL(str);
+    return url.protocol === "http:" || url.protocol === "https:" ? str : "";
+  } catch {
+    return "";
+  }
+}
+
 export default function MediaRenderer({ url, fileName, fileType }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [numPages, setNumPages] = useState(null);
+
+  const safeMediaUrl = safeUrl(url);
 
   const onDocumentLoadSuccess = useCallback(({ numPages: n }) => {
     setNumPages(n);
@@ -15,8 +27,8 @@ export default function MediaRenderer({ url, fileName, fileType }) {
 
   if (fileType?.startsWith("image/")) {
     return (
-      <a href={url} rel="noreferrer" target="_blank" className="block max-w-md">
-        <img src={url} alt={fileName} className="rounded-lg w-full h-auto object-cover max-h-80" />
+      <a href={safeMediaUrl} rel="noreferrer" target="_blank" className="block max-w-md">
+        <img src={safeMediaUrl} alt={fileName} className="rounded-lg w-full h-auto object-cover max-h-80" />
       </a>
     );
   }
@@ -24,7 +36,7 @@ export default function MediaRenderer({ url, fileName, fileType }) {
   if (fileType === "video/mp4" || fileType === "video/quicktime") {
     return (
       <video controls className="rounded-lg max-w-md w-full max-h-80 bg-black">
-        <source src={url} type={fileType} />
+        <source src={safeMediaUrl} type={fileType} />
       </video>
     );
   }
@@ -61,7 +73,7 @@ export default function MediaRenderer({ url, fileName, fileType }) {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center gap-4">
-                <Document file={url} onLoadSuccess={onDocumentLoadSuccess}>
+                <Document file={safeMediaUrl} onLoadSuccess={onDocumentLoadSuccess}>
                   {Array.from({ length: numPages || 1 }, (_, i) => (
                     <Page
                       key={i}
@@ -77,7 +89,7 @@ export default function MediaRenderer({ url, fileName, fileType }) {
               <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 text-xs text-gray-500">
                 <span>{numPages ? `${numPages} page${numPages > 1 ? "s" : ""}` : "Loading..."}</span>
                 <a
-                  href={url}
+                  href={safeMediaUrl}
                   download={fileName}
                   className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-medium"
                 >
@@ -94,7 +106,7 @@ export default function MediaRenderer({ url, fileName, fileType }) {
 
   return (
     <a
-      href={url}
+      href={safeMediaUrl}
       download={fileName}
       className="inline-flex items-center gap-2 px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
     >
