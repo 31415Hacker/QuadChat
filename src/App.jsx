@@ -53,6 +53,7 @@ import {
 import {
   Bell,
   BellOff,
+  CheckCheck,
   Chrome,
   CircleUserRound,
   Clock,
@@ -482,6 +483,34 @@ function getReplyPreview(text) {
   return `${cleanText.slice(0, 87)}...`;
 }
 
+function isMentionOf(text, myName) {
+  if (!text || !myName) return false;
+  const normalized = normalizeName(myName);
+  if (!normalized) return false;
+  return String(text)
+    .split(/\s+/)
+    .some((part) => {
+      if (!part.startsWith("@")) return false;
+      const mention = normalizeName(part);
+      return mention === "everyone" || mention === normalized;
+    });
+}
+
+function isFreshMessage(data, maxAgeMs = 30000) {
+  return Boolean(data?.createdAt?.toMillis) &&
+    Date.now() - data.createdAt.toMillis() < maxAgeMs;
+}
+
+function timeAgo(timestamp) {
+  const diff = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 function getFilePreview(file) {
   return file.type.startsWith("image/") || file.type.startsWith("video/")
     ? URL.createObjectURL(file)
@@ -727,6 +756,15 @@ export default function App() {
   const isNearBottomRef = useRef(true);
   const knownMessageIdsRef = useRef(new Set());
   const hasLoadedMessagesRef = useRef(false);
+  const [inAppNotifications, setInAppNotifications] = useState([]);
+  const [inAppToasts, setInAppToasts] = useState([]);
+  const [isNotificationPanelOpen, setNotificationPanelOpen] = useState(false);
+  const notificationPanelRef = useRef(null);
+  const knownMessageIdsByChannelRef = useRef(new Map());
+  const notificationIdsRef = useRef(new Set());
+  const toastIdsRef = useRef(new Set());
+  const toastTimersRef = useRef(new Map());
+  const activeNameRef = useRef("");
   const prevOnlineRef = useRef({});
   const hasSyncedOnlineRef = useRef(false);
 
@@ -825,6 +863,95 @@ export default function App() {
     CHANNELS.find((c) => c.id === activeChannel)?.label ||
     dmPartnerName ||
     activeChannel;
+
+  const dismissToast = (id) => {
+    setInAppToasts((prev) => prev.filter((toast) => toast.id !== id));
+    if (toastTimersRef.current.has(id)) {
+      window.clearTimeout(toastTimersRef.current.get(id));
+      toastTimersRef.current.delete(id);
+    }
+  };
+
+  const pushInAppNotification = ({
+    type,
+    channelId,
+    channelLabel,
+    senderName,
+    body,
+    id
+  }) => {
+    const notificationId =
+      id ||
+      `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    if (notificationIdsRef.current.has(notificationId)) return;
+    notificationIdsRef.current.add(notificationId);
+    setInAppNotifications((prev) =>
+      [
+        {
+          id: notificationId,
+          type,
+          channelId,
+          channelLabel,
+          senderName,
+          body,
+          createdAt: Date.now(),
+          read: false
+        },
+        ...prev
+      ].slice(0, 100)
+    );
+    if (document.visibilityState === "visible" && !toastIdsRef.current.has(notificationId)) {
+      toastIdsRef.current.add(notificationId);
+      setInAppToasts((prev) =>
+        [...prev, { id: notificationId, type, channelId, channelLabel, senderName, body }].slice(-3)
+      );
+      const timer = window.setTimeout(() => dismissToast(notificationId), 6000);
+      toastTimersRef.current.set(notificationId, timer);
+    }
+  };
+
+  const markAllNotificationsRead = () => {
+    setInAppNotifications((prev) =>
+      prev.map((n) => ({ ...n, read: true }))
+    );
+  };
+
+  const scrollToBottomOfMessages = () => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  const openNotification = (notification) => {
+    setInAppNotifications((prev) =>
+      prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
+    );
+    setNotificationPanelOpen(false);
+    if (notification.channelId) {
+      if (notification.channelId === activeChannelRef.current) {
+        scrollToBottomOfMessages();
+      } else {
+        setActiveChannel(notification.channelId);
+      }
+    }
+  };
+
+  const openToast = (toast) => {
+    dismissToast(toast.id);
+    if (toast.channelId) {
+      if (toast.channelId === activeChannelRef.current) {
+        scrollToBottomOfMessages();
+      } else {
+        setActiveChannel(toast.channelId);
+      }
+    }
+  };
+
+  const unreadNotificationCount = inAppNotifications.filter((n) => !n.read).length;
+
+  const dmChannelIdsKey = useMemo(
+    () => dmChannels.map((dm) => dm.id).sort().join("|"),
+    [dmChannels]
+  );
 
   async function openDm(userId) {
     if (!sessionUserId || !userId || userId === sessionUserId) return;
@@ -1176,7 +1303,8 @@ export default function App() {
   useEffect(() => {
     profilesRef.current = profiles;
     activeChannelRef.current = activeChannel;
-  }, [profiles, activeChannel]);
+    activeNameRef.current = activeName;
+  }, [profiles, activeChannel, activeName]);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
@@ -1230,6 +1358,14 @@ export default function App() {
               tag: `incoming-call-${callKey}`,
             });
           }
+          pushInAppNotification({
+            type: "call",
+            channelId: null,
+            channelLabel: null,
+            senderName: data.callerName,
+            body: "is calling you",
+            id: `call-${callKey}`
+          });
           setIncomingCall({ key: callKey, ...data });
         } else {
           console.log(`[CALL-STATUS] clearing incoming call for key=${callKey} reason=${!currentStatus ? "no-status" : currentStatus !== "calling" ? "not-calling" : "busy-or-expired"}`);
@@ -1525,6 +1661,25 @@ export default function App() {
   }, [showAttachMenu]);
 
   useEffect(() => {
+    if (!isNotificationPanelOpen) return;
+    function handleClick(e) {
+      if (notificationPanelRef.current && !notificationPanelRef.current.contains(e.target)) {
+        setNotificationPanelOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [isNotificationPanelOpen]);
+
+  useEffect(
+    () => () => {
+      toastTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      toastTimersRef.current.clear();
+    },
+    []
+  );
+
+  useEffect(() => {
     pendingFilesRef.current = pendingFiles;
   }, [pendingFiles]);
 
@@ -1561,36 +1716,55 @@ export default function App() {
       notificationPermission === "granted" &&
       (document.hidden || !document.hasFocus());
 
-    if (shouldNotify) {
-      messages
-        .filter(
-          (item) =>
-            !knownMessageIdsRef.current.has(item.id) &&
-            item.userId !== sessionUserId
-        )
-        .forEach((item) => {
-          const senderProfile = profiles[item.userId];
-          const senderName = getProfileName(senderProfile, "Someone");
+    messages
+      .filter(
+        (item) =>
+          !knownMessageIdsRef.current.has(item.id) &&
+          item.userId !== sessionUserId
+      )
+      .forEach((item) => {
+        const senderProfile = profiles[item.userId];
+        const senderName = getProfileName(senderProfile, "Someone");
+        const body = getReplyPreview(
+          item.text ||
+            (item.isFile
+              ? "Sent a file"
+              : item.attachments?.length > 0
+                ? "Sent an attachment"
+                : "Sent a message")
+        );
+        const isMention = isMentionOf(item.text, activeName);
+        const messageVisible =
+          !document.hidden && document.hasFocus() && isNearBottomRef.current;
+
+        if (isFreshMessage(item) && (!messageVisible || isMention)) {
+          pushInAppNotification({
+            type: isMention ? "mention" : "message",
+            channelId: activeChannel,
+            channelLabel: activeChannelLabel,
+            senderName,
+            body,
+            id: `msg-${activeChannel}-${item.id}`
+          });
+        }
+
+        if (shouldNotify) {
           const notification = new Notification(`QuadChat: ${senderName}`, {
-            body: getReplyPreview(
-              item.text ||
-                (item.isFile
-                  ? "Sent a file"
-                  : item.attachments?.length > 0
-                    ? "Sent an attachment"
-                    : "Sent a message")
-            ),
+            body,
             icon: notificationIcon,
             tag: `quadchat-${item.id}`
           });
 
           window.setTimeout(() => notification.close(), 7000);
-        });
-    }
+        }
+      });
 
     knownMessageIdsRef.current = nextKnownIds;
   }, [
     messages,
+    activeChannel,
+    activeChannelLabel,
+    activeName,
     notificationPermission,
     notificationsEnabled,
     profiles,
@@ -1601,6 +1775,75 @@ export default function App() {
   useEffect(() => {
     return () => { cleanupGroupCall(); };
   }, []);
+
+  useEffect(() => {
+    if (!user || !sessionUserId) return;
+
+    const watcherChannels = [
+      ...CHANNELS.map((channel) => ({ id: channel.id, label: channel.label })),
+      ...dmChannels.map((dm) => ({
+        id: dm.id,
+        label: getDmPartnerName(dm, profilesRef.current, sessionUserId)
+      }))
+    ];
+
+    const unsubs = watcherChannels.map(({ id: channelId, label: channelLabel }) => {
+      const tailQuery = query(
+        messagesRef(channelId),
+        orderBy("createdAt", "desc"),
+        limit(10)
+      );
+      return onSnapshot(
+        tailQuery,
+        (snap) => {
+          const known = knownMessageIdsByChannelRef.current.get(channelId);
+          if (!known) {
+            knownMessageIdsByChannelRef.current.set(
+              channelId,
+              new Set(snap.docs.map((messageDoc) => messageDoc.id))
+            );
+            return;
+          }
+          let changed = false;
+          snap.docs.forEach((messageDoc) => {
+            if (known.has(messageDoc.id)) return;
+            const data = messageDoc.data();
+            if (!data || data.userId === sessionUserId || !isFreshMessage(data)) return;
+            known.add(messageDoc.id);
+            changed = true;
+            const senderName = getProfileName(
+              profilesRef.current[data.userId],
+              "Someone"
+            );
+            const body = getReplyPreview(
+              data.text ||
+                (data.isFile
+                  ? "Sent a file"
+                  : data.attachments?.length > 0
+                    ? "Sent an attachment"
+                    : "Sent a message")
+            );
+            const isMention = isMentionOf(data.text, activeNameRef.current);
+            if (channelId === activeChannelRef.current && !isMention) return;
+            pushInAppNotification({
+              type: isMention ? "mention" : "message",
+              channelId,
+              channelLabel,
+              senderName,
+              body,
+              id: `msg-${channelId}-${messageDoc.id}`
+            });
+          });
+          if (changed) {
+            knownMessageIdsByChannelRef.current.set(channelId, known);
+          }
+        },
+        () => {}
+      );
+    });
+
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [user, sessionUserId, dmChannelIdsKey]);
 
   async function handleAuth(event) {
     event.preventDefault();
@@ -1980,6 +2223,14 @@ export default function App() {
           if (typeof Notification !== "undefined") {
             try { new Notification("QuadChat", { body: `${calleeName} has ended the call.` }); } catch (_) {}
           }
+          pushInAppNotification({
+            type: "call",
+            channelId: null,
+            channelLabel: null,
+            senderName: calleeName,
+            body: "has ended the call",
+            id: `call-end-${callRef.key}`
+          });
           console.log("[CALL-START] cancel listener → cleanupCall");
           cleanupCall();
         }
@@ -2161,6 +2412,14 @@ export default function App() {
           if (typeof Notification !== "undefined") {
             try { new Notification("QuadChat", { body: `${incomingCall.callerName} has ended the call.` }); } catch (_) {}
           }
+          pushInAppNotification({
+            type: "call",
+            channelId: null,
+            channelLabel: null,
+            senderName: incomingCall.callerName,
+            body: "has ended the call",
+            id: `call-end-${callRef.key}`
+          });
           console.log("[CALL-ANSWER] cancel listener → cleanupCall");
           cleanupCall();
         }
@@ -2628,6 +2887,14 @@ export default function App() {
           if (typeof Notification !== "undefined") {
             try { new Notification("QuadChat", { body: `${displayName} has left the group call.` }); } catch (_) {}
           }
+          pushInAppNotification({
+            type: "call",
+            channelId: null,
+            channelLabel: null,
+            senderName: displayName,
+            body: "has left the group call",
+            id: `call-leave-${callKey}-${uid}`
+          });
           setP2pGroupCallParticipants((prev) => {
             const { [uid]: _, ...rest } = prev;
             return rest;
@@ -4069,6 +4336,66 @@ export default function App() {
             </span>
           </button>
           ) : null}
+          <div className="notif-bell" ref={notificationPanelRef}>
+            <button
+              className="icon-text-button notif-bell-button"
+              aria-label="Notifications"
+              aria-expanded={isNotificationPanelOpen}
+              type="button"
+              onClick={() => setNotificationPanelOpen((isOpen) => !isOpen)}
+              title="Notifications"
+            >
+              <Bell size={18} />
+              <span>Notifications</span>
+              {unreadNotificationCount > 0 ? (
+                <span className="notif-badge">{unreadNotificationCount}</span>
+              ) : null}
+            </button>
+            {isNotificationPanelOpen ? (
+              <div className="notif-panel" aria-label="Notifications">
+                <div className="notif-panel-header">
+                  <strong>Notifications</strong>
+                  {unreadNotificationCount > 0 ? (
+                    <button type="button" onClick={markAllNotificationsRead}>
+                      <CheckCheck size={14} />
+                      <span>Mark all read</span>
+                    </button>
+                  ) : null}
+                </div>
+                {inAppNotifications.length === 0 ? (
+                  <div className="notif-empty">No notifications yet.</div>
+                ) : (
+                  inAppNotifications.map((notification) => (
+                    <button
+                      className={`notif-item ${notification.read ? "" : "notif-item-unread"}`}
+                      key={notification.id}
+                      type="button"
+                      onClick={() => openNotification(notification)}
+                    >
+                      <span className={`notif-item-icon notif-item-icon-${notification.type}`}>
+                        {notification.type === "call" ? (
+                          <Phone size={15} />
+                        ) : notification.type === "mention" ? (
+                          <MessageCircle size={15} />
+                        ) : (
+                          <Users size={15} />
+                        )}
+                      </span>
+                      <span className="notif-item-text">
+                        <strong>{notification.channelLabel || notification.senderName}</strong>
+                        <span>
+                          {notification.type === "call"
+                            ? `${notification.senderName} ${notification.body}`
+                            : `${notification.senderName}: ${notification.body}`}
+                        </span>
+                        <small>{timeAgo(notification.createdAt)}</small>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
           <button
             className="icon-text-button"
             type="button"
@@ -5578,6 +5905,54 @@ export default function App() {
               </button>
             </div>
           </section>
+        </div>
+      ) : null}
+      {inAppToasts.length > 0 ? (
+        <div className="toast-container" role="status" aria-live="polite">
+          {inAppToasts.map((toast) => (
+            <button
+              className={`toast toast-${toast.type}`}
+              key={toast.id}
+              type="button"
+              onClick={() => openToast(toast)}
+            >
+              <span className="toast-icon">
+                {toast.type === "call" ? (
+                  <Phone size={16} />
+                ) : toast.type === "mention" ? (
+                  <MessageCircle size={16} />
+                ) : (
+                  <Users size={16} />
+                )}
+              </span>
+              <span className="toast-text">
+                <strong>{toast.channelLabel || toast.senderName}</strong>
+                <span>
+                  {toast.type === "call"
+                    ? `${toast.senderName} ${toast.body}`
+                    : `${toast.senderName}: ${toast.body}`}
+                </span>
+              </span>
+              <span
+                className="toast-close"
+                role="button"
+                tabIndex={0}
+                title="Dismiss"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  dismissToast(toast.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.stopPropagation();
+                    dismissToast(toast.id);
+                  }
+                }}
+              >
+                <X size={14} />
+              </span>
+            </button>
+          ))}
         </div>
       ) : null}
     </main>
