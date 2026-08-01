@@ -1,5 +1,6 @@
 /* ========== Theme Variables (default: dark) ========== */
 :root {
+  --fit-scale: 1;
   --bg-page: #0a0f0e;
   --bg-panel: rgba(16, 24, 22, 0.96);
   --bg-panel-border: rgba(60, 85, 78, 0.18);
@@ -109,6 +110,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 button,
@@ -123,8 +125,12 @@ input {
     linear-gradient(315deg, rgba(222, 101, 77, 0.14), transparent 36%),
     var(--bg-page);
   display: flex;
+  height: calc(100vh / var(--fit-scale));
   min-height: 100vh;
   padding: 28px;
+  transform: scale(var(--fit-scale));
+  transform-origin: top left;
+  width: calc(100vw / var(--fit-scale));
 }
 
 .chat-panel,
@@ -1962,6 +1968,33 @@ button:disabled {
   .users-sidebar {
     display: none;
   }
+}
+
+body.fit-scaled .app-shell {
+  padding: 28px;
+}
+
+body.fit-scaled .chat-panel {
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 8px;
+  height: calc(100% - 56px);
+  max-width: 960px;
+  width: min(100%, 960px);
+}
+
+body.fit-scaled .signin-panel {
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 8px;
+  min-height: 0;
+  place-content: unset;
+}
+
+body.fit-scaled .users-sidebar {
+  display: flex;
+}
+
+body.fit-scaled .icon-text-button span {
+  display: inline;
 }
 
 .status-modal {

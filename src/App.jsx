@@ -1015,6 +1015,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const DESIGN_WIDTH = 1016;
+    const DESIGN_HEIGHT = 876;
+
+    const applyFitScale = () => {
+      const scale = Math.min(
+        1,
+        window.innerWidth / DESIGN_WIDTH,
+        window.innerHeight / DESIGN_HEIGHT
+      );
+      document.documentElement.style.setProperty("--fit-scale", scale.toFixed(6));
+      document.body.classList.toggle("fit-scaled", scale < 1);
+    };
+
+    applyFitScale();
+    window.addEventListener("resize", applyFitScale);
+    window.addEventListener("orientationchange", applyFitScale);
+    return () => {
+      window.removeEventListener("resize", applyFitScale);
+      window.removeEventListener("orientationchange", applyFitScale);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
 
     const uid = user.uid;
