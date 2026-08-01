@@ -110,7 +110,7 @@ service cloud.firestore {
 
     // Direct Messages
     match /dms/{dmId} {
-      allow read: if signedIn() && request.auth.uid in resource.data.participants;
+      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.participants);
 
       allow create: if signedIn()
         && request.resource.data.participants is list
