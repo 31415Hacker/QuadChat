@@ -57,7 +57,9 @@ service cloud.firestore {
 
     function dmParticipants(channel) {
       let path = /databases/$(database)/documents/dms/$(channel);
-      return exists(path) ? get(path).data.participants : [];
+      return exists(path) && get(path).data.participants is list
+        ? get(path).data.participants
+        : [];
     }
 
     function isDmParticipant(channel) {
@@ -119,8 +121,7 @@ service cloud.firestore {
 
       allow update: if signedIn()
         && request.auth.uid in resource.data.participants
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["names", "lastMessage", "lastSenderId", "updatedAt"])
-        && request.resource.data.participants == resource.data.participants;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["names", "lastMessage", "lastSenderId", "updatedAt"]);
     }
 
     // User Profiles

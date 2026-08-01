@@ -109,9 +109,12 @@ function dmChannelId(uidA, uidB) {
   return `dm_${[uidA, uidB].sort().join("_")}`;
 }
 
-function dmPartnerId(channelId, sessionUserId) {
+function dmPartnerId(channelId, sessionUserId, dm) {
   if (!isDmChannelId(channelId)) return "";
-  return channelId.split("_").find((uid) => uid !== sessionUserId) || "";
+  if (Array.isArray(dm?.participants)) {
+    return dm.participants.find((uid) => uid !== sessionUserId) || "";
+  }
+  return channelId.slice(3).split("_").find((uid) => uid !== sessionUserId) || "";
 }
 
 const usersRef = collection(db, "users");
@@ -251,7 +254,7 @@ function getProfileName(profile, fallback = "Anonymous") {
 
 function getDmPartnerName(dm, profiles, sessionUserId) {
   if (!dm?.id) return "";
-  const partnerId = dmPartnerId(dm.id, sessionUserId);
+  const partnerId = dmPartnerId(dm.id, sessionUserId, dm);
   if (!partnerId) return "";
   return (
     getProfileName(profiles[partnerId], "") ||
@@ -808,7 +811,7 @@ export default function App() {
   const activeDm = dmChannels.find((dm) => dm.id === activeChannel) || null;
   const dmPartnerName = useMemo(() => {
     if (!isDmChannelId(activeChannel)) return "";
-    const partnerId = dmPartnerId(activeChannel, sessionUserId);
+    const partnerId = dmPartnerId(activeChannel, sessionUserId, activeDm);
     if (!partnerId) return "";
     return (
       getProfileName(profiles[partnerId], "") ||
@@ -847,11 +850,10 @@ export default function App() {
 
   async function updateDmMetadata(lastMessage) {
     if (!isDmChannelId(activeChannel) || !sessionUserId) return;
-    const partnerId = dmPartnerId(activeChannel, sessionUserId);
+    const partnerId = dmPartnerId(activeChannel, sessionUserId, activeDm);
     await setDoc(
       doc(db, "dms", activeChannel),
       {
-        participants: [sessionUserId, partnerId].sort(),
         names: {
           [sessionUserId]: activeName,
           [partnerId]: getProfileName(profiles[partnerId], "Unknown")
