@@ -154,15 +154,16 @@ input {
 }
 
 .chat-panel {
+  align-self: stretch;
   display: flex;
-  height: calc(100% - 56px);
 }
 
 .chat-main {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  min-width: 0;
   flex: 1 1 auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .chat-header,
@@ -1941,7 +1942,6 @@ button:disabled {
 .compact .chat-panel {
   border: 0;
   border-radius: 0;
-  height: 100%;
   max-width: none;
   width: 100%;
 }
