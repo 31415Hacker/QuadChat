@@ -1382,7 +1382,22 @@ export default function App() {
         (snap) => {
           if (cancelled) return;
           snap.docChanges().forEach((change) => {
-            if (change.type === "modified") {
+            if (change.type === "added") {
+              const msg = {
+                id: change.doc.id,
+                ...change.doc.data()
+              };
+              setMessages((prev) => {
+                const existingIndex = prev.findIndex((m) => m.id === msg.id);
+                if (existingIndex === -1) {
+                  const next = [...prev, msg];
+                  return next.length > MAX_MESSAGES
+                    ? next.slice(next.length - MAX_MESSAGES)
+                    : next;
+                }
+                return prev;
+              });
+            } else if (change.type === "modified") {
               const msg = {
                 id: change.doc.id,
                 ...change.doc.data()
