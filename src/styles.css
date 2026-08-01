@@ -1656,6 +1656,7 @@ button:disabled {
 }
 
 .users-sidebar {
+  align-self: stretch;
   background: var(--bg-sidebar);
   border-left: 1px solid var(--border-color);
   display: flex;
@@ -1984,10 +1985,6 @@ button:disabled {
 
 .compact .message-menu-button {
   opacity: 1;
-}
-
-.compact .users-sidebar {
-  display: none;
 }
 
 .status-modal {
