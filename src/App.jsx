@@ -625,6 +625,11 @@ export default function App() {
     const stored = localStorage.getItem("quadchat-show-version");
     return stored === "true";
   });
+  const [uiScale, setUiScale] = useState(() => {
+    const stored = localStorage.getItem("quadchat-ui-scale");
+    const value = Number(stored);
+    return stored && value >= 100 && value <= 300 ? value : 100;
+  });
   const [settingsName, setSettingsName] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
@@ -1018,24 +1023,29 @@ export default function App() {
     const DESIGN_WIDTH = 1016;
     const DESIGN_HEIGHT = 876;
 
-    const applyFitScale = () => {
-      const scale = Math.min(
+    const applyFit = () => {
+      const fitScale = Math.min(
         1,
         window.innerWidth / DESIGN_WIDTH,
         window.innerHeight / DESIGN_HEIGHT
       );
-      document.documentElement.style.setProperty("--fit-scale", scale.toFixed(6));
-      document.body.classList.toggle("fit-scaled", scale < 1);
+      const effective = Math.min(fitScale * (uiScale / 100), 3);
+      const root = document.documentElement;
+      root.style.setProperty("--fit-scale", effective.toFixed(6));
+      root.style.setProperty("--fit-width", `${window.innerWidth}px`);
+      root.style.setProperty("--fit-height", `${window.innerHeight}px`);
+      document.body.classList.toggle("fit-scaled", fitScale < 1);
+      document.body.style.overflow = effective > 1 ? "auto" : "hidden";
     };
 
-    applyFitScale();
-    window.addEventListener("resize", applyFitScale);
-    window.addEventListener("orientationchange", applyFitScale);
+    applyFit();
+    window.addEventListener("resize", applyFit);
+    window.addEventListener("orientationchange", applyFit);
     return () => {
-      window.removeEventListener("resize", applyFitScale);
-      window.removeEventListener("orientationchange", applyFitScale);
+      window.removeEventListener("resize", applyFit);
+      window.removeEventListener("orientationchange", applyFit);
     };
-  }, []);
+  }, [uiScale]);
 
   useEffect(() => {
     if (!user) return;
@@ -1086,6 +1096,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("quadchat-show-version", showVersionInHeader ? "true" : "false");
   }, [showVersionInHeader]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-ui-scale", String(uiScale));
+  }, [uiScale]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -5733,6 +5747,31 @@ export default function App() {
                     <p className="settings-section-desc">
                       Options for a more accessible experience.
                     </p>
+
+                    <section className="settings-section-box">
+                      <div>
+                        <h3>
+                          UI scale
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
+                        <p>
+                          Adjust the interface size. 100% fits the app to your
+                          screen; higher values make it larger.
+                        </p>
+                      </div>
+                      <label className="scale-row">
+                        <input
+                          aria-label="UI scale"
+                          max="300"
+                          min="100"
+                          onChange={(event) => setUiScale(Number(event.target.value))}
+                          step="25"
+                          type="range"
+                          value={uiScale}
+                        />
+                        <output>{uiScale}%</output>
+                      </label>
+                    </section>
 
                     <section className="settings-section-box">
                       <div>

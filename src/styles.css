@@ -1,6 +1,8 @@
 /* ========== Theme Variables (default: dark) ========== */
 :root {
   --fit-scale: 1;
+  --fit-width: 100vw;
+  --fit-height: 100vh;
   --bg-page: #0a0f0e;
   --bg-panel: rgba(16, 24, 22, 0.96);
   --bg-panel-border: rgba(60, 85, 78, 0.18);
@@ -125,12 +127,11 @@ input {
     linear-gradient(315deg, rgba(222, 101, 77, 0.14), transparent 36%),
     var(--bg-page);
   display: flex;
-  height: calc(100vh / var(--fit-scale));
+  height: calc(var(--fit-height) / var(--fit-scale));
   min-height: 100vh;
   padding: 28px;
-  transform: scale(var(--fit-scale));
-  transform-origin: top left;
-  width: calc(100vw / var(--fit-scale));
+  width: calc(var(--fit-width) / var(--fit-scale));
+  zoom: var(--fit-scale);
 }
 
 .chat-panel,
@@ -830,6 +831,26 @@ button:disabled {
 .toggle-row input {
   height: 18px;
   width: 18px;
+}
+
+.scale-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.scale-row input[type="range"] {
+  accent-color: var(--bg-accent);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.scale-row output {
+  color: var(--text-accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-width: 3.5em;
+  text-align: right;
 }
 
 .secure-banner {
