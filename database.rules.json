@@ -30,7 +30,14 @@
         // Only caller or callee can view or interact with the call object
         ".read": "auth != null && (data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid || !data.exists())",
         ".write": "auth != null && (!data.exists() && newData.child('callerId').val() === auth.uid || data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid)",
-        
+
+        // Caller/callee identities are locked after creation so they can't be rewritten
+        "callerId": {
+          ".validate": "!data.exists() || newData.val() === data.val()"
+        },
+        "calleeId": {
+          ".validate": "!data.exists() || newData.val() === data.val()"
+        },
         "status": {
           ".validate": "newData.isString()"
         },
@@ -60,12 +67,17 @@
         ".write": "auth != null",
         
         "participants": {
+          // Whole-map writes denied; users can only touch their own entry below
+          ".write": false,
           "$uid": {
             // Users can only add, modify, or remove their own participant entry
             ".write": "auth != null && auth.uid === $uid"
           }
         },
         "connections": {
+          // Only the per-pair node below grants access
+          ".read": false,
+          ".write": false,
           "$connId": {
             // Peer connection keys follow the 'uidA_uidB' pattern
             // Only participants in that pair can read/write candidates/SDP signals

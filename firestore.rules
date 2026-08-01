@@ -34,6 +34,11 @@ service cloud.firestore {
       );
     }
 
+    function isAdminEmail() {
+      return signedIn() && 'email' in request.auth.token &&
+        request.auth.token.email.lower() in ['ariqipraditya@gmail.com'];
+    }
+
     function isNotMuted() {
       return signedIn() && (
         !currentUserExists() ||
@@ -62,6 +67,7 @@ service cloud.firestore {
           "attachments", "isFile", "fileName", "fileType", "type",
           "title", "googleMeetLink", "note", "tableData", "name"
         ])
+        && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin())
         && (channel != "updates" || isDeveloper());
 
       allow update: if signedIn()
@@ -79,7 +85,8 @@ service cloud.firestore {
       allow create: if signedIn() && (
         isAdmin() || (
           userId == request.auth.uid &&
-          !request.resource.data.keys().hasOnly(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "id", "mutedUpdatedAt"])
+          (isAdminEmail() ||
+           !request.resource.data.keys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
         )
       );
 
