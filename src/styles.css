@@ -1702,6 +1702,84 @@ button:disabled {
   opacity: 0.55;
 }
 
+.dm-section-heading {
+  color: var(--text-tertiary);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin: 12px 4px 2px;
+  text-transform: uppercase;
+}
+
+.dm-tab-avatar {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 0.6rem;
+  font-weight: 800;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.channel-tab-new-dm {
+  color: var(--accent-green);
+  margin-top: 8px;
+}
+
+.new-dm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.new-dm-user {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.9rem;
+  gap: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.new-dm-user:hover {
+  background: var(--bg-hover);
+}
+
+.new-dm-avatar {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  display: flex;
+  flex: 0 0 28px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.new-dm-empty {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+  margin: 12px 0;
+  text-align: center;
+}
+
 .channel-description {
   align-items: center;
   background: var(--bg-hover);
@@ -2165,6 +2243,29 @@ button:disabled {
 }
 
 .user-call-btn:hover {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: var(--text-inverse);
+}
+
+.user-dm-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  width: 16px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.user-dm-btn:hover {
   background: var(--accent-green);
   border-color: var(--accent-green);
   color: var(--text-inverse);

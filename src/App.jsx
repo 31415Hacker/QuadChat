@@ -101,6 +101,19 @@ function messagesRef(channelId) {
   return collection(db, "messages", channelId, "messages");
 }
 
+function isDmChannelId(channelId) {
+  return typeof channelId === "string" && channelId.startsWith("dm_");
+}
+
+function dmChannelId(uidA, uidB) {
+  return `dm_${[uidA, uidB].sort().join("_")}`;
+}
+
+function dmPartnerId(channelId, sessionUserId) {
+  if (!isDmChannelId(channelId)) return "";
+  return channelId.split("_").find((uid) => uid !== sessionUserId) || "";
+}
+
 const usersRef = collection(db, "users");
 const appSettingsRef = doc(db, "settings", "app");
 const googleProvider = new GoogleAuthProvider();
@@ -234,6 +247,17 @@ function normalizeName(value) {
 
 function getProfileName(profile, fallback = "Anonymous") {
   return profile?.displayName?.trim() || profile?.email || fallback;
+}
+
+function getDmPartnerName(dm, profiles, sessionUserId) {
+  if (!dm?.id) return "";
+  const partnerId = dmPartnerId(dm.id, sessionUserId);
+  if (!partnerId) return "";
+  return (
+    getProfileName(profiles[partnerId], "") ||
+    dm.names?.[partnerId] ||
+    "Unknown"
+  );
 }
 
 function normalizeDisplayName(displayName, email) {
@@ -718,6 +742,8 @@ export default function App() {
   const muteLabel = getMuteLabel(currentProfile);
   const warningLabel = getWarningLabel(currentProfile);
   const [activeChannel, setActiveChannel] = useState("group");
+  const [dmChannels, setDmChannels] = useState([]);
+  const [showNewDm, setShowNewDm] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showGamingPost, setShowGamingPost] = useState(false);
   const [gamingPostCard, setGamingPostCard] = useState(null);
@@ -778,6 +804,65 @@ export default function App() {
     () => getProfileName(currentProfile, user?.displayName || user?.email || ""),
     [currentProfile, user]
   );
+
+  const activeDm = dmChannels.find((dm) => dm.id === activeChannel) || null;
+  const dmPartnerName = useMemo(() => {
+    if (!isDmChannelId(activeChannel)) return "";
+    const partnerId = dmPartnerId(activeChannel, sessionUserId);
+    if (!partnerId) return "";
+    return (
+      getProfileName(profiles[partnerId], "") ||
+      activeDm?.names?.[partnerId] ||
+      "Unknown"
+    );
+  }, [activeChannel, sessionUserId, profiles, activeDm]);
+
+  const activeChannelLabel =
+    CHANNELS.find((c) => c.id === activeChannel)?.label ||
+    dmPartnerName ||
+    activeChannel;
+
+  async function openDm(userId) {
+    if (!sessionUserId || !userId || userId === sessionUserId) return;
+    const dmId = dmChannelId(sessionUserId, userId);
+    try {
+      const existing = await getDoc(doc(db, "dms", dmId));
+      if (!existing.exists()) {
+        await setDoc(doc(db, "dms", dmId), {
+          participants: [sessionUserId, userId].sort(),
+          names: {
+            [sessionUserId]: activeName,
+            [userId]: getProfileName(profiles[userId], "Unknown")
+          },
+          lastMessage: "",
+          lastSenderId: sessionUserId,
+          updatedAt: serverTimestamp()
+        });
+      }
+      setActiveChannel(dmId);
+    } catch (firebaseError) {
+      setError(firebaseError.message);
+    }
+  }
+
+  async function updateDmMetadata(lastMessage) {
+    if (!isDmChannelId(activeChannel) || !sessionUserId) return;
+    const partnerId = dmPartnerId(activeChannel, sessionUserId);
+    await setDoc(
+      doc(db, "dms", activeChannel),
+      {
+        participants: [sessionUserId, partnerId].sort(),
+        names: {
+          [sessionUserId]: activeName,
+          [partnerId]: getProfileName(profiles[partnerId], "Unknown")
+        },
+        lastMessage,
+        lastSenderId: sessionUserId,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -917,6 +1002,38 @@ export default function App() {
 
     return unsubscribe;
   }, [user]);
+
+  useEffect(() => {
+    if (!sessionUserId) {
+      setDmChannels([]);
+      return undefined;
+    }
+
+    const dmQuery = query(
+      collection(db, "dms"),
+      where("participants", "array-contains", sessionUserId)
+    );
+
+    const unsubscribe = onSnapshot(
+      dmQuery,
+      (snapshot) => {
+        const channels = snapshot.docs.map((dmDoc) => ({
+          id: dmDoc.id,
+          ...dmDoc.data()
+        }));
+        channels.sort(
+          (a, b) =>
+            (b.updatedAt?.toDate?.() || 0) - (a.updatedAt?.toDate?.() || 0)
+        );
+        setDmChannels(channels);
+      },
+      (firebaseError) => {
+        setError(firebaseError.message);
+      }
+    );
+
+    return unsubscribe;
+  }, [sessionUserId]);
 
   useEffect(() => {
     if (!user) {
@@ -3296,6 +3413,9 @@ export default function App() {
 
     try {
       const url = await uploadToCloudinary(file);
+      if (isDmChannelId(activeChannel)) {
+        await updateDmMetadata("🎤 Voice message");
+      }
       await addDoc(messagesRef(activeChannel), {
         text: url,
         isFile: true,
@@ -3533,6 +3653,9 @@ export default function App() {
 
       if (cleanMessage) {
         const messageText = commandResult?.metadata?.notificationText || cleanMessage;
+        if (isDmChannelId(activeChannel)) {
+          await updateDmMetadata(messageText);
+        }
         await addDoc(messagesRef(activeChannel), {
           text: messageText,
           ...(commandResult?.metadata || {}),
@@ -3553,6 +3676,9 @@ export default function App() {
 
       for (const pendingFile of pendingFiles) {
         const url = await uploadToCloudinary(pendingFile.file);
+        if (isDmChannelId(activeChannel)) {
+          await updateDmMetadata(`📎 ${pendingFile.file.name}`);
+        }
         await addDoc(messagesRef(activeChannel), {
           text: url,
           isFile: true,
@@ -3847,6 +3973,41 @@ export default function App() {
                 <span>{channel.label}</span>
               </button>
             ))}
+            <button
+              className="channel-tab channel-tab-new-dm"
+              type="button"
+              onClick={() => setShowNewDm(true)}
+              title="Start a private conversation"
+            >
+              <Plus size={18} />
+              <span>New DM</span>
+            </button>
+            {dmChannels.length > 0 ? (
+              <>
+                <div className="dm-section-heading">Direct</div>
+                {dmChannels.map((dm) => {
+                  const partnerName = getDmPartnerName(dm, profiles, sessionUserId);
+                  return (
+                    <button
+                      aria-selected={activeChannel === dm.id}
+                      className={`channel-tab ${
+                        activeChannel === dm.id ? "active" : ""
+                      }`}
+                      key={dm.id}
+                      onClick={() => setActiveChannel(dm.id)}
+                      role="tab"
+                      type="button"
+                      title={partnerName}
+                    >
+                      <span className="dm-tab-avatar">
+                        {getInitials(partnerName)}
+                      </span>
+                      <span>{partnerName}</span>
+                    </button>
+                  );
+                })}
+              </>
+            ) : null}
           </div>
         </aside>
         <div className="chat-main">
@@ -3860,7 +4021,7 @@ export default function App() {
               <p>
                 Signed in as {activeName} · {messages.length} message
                 {messages.length === 1 ? "" : "s"} in{" "}
-                {CHANNELS.find((c) => c.id === activeChannel)?.label}
+                {activeChannelLabel}
               </p>
               {isCurrentUserDeveloper ? (
                 <span className="admin-badge">Developer</span>
@@ -3869,6 +4030,7 @@ export default function App() {
               ) : null}
             </div>
           </div>
+          {!isDmChannelId(activeChannel) ? (
           <button
             className={`icon-text-button ${groupCallStatus === "connected" || p2pGroupCallStatus === "connected" ? "group-call-active" : ""}`}
             type="button"
@@ -3886,6 +4048,7 @@ export default function App() {
                     : "Group call"}
             </span>
           </button>
+          ) : null}
           <button
             className="icon-text-button"
             type="button"
@@ -4084,6 +4247,44 @@ export default function App() {
                 >
                   Save
                 </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {showNewDm ? (
+          <div className="modal-backdrop" onClick={() => setShowNewDm(false)}>
+            <div className="status-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="status-modal-header">
+                <MessageCircle size={18} />
+                <span>Start a conversation</span>
+                <button className="modal-close" type="button" onClick={() => setShowNewDm(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="new-dm-list">
+                {Object.values(profiles)
+                  .filter((profile) => profile.id !== sessionUserId)
+                  .map((profile) => {
+                    const name = getProfileName(profile, profile.email || "Unknown");
+                    return (
+                      <button
+                        className="new-dm-user"
+                        key={profile.id}
+                        type="button"
+                        onClick={() => {
+                          openDm(profile.id);
+                          setShowNewDm(false);
+                        }}
+                      >
+                        <span className="new-dm-avatar">{getInitials(name)}</span>
+                        <span>{name}</span>
+                      </button>
+                    );
+                  })}
+                {Object.keys(profiles).filter((id) => id !== sessionUserId).length === 0 ? (
+                  <p className="new-dm-empty">No other users yet.</p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -4309,7 +4510,9 @@ export default function App() {
                     ? "No updates yet."
                     : activeChannel === "suggestions"
                       ? "No suggestions yet. Be the first!"
-                      : "No messages yet. Say hello when you are ready."}
+                      : isDmChannelId(activeChannel)
+                        ? `This is the beginning of your private conversation with ${dmPartnerName}.`
+                        : "No messages yet. Say hello when you are ready."}
                 </p>
               </div>
             ) : (
@@ -4542,6 +4745,16 @@ export default function App() {
                         {userActive ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
                       </span>
                     </div>
+                    {profile.id !== sessionUserId ? (
+                      <button
+                        className="user-dm-btn"
+                        type="button"
+                        onClick={() => openDm(profile.id)}
+                        title={`Message ${name}`}
+                      >
+                        <MessageCircle size={10} />
+                      </button>
+                    ) : null}
                     {profile.id !== sessionUserId && userActive && callStatus === "idle" ? (
                       <button
                         className="user-call-btn"
@@ -4791,7 +5004,11 @@ export default function App() {
                   set(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`), { isTyping: true, name: activeName, timestamp: now }).catch(() => {});
                 }}
                 onPaste={handleComposerPaste}
-                placeholder="Type a message"
+                placeholder={
+                  isDmChannelId(activeChannel)
+                    ? `Message ${dmPartnerName}`
+                    : "Type a message"
+                }
                 maxLength={500}
               />
             )}
