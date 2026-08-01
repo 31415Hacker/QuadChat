@@ -168,6 +168,15 @@ function formatDayLabel(timestamp) {
 
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days % 30 === 0) {
+    const months = days / 30;
+    return months === 1 ? "1 month ago" : `${months} months ago`;
+  }
+  if (days % 7 === 0) {
+    const weeks = days / 7;
+    return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+  }
   if (date.getFullYear() === now.getFullYear()) {
     return new Intl.DateTimeFormat(undefined, {
       weekday: "short",
