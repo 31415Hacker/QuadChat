@@ -1665,6 +1665,8 @@ button:disabled {
   flex: 0 0 240px;
   min-width: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 10;
 }
 
 .channel-sidebar {
