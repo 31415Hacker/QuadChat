@@ -172,6 +172,7 @@ function startOfDay(date) {
 }
 
 function dayKey(date) {
+  if (!date) return "";
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
@@ -1395,7 +1396,9 @@ export default function App() {
                     ? next.slice(next.length - MAX_MESSAGES)
                     : next;
                 }
-                return prev;
+                const next = prev.slice();
+                next[existingIndex] = { ...next[existingIndex], ...msg };
+                return next;
               });
             } else if (change.type === "modified") {
               const msg = {
