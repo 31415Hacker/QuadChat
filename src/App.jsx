@@ -625,6 +625,11 @@ export default function App() {
     const stored = localStorage.getItem("quadchat-show-version");
     return stored === "true";
   });
+  const [uiScale, setUiScale] = useState(() => {
+    const stored = localStorage.getItem("quadchat-ui-scale");
+    const value = Number(stored);
+    return stored && value >= 50 && value <= 100 ? value : 100;
+  });
   const [settingsName, setSettingsName] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
@@ -1063,6 +1068,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("quadchat-show-version", showVersionInHeader ? "true" : "false");
   }, [showVersionInHeader]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--ui-scale", (uiScale / 100).toFixed(4));
+  }, [uiScale]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-ui-scale", String(uiScale));
+  }, [uiScale]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -5710,6 +5724,31 @@ export default function App() {
                     <p className="settings-section-desc">
                       Options for a more accessible experience.
                     </p>
+
+                    <section className="settings-section-box">
+                      <div>
+                        <h3>
+                          UI scale
+                          <span className="tag tag-safe">Safe</span>
+                        </h3>
+                        <p>
+                          Shrinks the entire interface. 100% shows every part
+                          of the UI on screen at its default size.
+                        </p>
+                      </div>
+                      <label className="scale-row">
+                        <input
+                          aria-label="UI scale"
+                          max="100"
+                          min="50"
+                          onChange={(event) => setUiScale(Number(event.target.value))}
+                          step="5"
+                          type="range"
+                          value={uiScale}
+                        />
+                        <output>{uiScale}%</output>
+                      </label>
+                    </section>
 
                     <section className="settings-section-box">
                       <div>
