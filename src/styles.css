@@ -1,8 +1,5 @@
 /* ========== Theme Variables (default: dark) ========== */
 :root {
-  --fit-scale: 1;
-  --fit-width: 100vw;
-  --fit-height: 100vh;
   --bg-page: #0a0f0e;
   --bg-panel: rgba(16, 24, 22, 0.96);
   --bg-panel-border: rgba(60, 85, 78, 0.18);
@@ -127,11 +124,9 @@ input {
     linear-gradient(315deg, rgba(222, 101, 77, 0.14), transparent 36%),
     var(--bg-page);
   display: flex;
-  height: calc(var(--fit-height) / var(--fit-scale));
-  min-height: calc(var(--fit-height) / var(--fit-scale));
+  height: 100vh;
+  height: 100dvh;
   padding: 28px;
-  width: calc(var(--fit-width) / var(--fit-scale));
-  zoom: var(--fit-scale);
 }
 
 .chat-panel,
@@ -832,26 +827,6 @@ button:disabled {
 .toggle-row input {
   height: 18px;
   width: 18px;
-}
-
-.scale-row {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
-.scale-row input[type="range"] {
-  accent-color: var(--bg-accent);
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.scale-row output {
-  color: var(--text-accent);
-  font-size: 0.85rem;
-  font-weight: 700;
-  min-width: 3.5em;
-  text-align: right;
 }
 
 .secure-banner {
@@ -1937,56 +1912,62 @@ button:disabled {
   background: var(--bg-hover);
 }
 
-.compact .app-shell {
-  padding: 0;
-}
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0;
+  }
 
-.compact .chat-panel {
-  border: 0;
-  border-radius: 0;
-  max-width: none;
-  width: 100%;
-}
+  .chat-panel {
+    border: 0;
+    border-radius: 0;
+    max-width: none;
+    width: 100%;
+  }
 
-.compact .chat-header {
-  align-items: flex-start;
-  gap: 12px;
-  padding: 18px;
-}
+  .chat-header {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px;
+  }
 
-.compact .chat-title {
-  gap: 12px;
-}
+  .chat-title {
+    gap: 12px;
+  }
 
-.compact .icon-text-button span {
-  display: none;
-}
+  .icon-text-button span {
+    display: none;
+  }
 
-.compact .profile-menu {
-  right: 0;
-}
+  .profile-menu {
+    right: 0;
+  }
 
-.compact .settings-actions {
-  grid-template-columns: 1fr;
-}
+  .settings-actions {
+    grid-template-columns: 1fr;
+  }
 
-.compact .key-actions {
-  grid-template-columns: 1fr;
-}
+  .key-actions {
+    grid-template-columns: 1fr;
+  }
 
-.compact .signin-panel {
-  border: 0;
-  border-radius: 0;
-  min-height: 100%;
-  place-content: center;
-}
+  .signin-panel {
+    border: 0;
+    border-radius: 0;
+    min-height: 100%;
+    place-content: center;
+  }
 
-.compact .message {
-  max-width: 88%;
-}
+  .message {
+    max-width: 88%;
+  }
 
-.compact .message-menu-button {
-  opacity: 1;
+  .message-menu-button {
+    opacity: 1;
+  }
+
+  .users-sidebar {
+    flex: 0 0 200px;
+  }
 }
 
 .status-modal {
