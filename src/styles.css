@@ -107,6 +107,10 @@
 }
 
 body {
+  background:
+    linear-gradient(135deg, rgba(43, 88, 118, 0.14), transparent 34%),
+    linear-gradient(315deg, rgba(222, 101, 77, 0.14), transparent 36%),
+    var(--bg-page);
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
@@ -120,10 +124,6 @@ input {
 
 .app-shell {
   align-items: center;
-  background:
-    linear-gradient(135deg, rgba(43, 88, 118, 0.14), transparent 34%),
-    linear-gradient(315deg, rgba(222, 101, 77, 0.14), transparent 36%),
-    var(--bg-page);
   display: flex;
   height: 100vh;
   height: 100dvh;
@@ -907,7 +907,7 @@ button:disabled {
 }
 
 .settings-page {
-  background: var(--bg-page);
+  background: transparent;
   display: flex;
   height: 100%;
   width: 100%;
@@ -1440,6 +1440,14 @@ button:disabled {
 .composer-row {
   display: grid;
   gap: 12px;
+  grid-template-columns: 50px 50px minmax(0, 1fr) 50px;
+}
+
+.composer-row--recording {
+  grid-template-columns: 50px minmax(0, 1fr) 50px;
+}
+
+.composer-row--no-mic {
   grid-template-columns: 50px minmax(0, 1fr) 50px;
 }
 
@@ -2026,6 +2034,52 @@ button:disabled {
 
   .channel-sidebar {
     flex: 0 0 64px;
+  }
+
+  .composer-row {
+    gap: 8px;
+    grid-template-columns: 40px 40px minmax(0, 1fr) 40px;
+  }
+
+  .composer-row--recording {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+  }
+
+  .composer-row--no-mic {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+  }
+
+  .composer-row button {
+    height: 44px;
+    width: 40px;
+  }
+}
+
+@media (max-width: 400px) {
+  .users-sidebar {
+    flex: 0 0 130px;
+  }
+
+  .channel-sidebar {
+    flex: 0 0 56px;
+  }
+
+  .composer-row {
+    gap: 6px;
+    grid-template-columns: 36px 36px minmax(0, 1fr) 36px;
+  }
+
+  .composer-row--recording {
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+  }
+
+  .composer-row--no-mic {
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+  }
+
+  .composer-row button {
+    height: 42px;
+    width: 36px;
   }
 }
 

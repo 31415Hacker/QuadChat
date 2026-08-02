@@ -5212,12 +5212,7 @@ export default function App() {
             </div>
           ) : null}
           <div
-            className="composer-row"
-            style={
-              isRecording || isRecordingPaused
-                ? { gridTemplateColumns: "50px 1fr 50px" }
-                : { gridTemplateColumns: "50px 50px 1fr 50px" }
-            }
+            className={`composer-row${isRecording || isRecordingPaused ? " composer-row--recording" : ""}${supportsRecording ? "" : " composer-row--no-mic"}`}
           >
             {isRecording || isRecordingPaused ? (
               <button
