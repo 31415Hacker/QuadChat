@@ -1935,6 +1935,27 @@ button:disabled {
   background: var(--bg-hover);
 }
 
+@media (max-width: 900px) {
+  .icon-text-button > span:not(.notif-badge) {
+    display: none;
+  }
+
+  .users-sidebar {
+    flex: 0 0 200px;
+  }
+
+  .chat-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .chat-title p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: 0;
@@ -1957,8 +1978,19 @@ button:disabled {
     gap: 12px;
   }
 
-  .icon-text-button span {
-    display: none;
+  .brand-mark {
+    flex: 0 0 40px;
+    height: 40px;
+  }
+
+  .chat-header h1 {
+    font-size: 1.2rem;
+  }
+
+  .avatar-button {
+    height: 40px;
+    min-height: 40px;
+    width: 40px;
   }
 
   .profile-menu {
@@ -1989,7 +2021,11 @@ button:disabled {
   }
 
   .users-sidebar {
-    flex: 0 0 200px;
+    flex: 0 0 150px;
+  }
+
+  .channel-sidebar {
+    flex: 0 0 64px;
   }
 }
 
