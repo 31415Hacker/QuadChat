@@ -375,13 +375,6 @@ function getStatusLabel(mode) {
   }
 }
 
-const ONLINE_THRESHOLD = 60000; // 60 seconds — if lastOnline is within this window, consider online
-
-function isRecentlyOnline(timestamp) {
-  if (!timestamp?.toDate) return false;
-  return Date.now() - timestamp.toDate() < ONLINE_THRESHOLD;
-}
-
 function getRelativeTime(timestamp) {
   if (!timestamp?.toDate) return "";
   const diff = Date.now() - timestamp.toDate();
@@ -770,8 +763,6 @@ export default function App() {
   const toastIdsRef = useRef(new Set());
   const toastTimersRef = useRef(new Map());
   const activeNameRef = useRef("");
-  const prevOnlineRef = useRef({});
-  const hasSyncedOnlineRef = useRef(false);
 
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserDeveloper =
@@ -1029,7 +1020,6 @@ export default function App() {
     setDoc(sessionRef, { start: serverTimestamp(), date: new Date().toISOString().slice(0, 10) });
 
     const handleBeforeUnload = () => {
-      setDoc(doc(db, "users", uid), { lastOnline: serverTimestamp() }, { merge: true });
       if (currentSessionDocRef.current) {
         updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
       }
@@ -1038,7 +1028,6 @@ export default function App() {
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      setDoc(doc(db, "users", uid), { lastOnline: serverTimestamp() }, { merge: true });
       if (currentSessionDocRef.current) {
         updateDoc(currentSessionDocRef.current, { end: serverTimestamp() }).catch(() => {});
       }
@@ -1220,8 +1209,7 @@ export default function App() {
               return next;
             });
 
-            if (data.userId !== user.uid) {
-            }
+
           }
         } catch (e) {
           console.error("Presence WS parse error:", e);
@@ -1251,32 +1239,6 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      hasSyncedOnlineRef.current = false;
-      prevOnlineRef.current = {};
-      return;
-    }
-
-    const uids = Object.keys(profiles);
-    if (uids.length === 0) return;
-
-    if (!hasSyncedOnlineRef.current) {
-      for (const [uid, profile] of Object.entries(profiles)) {
-        prevOnlineRef.current[uid] = isRecentlyOnline(profile.lastOnline);
-      }
-      hasSyncedOnlineRef.current = true;
-      return;
-    }
-
-    for (const [uid, profile] of Object.entries(profiles)) {
-      if (uid === sessionUserId) continue;
-      const nowOnline = isRecentlyOnline(profile.lastOnline);
-      const wasOnline = prevOnlineRef.current[uid] ?? false;
-      prevOnlineRef.current[uid] = nowOnline;
-    }
-  }, [user, profiles, sessionUserId]);
-
-  useEffect(() => {
     if (!user || !sessionUserId) return;
     const profile = profiles[sessionUserId];
     if (!profile?.status?.scheduledBusy?.length) return;
@@ -1297,15 +1259,6 @@ export default function App() {
     const id = setInterval(check, 30000);
     return () => clearInterval(id);
   }, [user, sessionUserId, profiles]);
-
-  useEffect(() => {
-    if (!user || !sessionUserId) return;
-    setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true });
-    const id = setInterval(() => {
-      setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true });
-    }, 30000);
-    return () => clearInterval(id);
-  }, [user, sessionUserId]);
 
   useEffect(() => {
     callStatusRef.current = callStatus;
@@ -3938,8 +3891,6 @@ export default function App() {
     setIsSending(true);
     setError("");
 
-    setDoc(doc(db, "users", sessionUserId), { lastOnline: serverTimestamp() }, { merge: true }).catch(() => {});
-
     try {
       const commandResult = await runAdminCommand(cleanMessage);
 
@@ -4320,9 +4271,7 @@ export default function App() {
             <div>
               <h1>{showVersionInHeader ? `QuadChat v${APP_VERSION}` : "QuadChat"}</h1>
               <p>
-                Signed in as {activeName} · {messages.length} message
-                {messages.length === 1 ? "" : "s"} in{" "}
-                {activeChannelLabel}
+                Signed in as {activeName}
               </p>
               {isCurrentUserDeveloper ? (
                 <span className="admin-badge">Developer</span>
@@ -5076,8 +5025,7 @@ export default function App() {
                 const muted = isProfileMuted(profile);
                 const theirMode = profile.status?.mode;
                 const isSelf = profile.id === sessionUserId;
-                const staleOnline = isRecentlyOnline(profile.lastOnline);
-                const userActive = isSelf || onlineUsers.has(profile.id) || staleOnline;
+                const userActive = isSelf || onlineUsers.has(profile.id);
                 const statusMode = userActive ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
                 return (
                   <div

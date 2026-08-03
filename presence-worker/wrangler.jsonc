@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "quadchat-worker",
+  "main": "index.js",
+  "compatibility_date": "2026-07-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PRESENCE",
+        "class_name": "PresenceServer"
+      }
+    ]
+  },
+  "exports": {
+    "PresenceServer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}
