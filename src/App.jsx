@@ -3473,7 +3473,7 @@ export default function App() {
     const parts = cleanMessage.trim().split(/\s+/);
     const command = parts[0]?.toLowerCase();
 
-    if (!["?mute", "?unmute", "?warn", "?unwarn"].includes(command)) {
+    if (!["?mute", "?unmute", "?warn", "?unwarn", "?purge"].includes(command)) {
       return null;
     }
 
@@ -3533,7 +3533,46 @@ export default function App() {
     }
 
     if (command === "?unwarn") {
-      const targetName = parts[1];
+    if (command === "?purge") {
+      const count = parseInt(parts[1], 10);
+      const offset = parts[2] ? parseInt(parts[2], 10) : 0;
+
+      if (!Number.isInteger(count) || count <= 0) {
+        setError("Use ?purge <count> [offset]. Count must be a positive number.");
+        return { handled: true };
+      }
+      if (!Number.isInteger(offset) || offset < 0) {
+        setError("Use ?purge <count> [offset]. Offset must be a non-negative number.");
+        return { handled: true };
+      }
+
+      const total = count + offset;
+      const q = query(
+        messagesRef(activeChannel),
+        orderBy("createdAt", "desc"),
+        limit(total)
+      );
+      const snap = await getDocs(q);
+      const toDelete = snap.docs.slice(offset, total);
+
+      for (const messageDoc of toDelete) {
+        await deleteDoc(doc(db, "messages", activeChannel, "messages", messageDoc.id));
+      }
+
+      setError("");
+      const adminName = getProfileName(currentProfile, activeName);
+      return {
+        handled: false,
+        metadata: {
+          adminCommand: true,
+          command,
+          commandTarget: `${toDelete.length} message${toDelete.length === 1 ? "" : "s"} (offset ${offset})`,
+          notificationText: `🧹 ${adminName} purged ${toDelete.length} message${toDelete.length === 1 ? "" : "s"}${offset > 0 ? ` (skipping ${offset} newest)` : ""}`
+        }
+      };
+    }
+
+    const targetName = parts[1];
       if (!targetName) {
         setError("Use ?unwarn username.");
         return { handled: true };
