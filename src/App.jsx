@@ -30,6 +30,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  startAt,
   startAfter,
   Timestamp,
   updateDoc,
@@ -215,6 +216,7 @@ export default function App() {
   const knownMessageIdsByChannelRef = useRef(new Map());
   const activeNameRef = useRef("");
   const profilesRef = useRef({});
+  const activeChannelRef = useRef(null);
   const searchPanelRef = useRef(null);
   const composerInputRef = useRef(null);
   const pendingJumpRef = useRef(null);
@@ -2660,6 +2662,7 @@ export default function App() {
                 <MessageList
                   activeChannel={activeChannel}
                   isCurrentUserDeveloper={isCurrentUserDeveloper}
+                  isCurrentUserAdmin={isCurrentUserAdmin}
                   messages={messages}
                   isLoadingMore={isLoadingMore}
                   hasMoreMessages={hasMoreMessages}

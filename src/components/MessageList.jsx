@@ -198,6 +198,7 @@ function MessageItem({
 export default function MessageList({
   activeChannel,
   isCurrentUserDeveloper,
+  isCurrentUserAdmin,
   messages,
   isLoadingMore,
   hasMoreMessages,
