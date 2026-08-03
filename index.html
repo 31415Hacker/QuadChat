@@ -14,8 +14,119 @@
     <meta property="og:site_name" content="QuadChat" />
     <meta name="twitter:card" content="summary" />
     <title>QuadChat</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #0a0f0e;
+      }
+      #app-loading {
+        align-items: center;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        justify-content: center;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 24px;
+      }
+      #app-loading .splash-mark {
+        align-items: center;
+        background: #f6c85f;
+        border-radius: 12px;
+        color: #3d3520;
+        display: flex;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 1.5rem;
+        font-weight: 800;
+        height: 56px;
+        justify-content: center;
+        width: 56px;
+      }
+      #app-loading h1 {
+        color: #e8eeed;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 1.4rem;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        margin: 0;
+      }
+      #app-loading p {
+        color: #94acac;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.95rem;
+        margin: 0;
+      }
+      #app-loading .splash-spinner {
+        animation: splash-spin 0.9s linear infinite;
+        border: 3px solid rgba(126, 193, 204, 0.25);
+        border-radius: 50%;
+        border-top-color: #7fc1cc;
+        height: 26px;
+        margin-top: 6px;
+        width: 26px;
+      }
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-loading .splash-spinner {
+          animation: none;
+        }
+      }
+      .fatal-error {
+        align-items: center;
+        background: #0a0f0e;
+        box-sizing: border-box;
+        color: #e8eeed;
+        display: flex;
+        flex-direction: column;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        gap: 14px;
+        justify-content: center;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 24px;
+        text-align: center;
+      }
+      .fatal-error h1 {
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin: 0;
+      }
+      .fatal-error p {
+        color: #94acac;
+        font-size: 0.9rem;
+        margin: 0;
+        max-width: 480px;
+        word-break: break-word;
+      }
+      .fatal-error button {
+        background: #e0705a;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.95rem;
+        font-weight: 700;
+        padding: 10px 18px;
+      }
+    </style>
   </head>
   <body>
+    <div id="app-loading">
+      <div class="splash-mark">QC</div>
+      <div>
+        <h1>QuadChat</h1>
+        <p>Checking your session.</p>
+      </div>
+      <div class="splash-spinner" aria-hidden="true"></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
