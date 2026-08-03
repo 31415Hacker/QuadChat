@@ -3545,6 +3545,12 @@ export default function App() {
         return { handled: true };
       }
 
+      const skipText = offset > 0 ? `, skipping the ${offset} newest` : "";
+      if (!window.confirm(`Are you sure you want to purge the ${count} newest message${count === 1 ? "" : "s"}${skipText}?`)) {
+        setError("Purge cancelled.");
+        return { handled: true };
+      }
+
       const total = count + offset;
       const q = query(
         messagesRef(activeChannel),
