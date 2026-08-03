@@ -1,0 +1,564 @@
+import {
+  Bell,
+  BellOff,
+  Chrome,
+  CircleUserRound,
+  Copy,
+  Eye,
+  ImagePlus,
+  KeyRound,
+  Moon,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  X
+} from "lucide-react";
+import { getInitials, getProfileName } from "../utils/names.js";
+
+export default function SettingsPage({
+  onClose,
+  settingsTab,
+  setSettingsTab,
+  isCurrentUserAdmin,
+  user,
+  activeName,
+  settingsName,
+  setSettingsName,
+  settingsPhotoPreview,
+  settingsPhotoFile,
+  handlePhotoFileChange,
+  uploadProfilePicture,
+  clearPendingPhoto,
+  removeProfilePicture,
+  isUploadingPhoto,
+  isSavingSettings,
+  settingsMessage,
+  settingsCurrentPassword,
+  setSettingsCurrentPassword,
+  settingsPassword,
+  setSettingsPassword,
+  saveSettings,
+  hasGoogleProvider,
+  hasEmailProvider,
+  linkGoogleAccount,
+  unlinkGoogleAccount,
+  unlinkPassword,
+  removeAccount,
+  isDarkTheme,
+  setIsDarkTheme,
+  uiScale,
+  setUiScale,
+  reduceMotion,
+  setReduceMotion,
+  toggleNotifications,
+  notificationsEnabled,
+  showVersionInHeader,
+  setShowVersionInHeader,
+  appSettings,
+  toggleSignup,
+  magicLinkEmail,
+  setMagicLinkEmail,
+  generateMagicLink,
+  isGeneratingLink,
+  magicLinkError,
+  magicLinkUrl,
+  copyMagicLink,
+  profiles
+}) {
+  return (
+    <div className="settings-page">
+      <button
+        className="settings-close-btn"
+        type="button"
+        onClick={onClose}
+      >
+        <X size={20} />
+      </button>
+      <div className="settings-page-inner">
+        <nav className="settings-nav">
+          <button
+            className={`settings-nav-item ${settingsTab === "account" ? "active" : ""}`}
+            onClick={() => setSettingsTab("account")}
+          >
+            <CircleUserRound size={18} />
+            <span>Account</span>
+          </button>
+          <button
+            className={`settings-nav-item ${settingsTab === "security" ? "active" : ""}`}
+            onClick={() => setSettingsTab("security")}
+          >
+            <KeyRound size={18} />
+            <span>Security</span>
+          </button>
+          <button
+            className={`settings-nav-item ${settingsTab === "appearance" ? "active" : ""}`}
+            onClick={() => setSettingsTab("appearance")}
+          >
+            <Moon size={18} />
+            <span>Appearance</span>
+          </button>
+          <button
+            className={`settings-nav-item ${settingsTab === "accessibility" ? "active" : ""}`}
+            onClick={() => setSettingsTab("accessibility")}
+          >
+            <Eye size={18} />
+            <span>Accessibility</span>
+          </button>
+          <button
+            className={`settings-nav-item ${settingsTab === "advanced" ? "active" : ""}`}
+            onClick={() => setSettingsTab("advanced")}
+          >
+            <Settings size={18} />
+            <span>Advanced</span>
+          </button>
+          {isCurrentUserAdmin ? (
+            <button
+              className={`settings-nav-item ${settingsTab === "admin" ? "active" : ""}`}
+              onClick={() => setSettingsTab("admin")}
+            >
+              <ShieldCheck size={18} />
+              <span>Admin</span>
+            </button>
+          ) : null}
+        </nav>
+        <main className="settings-content">
+          <div className="settings-content-header">
+            <h2>
+              {settingsTab === "account"
+                ? "Account"
+                : settingsTab === "security"
+                  ? "Security"
+                  : settingsTab === "appearance"
+                    ? "Appearance"
+                    : settingsTab === "accessibility"
+                      ? "Accessibility"
+                      : settingsTab === "advanced"
+                        ? "Advanced"
+                        : "Admin"}
+            </h2>
+          </div>
+          <form className="settings-form" onSubmit={saveSettings}>
+            {settingsTab === "account" ? (
+              <>
+                <p className="settings-section-desc">
+                  Manage your profile information and photo.
+                </p>
+
+                <label htmlFor="settings-name">
+                  <CircleUserRound size={18} />
+                  <span>Username</span>
+                </label>
+                <input
+                  id="settings-name"
+                  type="text"
+                  value={settingsName}
+                  onChange={(event) => setSettingsName(event.target.value)}
+                  maxLength={32}
+                  placeholder="Username without spaces"
+                />
+
+                <section className="settings-photo-section">
+                  <div className="settings-photo-row">
+                    <div className="settings-photo-preview" aria-hidden="true">
+                      {settingsPhotoPreview ? (
+                        <img src={settingsPhotoPreview} alt="" />
+                      ) : user?.photoURL ? (
+                        <img src={user.photoURL} alt="" />
+                      ) : (
+                        <span>{getInitials(activeName)}</span>
+                      )}
+                    </div>
+                    <div className="settings-photo-actions">
+                      <label className="settings-photo-pick" htmlFor="settings-photo-input">
+                        <ImagePlus size={18} />
+                        <span>{settingsPhotoFile ? "Choose another" : "Choose image"}</span>
+                      </label>
+                      <input
+                        accept="image/*"
+                        id="settings-photo-input"
+                        onChange={handlePhotoFileChange}
+                        type="file"
+                      />
+                      {settingsPhotoFile ? (
+                        <div className="settings-photo-buttons">
+                          <button
+                            disabled={isUploadingPhoto || isSavingSettings}
+                            onClick={uploadProfilePicture}
+                            type="button"
+                          >
+                            <Upload size={17} />
+                            <span>{isUploadingPhoto ? "Uploading..." : "Upload"}</span>
+                            <span className="tag tag-safe">Safe</span>
+                          </button>
+                          <button
+                            className="ghost-button"
+                            disabled={isUploadingPhoto}
+                            onClick={clearPendingPhoto}
+                            type="button"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : user?.photoURL ? (
+                        <button
+                          className="danger-button settings-photo-remove"
+                          disabled={isSavingSettings}
+                          onClick={removeProfilePicture}
+                          type="button"
+                        >
+                          <Trash2 size={17} />
+                          <span>Remove picture</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="settings-note">
+                    JPG, PNG, GIF, or WEBP. Max 5 MB. Stored on Cloudinary.
+                  </p>
+                </section>
+
+                {settingsMessage ? (
+                  <div className="error-banner inline-error settings-note">
+                    {settingsMessage}
+                  </div>
+                ) : null}
+
+                <div className="settings-actions">
+                  <button type="submit" disabled={isSavingSettings}>
+                    Save changes
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {settingsTab === "security" ? (
+              <>
+                <p className="settings-section-desc">
+                  Manage your password and connected sign-in methods.
+                </p>
+
+                <label htmlFor="settings-current-password">
+                  <KeyRound size={18} />
+                  <span>Current password</span>
+                </label>
+                <input
+                  id="settings-current-password"
+                  type="password"
+                  value={settingsCurrentPassword}
+                  onChange={(event) =>
+                    setSettingsCurrentPassword(event.target.value)
+                  }
+                  maxLength={64}
+                  placeholder="Required to change password"
+                  autoComplete="current-password"
+                />
+
+                <label htmlFor="settings-password">
+                  <KeyRound size={18} />
+                  <span>New password</span>
+                </label>
+                <input
+                  id="settings-password"
+                  type="password"
+                  value={settingsPassword}
+                  onChange={(event) => setSettingsPassword(event.target.value)}
+                  minLength={6}
+                  maxLength={64}
+                  placeholder="Leave blank to keep current password"
+                  autoComplete="new-password"
+                />
+
+                {settingsMessage ? (
+                  <div className="error-banner inline-error settings-note">
+                    {settingsMessage}
+                  </div>
+                ) : null}
+
+                {!hasGoogleProvider ? (
+                  <section className="settings-section-box">
+                    <div>
+                      <h3>
+                        Google account
+                        <span className="tag tag-safe">Safe</span>
+                      </h3>
+                      <p>Connect Google as another way to sign in.</p>
+                    </div>
+                    <button
+                      className="google-button"
+                      disabled={isSavingSettings}
+                      onClick={linkGoogleAccount}
+                      type="button"
+                    >
+                      <Chrome size={18} />
+                      <span>Connect Google</span>
+                    </button>
+                  </section>
+                ) : (
+                  <section className="settings-section-box">
+                    <div>
+                      <h3>
+                        Google account
+                        <span className="tag tag-danger">Dangerous</span>
+                      </h3>
+                      <p>Google sign-in is connected.</p>
+                    </div>
+                    <button
+                      className="danger-button"
+                      disabled={isSavingSettings}
+                      onClick={unlinkGoogleAccount}
+                      type="button"
+                    >
+                      Unlink Google
+                    </button>
+                  </section>
+                )}
+
+                {hasEmailProvider ? (
+                  <section className="settings-section-box">
+                    <div>
+                      <h3>
+                        Password sign-in
+                        <span className="tag tag-danger">Dangerous</span>
+                      </h3>
+                      <p>Remove password as a sign-in method.</p>
+                    </div>
+                    <button
+                      className="danger-button"
+                      disabled={isSavingSettings || !hasGoogleProvider}
+                      onClick={unlinkPassword}
+                      title={!hasGoogleProvider ? "Connect Google first to remove password" : ""}
+                      type="button"
+                    >
+                      <KeyRound size={18} />
+                      <span>Remove password</span>
+                    </button>
+                  </section>
+                ) : null}
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Remove account
+                      <span className="tag tag-danger">Dangerous</span>
+                    </h3>
+                    <p>Permanently delete your account and all associated data.</p>
+                  </div>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={removeAccount}
+                    disabled={isSavingSettings}
+                  >
+                    <Trash2 size={17} />
+                    <span>Remove account</span>
+                  </button>
+                </section>
+
+                <div className="settings-actions">
+                  <button type="submit" disabled={isSavingSettings}>
+                    Save changes
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {settingsTab === "appearance" ? (
+              <>
+                <p className="settings-section-desc">
+                  Customize the look and feel of QuadChat.
+                </p>
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Theme
+                      <span className="tag tag-safe">Safe</span>
+                    </h3>
+                    <p>Switch between dark and light mode.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      checked={isDarkTheme}
+                      onChange={() => setIsDarkTheme((prev) => !prev)}
+                      type="checkbox"
+                    />
+                    <span>{isDarkTheme ? "Dark mode" : "Light mode"}</span>
+                  </label>
+                </section>
+              </>
+              ) : null}
+
+            {settingsTab === "accessibility" ? (
+              <>
+                <p className="settings-section-desc">
+                  Options for a more accessible experience.
+                </p>
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      UI scale
+                      <span className="tag tag-safe">Safe</span>
+                    </h3>
+                    <p>
+                      Shrinks the entire interface. 100% shows every part
+                      of the UI on screen at its default size.
+                    </p>
+                  </div>
+                  <label className="scale-row">
+                    <input
+                      aria-label="UI scale"
+                      max="100"
+                      min="50"
+                      onChange={(event) => setUiScale(Number(event.target.value))}
+                      step="5"
+                      type="range"
+                      value={uiScale}
+                    />
+                    <output>{uiScale}%</output>
+                  </label>
+                </section>
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Reduced motion
+                      <span className="tag tag-safe">Safe</span>
+                    </h3>
+                    <p>Minimize animations and transitions throughout the app.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      checked={reduceMotion}
+                      onChange={() => setReduceMotion((prev) => !prev)}
+                      type="checkbox"
+                    />
+                    <span>{reduceMotion ? "On" : "Off"}</span>
+                  </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Desktop notifications
+                      <span className="tag tag-safe">Safe</span>
+                    </h3>
+                    <p>Receive browser notifications when you get a new message or call.</p>
+                  </div>
+                  <button
+                    className="ghost-button"
+                    disabled={isSavingSettings}
+                    onClick={toggleNotifications}
+                    type="button"
+                  >
+                    {notificationsEnabled ? (
+                      <BellOff size={18} />
+                    ) : (
+                      <Bell size={18} />
+                    )}
+                    <span>{notificationsEnabled ? "Disable" : "Enable"}</span>
+                  </button>
+                </section>
+              </>
+            ) : null}
+
+            {settingsTab === "advanced" ? (
+              <>
+                <p className="settings-section-desc">
+                  Experimental and power-user options.
+                </p>
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Show version in header
+                    </h3>
+                    <p>Display the app version next to "QuadChat" in the header bar.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      checked={showVersionInHeader}
+                      onChange={() => setShowVersionInHeader((prev) => !prev)}
+                      type="checkbox"
+                    />
+                    <span>{showVersionInHeader ? "On" : "Off"}</span>
+                  </label>
+                </section>
+              </>
+            ) : null}
+
+            {settingsTab === "admin" && isCurrentUserAdmin ? (
+              <>
+                <p className="settings-section-desc">
+                  Manage app-wide settings and generate sign-in links.
+                </p>
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Sign up
+                      <span className="tag tag-safe">Safe</span>
+                    </h3>
+                    <p>Control whether new users can create accounts.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      checked={appSettings.signupEnabled}
+                      onChange={toggleSignup}
+                      type="checkbox"
+                    />
+                    <span>Allow sign up</span>
+                  </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>
+                      Magic link
+                      <span className="tag tag-safe">Safe</span>
+                    </h3>
+                    <p>Generate a one-time sign-in link for any user.</p>
+                  </div>
+                  <div className="magic-link-form">
+                    <select
+                      value={magicLinkEmail}
+                      onChange={(event) => setMagicLinkEmail(event.target.value)}
+                    >
+                      <option value="">Select a user...</option>
+                      {Object.values(profiles).map((profile) => (
+                        <option key={profile.id} value={profile.email}>
+                          {getProfileName(profile, profile.email || "Unknown")}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={!magicLinkEmail || isGeneratingLink}
+                      onClick={generateMagicLink}
+                      type="button"
+                    >
+                      {isGeneratingLink ? "Generating..." : "Generate magic link"}
+                    </button>
+                  </div>
+                  {magicLinkError ? (
+                    <div className="error-banner inline-error" role="alert">{magicLinkError}</div>
+                  ) : null}
+                  {magicLinkUrl ? (
+                    <div className="magic-link-result">
+                      <div
+                        className="magic-link-url"
+                        onClick={copyMagicLink}
+                        title="Copy magic link"
+                      >
+                        <span>********************</span>
+                        <Copy size={16} />
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              </>
+            ) : null}
+          </form>
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,11 +1,32 @@
+import { auth } from "./firebase.js";
+
 export async function uploadToCloudinary(file) {
+  if (!auth.currentUser) {
+    throw new Error("Not signed in");
+  }
+
+  const idToken = await auth.currentUser.getIdToken();
+  const signatureRes = await fetch("/api/cloudinary-signature", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${idToken}` }
+  });
+  if (!signatureRes.ok) {
+    const err = await signatureRes.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to get upload signature (${signatureRes.status})`);
+  }
+  const { signature, timestamp, apiKey, cloudName, uploadPreset } =
+    await signatureRes.json();
+
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
-  formData.append("cloud_name", import.meta.env.VITE_CLOUDINARY_CLOUD_NAME);
+  formData.append("upload_preset", uploadPreset);
+  formData.append("cloud_name", cloudName);
+  formData.append("api_key", apiKey);
+  formData.append("timestamp", String(timestamp));
+  formData.append("signature", signature);
 
   const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`,
+    `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
     {
       method: "POST",
       body: formData
