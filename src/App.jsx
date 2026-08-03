@@ -3532,7 +3532,6 @@ export default function App() {
       };
     }
 
-    if (command === "?unwarn") {
     if (command === "?purge") {
       const count = parseInt(parts[1], 10);
       const offset = parts[2] ? parseInt(parts[2], 10) : 0;
@@ -3572,7 +3571,8 @@ export default function App() {
       };
     }
 
-    const targetName = parts[1];
+    if (command === "?unwarn") {
+      const targetName = parts[1];
       if (!targetName) {
         setError("Use ?unwarn username.");
         return { handled: true };
