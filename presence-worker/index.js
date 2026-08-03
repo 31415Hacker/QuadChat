@@ -97,8 +97,9 @@ async function updateLastOnline(env, userId) {
   const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
   const accessToken = await getAccessToken(account);
 
-  const documentName = `projects/${account.project_id}/databases/(default)/documents/users/${userId}`;
-  const url = `https://firestore.googleapis.com/v1/${documentName}:commit`;
+  const databasePath = `projects/${account.project_id}/databases/(default)`;
+  const documentName = `${databasePath}/documents/users/${userId}`;
+  const url = `https://firestore.googleapis.com/v1/${databasePath}/documents:commit`;
 
   const response = await fetch(url, {
     method: "POST",
