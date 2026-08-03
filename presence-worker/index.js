@@ -114,6 +114,7 @@ async function updateLastOnline(env, userId) {
             name: documentName,
             fields: {}
           },
+          updateMask: { fieldPaths: ["lastOnline"] },
           updateTransforms: [
             {
               fieldPath: "lastOnline",
