@@ -23,8 +23,8 @@ export default async function handler(req, res) {
     const idToken = authHeader.split("Bearer ")[1];
     await admin.auth().verifyIdToken(idToken);
 
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
+    const cloudName = process.env.VITE_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.VITE_CLOUDINARY_UPLOAD_PRESET;
     const apiKey = process.env.CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
