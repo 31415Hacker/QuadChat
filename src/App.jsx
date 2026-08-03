@@ -214,6 +214,7 @@ export default function App() {
   const hasLoadedMessagesRef = useRef(false);
   const knownMessageIdsByChannelRef = useRef(new Map());
   const activeNameRef = useRef("");
+  const profilesRef = useRef({});
   const searchPanelRef = useRef(null);
   const composerInputRef = useRef(null);
   const pendingJumpRef = useRef(null);
