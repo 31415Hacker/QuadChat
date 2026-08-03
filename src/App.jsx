@@ -388,6 +388,15 @@ function getRelativeTime(timestamp) {
   return timestamp.toDate().toLocaleDateString();
 }
 
+function RelativeTime({ timestamp }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{getRelativeTime(timestamp)}</>;
+}
+
 const VIDEO_EXT_REGEX = /\.(mp4|webm|mov|avi|mkv|ogg|wmv|flv)$/i;
 
 function safeUrl(str) {
@@ -5051,7 +5060,7 @@ export default function App() {
                         ) : null}
                       </button>
                       <span className="user-last-online">
-                        {userActive ? "" : profile.lastOnline ? getRelativeTime(profile.lastOnline) : "unmeasured"}
+                        {userActive ? "" : profile.lastOnline ? <RelativeTime timestamp={profile.lastOnline} /> : "unmeasured"}
                       </span>
                     </div>
                     {profile.id !== sessionUserId ? (
