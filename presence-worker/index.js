@@ -2,11 +2,92 @@ import { DurableObject } from "cloudflare:workers";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
+const JWKS_URL =
+  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+const FIREBASE_PROJECT_ID = "quadchat-cf697";
+const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
 
 let tokenCache = null;
+let jwksCache = { keys: null, fetchedAt: 0 };
 
 function base64UrlEncode(str) {
   return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlDecode(str) {
+  const pad = str.length % 4 === 0 ? "" : "=".repeat(4 - (str.length % 4));
+  const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function getFirebaseJwks() {
+  const age = Date.now() - jwksCache.fetchedAt;
+  if (jwksCache.keys && age < 3600000) {
+    return jwksCache.keys;
+  }
+  const response = await fetch(JWKS_URL);
+  if (!response.ok) {
+    throw new Error(`JWKS fetch failed: ${response.status}`);
+  }
+  const json = await response.json();
+  const keys = {};
+  for (const key of json.keys) {
+    keys[key.kid] = key;
+  }
+  jwksCache = { keys, fetchedAt: Date.now() };
+  return keys;
+}
+
+async function verifyFirebaseIdToken(token) {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Malformed token");
+  }
+  const [headerB64, payloadB64, signatureB64] = parts;
+  const header = JSON.parse(new TextDecoder().decode(base64UrlDecode(headerB64)));
+  const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64)));
+
+  if (payload.aud !== FIREBASE_PROJECT_ID) {
+    throw new Error("Wrong audience");
+  }
+  if (payload.iss !== FIREBASE_ISSUER) {
+    throw new Error("Wrong issuer");
+  }
+  if (!payload.exp || payload.exp * 1000 < Date.now()) {
+    throw new Error("Token expired");
+  }
+  if (!payload.sub) {
+    throw new Error("Missing subject");
+  }
+
+  const jwks = await getFirebaseJwks();
+  const jwk = jwks[header.kid];
+  if (!jwk) {
+    throw new Error("Unknown signing key");
+  }
+  const publicKey = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+  const valid = await crypto.subtle.verify(
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    publicKey,
+    base64UrlDecode(signatureB64),
+    new TextEncoder().encode(`${headerB64}.${payloadB64}`)
+  );
+  if (!valid) {
+    throw new Error("Invalid signature");
+  }
+  return payload.sub;
 }
 
 function pemToArrayBuffer(pem) {
@@ -152,9 +233,16 @@ export class PresenceServer extends DurableObject {
 
   async fetch(request) {
     const url = new URL(request.url);
-    const userId = url.searchParams.get("userId");
-    if (!userId) {
-      return new Response("Missing userId query parameter", { status: 400 });
+    const token = url.searchParams.get("token");
+    if (!token) {
+      return new Response("Missing token query parameter", { status: 400 });
+    }
+
+    let userId;
+    try {
+      userId = await verifyFirebaseIdToken(token);
+    } catch (err) {
+      return new Response(`Unauthorized: ${err.message}`, { status: 401 });
     }
 
     const pair = new WebSocketPair();

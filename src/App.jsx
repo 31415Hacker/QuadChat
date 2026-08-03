@@ -90,7 +90,11 @@ import {
   Copy,
   Eye,
   Monitor,
-  MonitorOff
+  MonitorOff,
+  Search,
+  Pencil,
+  AlertCircle,
+  AlertTriangle
 } from "lucide-react";
 import { Room, RoomEvent } from "livekit-client";
 import { auth, db, rtdb } from "../firebase.js";
@@ -605,6 +609,12 @@ export default function App() {
   const [profiles, setProfiles] = useState({});
   const [replyTo, setReplyTo] = useState(null);
   const [openMessageMenuId, setOpenMessageMenuId] = useState("");
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchSearched, setSearchSearched] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     readNotificationsEnabled
   );
@@ -772,6 +782,11 @@ export default function App() {
   const toastIdsRef = useRef(new Set());
   const toastTimersRef = useRef(new Map());
   const activeNameRef = useRef("");
+  const searchPanelRef = useRef(null);
+  const composerInputRef = useRef(null);
+  const pendingJumpRef = useRef(null);
+  const highlightTargetRef = useRef(null);
+  const [channelReloadKey, setChannelReloadKey] = useState(0);
 
   const currentProfile = sessionUserId ? profiles[sessionUserId] : null;
   const isCurrentUserDeveloper =
@@ -1186,16 +1201,26 @@ export default function App() {
     const presenceUrl = import.meta.env.VITE_PRESENCE_WORKER_URL;
     if (!presenceUrl) return;
 
-    const wsUrl = `${presenceUrl}?userId=${user.uid}`;
     let ws = null;
     let reconnectTimeout = null;
     let reconnectAttempt = 0;
     const maxReconnectDelay = 30000;
     let closed = false;
 
-    function connect() {
+    async function connect() {
       if (closed) return;
-      ws = new WebSocket(wsUrl);
+      try {
+        const token = await user.getIdToken();
+        const wsUrl = `${presenceUrl}?token=${encodeURIComponent(token)}`;
+        ws = new WebSocket(wsUrl);
+      } catch (e) {
+        if (!closed) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), maxReconnectDelay);
+          reconnectAttempt++;
+          reconnectTimeout = setTimeout(connect, delay);
+        }
+        return;
+      }
 
       ws.onopen = () => {
         reconnectAttempt = 0;
@@ -1406,13 +1431,40 @@ export default function App() {
 
     async function loadInitialMessages() {
       const ref = messagesRef(activeChannel);
-      const initialQ = query(
-        ref,
-        orderBy("createdAt", "asc"),
-        limitToLast(PAGE_SIZE)
-      );
+      const jump = pendingJumpRef.current;
+      let snapshot;
+      let jumpTargetId = null;
 
-      const snapshot = await getDocs(initialQ);
+      if (jump && jump.channelId === activeChannel && jump.createdAt) {
+        jumpTargetId = jump.messageId;
+        pendingJumpRef.current = null;
+        const beforeSnap = await getDocs(
+          query(
+            ref,
+            orderBy("createdAt", "desc"),
+            startAt(jump.createdAt),
+            limit(15)
+          )
+        );
+        const beforeDocs = beforeSnap.docs.slice().reverse();
+        const afterSnap = await getDocs(
+          query(
+            ref,
+            orderBy("createdAt", "asc"),
+            startAfter(jump.createdAt),
+            limit(25)
+          )
+        );
+        snapshot = { docs: [...beforeDocs, ...afterSnap.docs] };
+      } else {
+        snapshot = await getDocs(
+          query(
+            ref,
+            orderBy("createdAt", "asc"),
+            limitToLast(PAGE_SIZE)
+          )
+        );
+      }
 
       if (cancelled) return;
 
@@ -1422,10 +1474,14 @@ export default function App() {
       }));
 
       setMessages(msgs);
-      setTimeout(() => {
-        const el = messagesContainerRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
-      }, 0);
+      if (jumpTargetId) {
+        highlightTargetRef.current = jumpTargetId;
+      } else {
+        setTimeout(() => {
+          const el = messagesContainerRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        }, 0);
+      }
       const hasMore = snapshot.docs.length >= PAGE_SIZE;
       setHasMoreMessages(hasMore);
       hasMoreMessagesRef.current = hasMore;
@@ -1548,7 +1604,7 @@ export default function App() {
         newMessagesUnsubRef.current = null;
       }
     };
-  }, [user, activeChannel]);
+  }, [user, activeChannel, channelReloadKey]);
 
   useEffect(() => {
     if (!user || !activeChannel) {
@@ -1579,7 +1635,7 @@ export default function App() {
   }, [user, activeChannel, sessionUserId]);
 
   useEffect(() => {
-    if (isNearBottomRef.current) {
+    if (isNearBottomRef.current && !highlightTargetRef.current) {
       endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   }, [messages, typingUsers]);
@@ -1606,6 +1662,17 @@ export default function App() {
       scrollSaveRef.current = null;
     }
   }, [isLoadingMore]);
+
+  useEffect(() => {
+    const targetId = highlightTargetRef.current;
+    if (!targetId) return;
+    const el = document.getElementById(`msg-${targetId}`);
+    if (!el) return;
+    highlightTargetRef.current = null;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("message-highlight");
+    setTimeout(() => el.classList.remove("message-highlight"), 2500);
+  }, [messages, activeChannel, channelReloadKey]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -1646,6 +1713,26 @@ export default function App() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isNotificationPanelOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    function handleClick(e) {
+      if (searchPanelRef.current && !searchPanelRef.current.contains(e.target)) {
+        setSearchOpen(false);
+      }
+    }
+    function handleKey(e) {
+      if (e.key === "Escape") {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [searchOpen]);
 
   useEffect(
     () => () => {
@@ -3917,11 +4004,111 @@ export default function App() {
     }
   }
 
+  function startEditMessage(item) {
+    setOpenMessageMenuId("");
+    setReplyTo(null);
+    setEditingMessage({ id: item.id, text: typeof item.text === "string" ? item.text : "" });
+    setMessage(typeof item.text === "string" ? item.text : "");
+    setTimeout(() => composerInputRef.current?.focus(), 0);
+  }
+
+  async function runSearch() {
+    const queryText = searchQuery.trim().toLowerCase();
+    if (!queryText || !user) return;
+    setSearching(true);
+    setSearchSearched(true);
+    try {
+      const channelIds = [
+        ...CHANNELS.map((channel) => channel.id),
+        ...dmChannels.map((dm) => dm.id)
+      ];
+      const groups = [];
+      for (const channelId of channelIds) {
+        const ref = messagesRef(channelId);
+        const snap = await getDocs(
+          query(ref, orderBy("createdAt", "desc"), limit(2000))
+        );
+        const matched = [];
+        for (const messageDoc of snap.docs) {
+          const data = messageDoc.data();
+          if (typeof data.text === "string" && data.text.toLowerCase().includes(queryText)) {
+            matched.push({ id: messageDoc.id, ...data });
+          }
+          if (matched.length >= 30) break;
+        }
+        if (matched.length === 0) continue;
+        const label = isDmChannelId(channelId)
+          ? getDmPartnerName(
+              dmChannels.find((dm) => dm.id === channelId) || { participants: [] },
+              profiles,
+              sessionUserId
+            )
+          : CHANNELS.find((channel) => channel.id === channelId)?.label || channelId;
+        groups.push({ channelId, label, messages: matched });
+      }
+      setSearchResults(groups);
+    } catch (firebaseError) {
+      setError(firebaseError.message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function jumpToSearchResult(group, msg) {
+    if (!msg.createdAt) return;
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchSearched(false);
+    pendingJumpRef.current = {
+      channelId: group.channelId,
+      messageId: msg.id,
+      createdAt: msg.createdAt
+    };
+    if (group.channelId !== activeChannel) {
+      setActiveChannel(group.channelId);
+    }
+    setChannelReloadKey((key) => key + 1);
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
 
     if (isRecording || isRecordingPaused) {
       stopRecording(true);
+      return;
+    }
+
+    if (editingMessage) {
+      const cleanEdit = message.trim();
+      if (isSending || !sessionUserId || !activeName) return;
+      if (!cleanEdit) {
+        setEditingMessage(null);
+        setMessage("");
+        return;
+      }
+      setIsSending(true);
+      setError("");
+      try {
+        await updateDoc(
+          doc(db, "messages", activeChannel, "messages", editingMessage.id),
+          {
+            text: cleanEdit,
+            edited: true,
+            editedAt: serverTimestamp()
+          }
+        );
+      } catch (firebaseError) {
+        setError(
+          firebaseError.code === "permission-denied"
+            ? "Firestore rules blocked this edit."
+            : firebaseError.message
+        );
+      } finally {
+        setIsSending(false);
+        setEditingMessage(null);
+        setMessage("");
+      }
       return;
     }
 
@@ -4131,7 +4318,7 @@ export default function App() {
                 autoComplete="email"
                 maxLength={120}
               />
-              {emailLinkError ? <div className="error-banner inline-error">{emailLinkError}</div> : null}
+              {emailLinkError ? <div className="error-banner inline-error" role="alert">{emailLinkError}</div> : null}
               <button
                 type="submit"
                 disabled={!pendingEmailLinkEmail.trim()}
@@ -4210,7 +4397,7 @@ export default function App() {
                   autoComplete="current-password"
                   maxLength={64}
                 />
-                {error ? <div className="error-banner inline-error">{error}</div> : null}
+                {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
                 <button
                   type="submit"
                   disabled={
@@ -4353,6 +4540,76 @@ export default function App() {
             </span>
           </button>
           ) : null}
+          <div className="search-wrap" ref={searchPanelRef}>
+            <button
+              className="icon-text-button"
+              aria-label="Search messages"
+              aria-expanded={searchOpen}
+              type="button"
+              onClick={() => setSearchOpen((isOpen) => !isOpen)}
+              title="Search messages"
+            >
+              <Search size={18} />
+              <span>Search</span>
+            </button>
+            {searchOpen ? (
+              <div className="search-panel" aria-label="Search messages">
+                <div className="search-panel-input-row">
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        runSearch();
+                      }
+                    }}
+                    placeholder="Search all messages…"
+                    maxLength={100}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={runSearch}
+                    disabled={!searchQuery.trim() || searching}
+                    title="Search"
+                  >
+                    Search
+                  </button>
+                </div>
+                {searching ? (
+                  <div className="search-empty">Searching…</div>
+                ) : searchSearched && searchResults.length === 0 ? (
+                  <div className="search-empty">No results found.</div>
+                ) : !searchSearched ? (
+                  <div className="search-empty">
+                    Search across all channels and DMs. Press Enter to search.
+                  </div>
+                ) : null}
+                {searchResults.map((group) => (
+                  <div className="search-group" key={group.channelId}>
+                    <div className="search-group-label">{group.label}</div>
+                    {group.messages.map((msg) => (
+                      <button
+                        className="search-result"
+                        key={`${group.channelId}-${msg.id}`}
+                        type="button"
+                        onClick={() => jumpToSearchResult(group, msg)}
+                      >
+                        <span className="search-result-sender">
+                          {getProfileName(profiles[msg.userId], "Someone")}
+                          <small>{formatTime(msg.createdAt)}</small>
+                        </span>
+                        <span className="search-result-preview">{msg.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div className="notif-bell" ref={notificationPanelRef}>
             <button
               className="icon-text-button notif-bell-button"
@@ -4473,9 +4730,24 @@ export default function App() {
           </div>
         </header>
 
-        {error ? <div className="error-banner">{error}</div> : null}
-        {muteLabel ? <div className="error-banner">{muteLabel}</div> : null}
-        {warningLabel ? <div className="error-banner warning-banner">{warningLabel}</div> : null}
+        {error ? (
+          <div className="error-banner" role="alert">
+            <AlertCircle size={16} className="banner-icon" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+        {muteLabel ? (
+          <div className="warning-banner" role="alert">
+            <AlertTriangle size={16} className="banner-icon" />
+            <span>{muteLabel}</span>
+          </div>
+        ) : null}
+        {warningLabel ? (
+          <div className="warning-banner" role="alert">
+            <AlertTriangle size={16} className="banner-icon" />
+            <span>{warningLabel}</span>
+          </div>
+        ) : null}
 
         {screenShareRequest ? (
           <div className="screen-share-request">
@@ -4908,11 +5180,15 @@ export default function App() {
                         </div>
                       ) : null}
                       <article
+                        id={`msg-${item.id}`}
                         className={`message ${isMine ? "message-mine" : ""}`}
                       >
                       <div className="message-meta">
                         <strong>{senderName}</strong>
-                        <span>{formatTime(item.createdAt)}</span>
+                        <span>
+                          {formatTime(item.createdAt)}
+                          {item.edited ? <span className="edited-tag"> · edited</span> : null}
+                        </span>
                       </div>
                       <div className="message-actions">
                         <button
@@ -4944,6 +5220,18 @@ export default function App() {
                               <CornerDownLeft size={16} />
                               <span>Reply</span>
                             </button>
+                            {isMine &&
+                            typeof item.text === "string" &&
+                            !item.isFile &&
+                            item.type !== "game_session_card" ? (
+                              <button
+                                onClick={() => startEditMessage(item)}
+                                type="button"
+                              >
+                                <Pencil size={16} />
+                                <span>Edit</span>
+                              </button>
+                            ) : null}
                             {(isMine || isCurrentUserAdmin) ? (
                               <button
                                 onClick={() => {
@@ -5171,7 +5459,25 @@ export default function App() {
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
-          {replyTo ? (
+          {editingMessage ? (
+            <div className="edit-composer">
+              <div className="reply-composer-text">
+                <strong>Editing message</strong>
+                <span>{getReplyPreview(editingMessage.text)}</span>
+              </div>
+              <button
+                aria-label="Cancel editing"
+                onClick={() => {
+                  setEditingMessage(null);
+                  setMessage("");
+                }}
+                title="Cancel edit"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : replyTo ? (
             <div className="reply-composer">
               <div className="reply-composer-text">
                 <strong>Replying to {replyTo.senderName}</strong>
@@ -5347,6 +5653,7 @@ export default function App() {
               </div>
             ) : (
               <input
+                ref={composerInputRef}
                 type="text"
                 value={message}
                 onChange={(event) => {
@@ -5363,30 +5670,34 @@ export default function App() {
                 }}
                 onPaste={handleComposerPaste}
                 placeholder={
-                  isDmChannelId(activeChannel)
-                    ? `Message ${dmPartnerName}`
-                    : "Type a message"
+                  editingMessage
+                    ? "Edit message…"
+                    : isDmChannelId(activeChannel)
+                      ? `Message ${dmPartnerName}`
+                      : "Type a message"
                 }
                 maxLength={500}
               />
             )}
             <button
               type="submit"
-              aria-label="Send message"
-              title="Send message"
+              aria-label={editingMessage ? "Save edits" : "Send message"}
+              title={editingMessage ? "Save edits" : "Send message"}
               disabled={
-                (!message.trim() &&
-                  pendingFiles.length === 0 &&
-                  !isRecording &&
-                  !isRecordingPaused) ||
-                !activeName ||
-                isSending ||
-                !sessionUserId ||
-                (!isCurrentUserAdmin && isProfileMuted(currentProfile)) ||
-                !canPostInActiveChannel
+                editingMessage
+                  ? !message.trim()
+                  : ((!message.trim() &&
+                      pendingFiles.length === 0 &&
+                      !isRecording &&
+                      !isRecordingPaused) ||
+                      !activeName ||
+                      isSending ||
+                      !sessionUserId ||
+                      (!isCurrentUserAdmin && isProfileMuted(currentProfile)) ||
+                      !canPostInActiveChannel)
               }
             >
-              <Send size={20} />
+              {editingMessage ? <CheckCheck size={20} /> : <Send size={20} />}
             </button>
           </div>
         </form>
@@ -5866,7 +6177,7 @@ export default function App() {
                         </button>
                       </div>
                       {magicLinkError ? (
-                        <div className="error-banner inline-error">{magicLinkError}</div>
+                        <div className="error-banner inline-error" role="alert">{magicLinkError}</div>
                       ) : null}
                       {magicLinkUrl ? (
                         <div className="magic-link-result">

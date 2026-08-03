@@ -97,12 +97,22 @@ service cloud.firestore {
 
       allow update: if signedIn()
         && isNotMuted()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvps"])
-        && (!("rsvps" in request.resource.data)
-            || request.resource.data.rsvps
-                .diff("rsvps" in resource.data ? resource.data.rsvps : {})
-                .affectedKeys()
-                .hasOnly([request.auth.uid]));
+        && (
+          (
+            request.auth.uid == resource.data.userId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited", "editedAt"])
+            && (!("text" in request.resource.data) || request.resource.data.text is string)
+            && (!("edited" in request.resource.data) || request.resource.data.edited is bool)
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvps"])
+            && (!("rsvps" in request.resource.data)
+                || request.resource.data.rsvps
+                    .diff("rsvps" in resource.data ? resource.data.rsvps : {})
+                    .affectedKeys()
+                    .hasOnly([request.auth.uid]))
+          )
+        );
 
       allow delete: if signedIn()
         && (resource.data.userId == request.auth.uid || isAdmin());
