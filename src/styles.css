@@ -1169,7 +1169,6 @@ button:disabled {
 }
 
 .message {
-  align-items: flex-start;
   align-self: flex-start;
   display: flex;
   flex-direction: column;
@@ -1179,7 +1178,6 @@ button:disabled {
 }
 
 .message-mine {
-  align-items: flex-end;
   align-self: flex-end;
 }
 
@@ -1187,7 +1185,6 @@ button:disabled {
   background: var(--bg-hover);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  max-width: 100%;
   min-width: 0;
   padding: 11px 13px;
   position: relative;
@@ -1374,10 +1371,8 @@ button:disabled {
 .reply-card {
   background: var(--quote-bg);
   border-left: 2px solid var(--quote-border);
-  border-radius: 6px;
+  border-radius: 6px 6px 0 0;
   cursor: pointer;
-  margin-bottom: 4px;
-  max-width: 100%;
   min-width: 0;
   padding: 4px 8px;
   transition:
