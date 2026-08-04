@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, memo } from "react";
 import {
   CornerDownLeft,
   FileText,
@@ -18,7 +18,7 @@ import {
   safeUrl
 } from "../utils/messages.jsx";
 
-function MessageItem({
+const MessageItem = memo(function MessageItem({
   item,
   senderName,
   isMine,
@@ -205,7 +205,7 @@ function MessageItem({
       ) : null}
     </article>
   );
-}
+});
 
 export default function MessageList({
   activeChannel,

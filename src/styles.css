@@ -547,6 +547,44 @@ button:disabled {
   z-index: 40;
 }
 
+.confirm-dialog {
+  background: var(--bg-surface);
+  border-radius: 8px;
+  box-shadow: 0 26px 80px var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 420px;
+  padding: 24px;
+  width: min(100%, 420px);
+}
+
+.confirm-dialog-title {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.confirm-dialog-message {
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.confirm-dialog-actions .secondary-button,
+.confirm-dialog-actions .danger-button,
+.confirm-dialog-actions .save-status-btn {
+  min-height: 40px;
+}
+
+
 .settings-modal {
   background: var(--bg-surface);
   border-radius: 8px;

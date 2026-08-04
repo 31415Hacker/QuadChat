@@ -16,5 +16,20 @@ export default defineConfig({
   plugins: [react()],
   define: {
     __COMMIT_HASH__: JSON.stringify(getCommitHash())
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          firebase: [
+            "firebase/app",
+            "firebase/auth",
+            "firebase/firestore",
+            "firebase/database"
+          ],
+          media: ["lucide-react"]
+        }
+      }
+    }
   }
 });

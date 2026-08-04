@@ -12,7 +12,6 @@ import {
   update,
   remove
 } from "firebase/database";
-import { Room, RoomEvent } from "livekit-client";
 import { rtdb } from "../../firebase.js";
 import { notificationIcon, OPUS_BITRATE, rtcConfig } from "../constants.js";
 import { applyOpusBitrate, computeCapability } from "../utils/media.js";
@@ -1121,6 +1120,7 @@ export function useCalls({
         cleanupCall();
       }
 
+      const { Room, RoomEvent } = await import("livekit-client");
       const idToken = await user.getIdToken();
       const res = await fetch("/api/livekit-token", {
         method: "POST",

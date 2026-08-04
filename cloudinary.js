@@ -1,6 +1,6 @@
 import { auth } from "./firebase.js";
 
-export async function uploadToCloudinary(file) {
+export async function uploadToCloudinary(file, kind = "message") {
   if (!auth.currentUser) {
     throw new Error("Not signed in");
   }
@@ -8,7 +8,16 @@ export async function uploadToCloudinary(file) {
   const idToken = await auth.currentUser.getIdToken();
   const signatureRes = await fetch("/api/cloudinary-signature", {
     method: "POST",
-    headers: { Authorization: `Bearer ${idToken}` }
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      kind,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size
+    })
   });
   if (!signatureRes.ok) {
     const err = await signatureRes.json().catch(() => ({}));

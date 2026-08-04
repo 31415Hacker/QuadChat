@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -87,6 +87,7 @@ import {
 import { usePresence } from "./hooks/usePresence.js";
 import { useNotifications } from "./hooks/useNotifications.js";
 import { useCalls } from "./hooks/useCalls.js";
+import useConfirmDialog from "./hooks/useConfirmDialog.js";
 
 import AuthScreen from "./components/AuthScreen.jsx";
 import ChannelSidebar from "./components/ChannelSidebar.jsx";
@@ -102,6 +103,7 @@ import {
   IncomingCallModal,
   GamingPostModal
 } from "./components/Modals.jsx";
+import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import {
   ScreenShareRequestBanner,
   ActiveCallBar,
@@ -346,6 +348,15 @@ export default function App() {
     notificationPermission,
     onCallError: (msg) => setSettingsMessage(msg)
   });
+
+  const { confirmState, ask, closeConfirm } = useConfirmDialog();
+
+  const joinGroupCallRef = useRef(joinGroupCall);
+  joinGroupCallRef.current = joinGroupCall;
+  const joinGroupCallStable = useCallback(
+    (...args) => joinGroupCallRef.current?.(...args),
+    []
+  );
 
   async function openUserAnalytics(profile) {
     if (!profile) return;
@@ -1272,8 +1283,9 @@ export default function App() {
 
       let photoChoice = null;
       if (googlePhoto && existingPhoto && googlePhoto !== existingPhoto) {
-        const overwrite = window.confirm(
-          "You already have a profile picture. Replace it with your Google account picture?"
+        const overwrite = await ask(
+          "You already have a profile picture. Replace it with your Google account picture?",
+          { title: "Replace profile picture?", confirmLabel: "Replace" }
         );
         photoChoice = overwrite ? googlePhoto : existingPhoto;
       } else if (googlePhoto) {
@@ -1302,8 +1314,9 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Unlink Google from this account? You can link a different Google account later."
+    const confirmed = await ask(
+      "Unlink Google from this account? You can link a different Google account later.",
+      { title: "Unlink Google?", confirmLabel: "Unlink" }
     );
     if (!confirmed) return;
 
@@ -1325,8 +1338,9 @@ export default function App() {
   async function unlinkPassword() {
     if (!user || !hasEmailProvider) return;
 
-    const confirmed = window.confirm(
-      "Remove password sign-in from this account? You will no longer be able to sign in with a password."
+    const confirmed = await ask(
+      "Remove password sign-in from this account? You will no longer be able to sign in with a password.",
+      { title: "Remove password sign-in?", confirmLabel: "Remove" }
     );
     if (!confirmed) return;
 
@@ -1444,7 +1458,7 @@ export default function App() {
     setIsUploadingPhoto(true);
     setSettingsMessage("");
     try {
-      const url = await uploadToCloudinary(settingsPhotoFile);
+      const url = await uploadToCloudinary(settingsPhotoFile, "profile");
       await saveUserProfile(user, undefined, { photoURL: url, forcePhoto: true });
       await user.reload();
       setUser(auth.currentUser);
@@ -1464,7 +1478,10 @@ export default function App() {
     if (!user) {
       return;
     }
-    const confirmed = window.confirm("Remove your profile picture?");
+    const confirmed = await ask("Remove your profile picture?", {
+      title: "Remove profile picture?",
+      confirmLabel: "Remove"
+    });
     if (!confirmed) {
       return;
     }
@@ -1612,9 +1629,10 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Remove this account? This cannot be undone."
-    );
+    const confirmed = await ask("Remove this account? This cannot be undone.", {
+      title: "Remove account?",
+      confirmLabel: "Remove account"
+    });
 
     if (!confirmed) {
       return;
@@ -1788,7 +1806,11 @@ export default function App() {
       }
 
       const skipText = offset > 0 ? `, skipping the ${offset} newest` : "";
-      if (!window.confirm(`Are you sure you want to purge the ${count} newest message${count === 1 ? "" : "s"}${skipText}?`)) {
+      const confirmed = await ask(
+        `Are you sure you want to purge the ${count} newest message${count === 1 ? "" : "s"}${skipText}?`,
+        { title: "Purge messages?", confirmLabel: "Purge" }
+      );
+      if (!confirmed) {
         setError("Purge cancelled.");
         return { handled: true };
       }
@@ -1962,7 +1984,7 @@ export default function App() {
     setError("");
 
     try {
-      const url = await uploadToCloudinary(file);
+      const url = await uploadToCloudinary(file, "voice");
       if (isDmChannelId(activeChannel)) {
         await updateDmMetadata("🎤 Voice message");
       }
@@ -2131,7 +2153,7 @@ export default function App() {
     }
   }
 
-  async function handleRsvp(messageId, status, customText) {
+  const handleRsvp = useCallback(async (messageId, status, customText) => {
     if (!sessionUserId || !activeChannel || !messageId) return;
     const ref = doc(db, "messages", activeChannel, "messages", messageId);
     if (!status) {
@@ -2146,10 +2168,13 @@ export default function App() {
         updatedAt: serverTimestamp()
       }
     });
-  }
+  }, [sessionUserId, activeChannel, activeName]);
 
-  async function handleDeleteMessage(messageId) {
-    const confirmed = window.confirm("Are you sure you want to delete this message?");
+  const handleDeleteMessage = useCallback(async (messageId) => {
+    const confirmed = await ask("Are you sure you want to delete this message?", {
+      title: "Delete message?",
+      confirmLabel: "Delete"
+    });
     if (!confirmed) return;
 
     try {
@@ -2157,15 +2182,15 @@ export default function App() {
     } catch (firebaseError) {
       setError(firebaseError.message);
     }
-  }
+  }, [ask, activeChannel]);
 
-  function startEditMessage(item) {
+  const startEditMessage = useCallback((item) => {
     setOpenMessageMenuId("");
     setReplyTo(null);
     setEditingMessage({ id: item.id, text: typeof item.text === "string" ? item.text : "" });
     setMessage(typeof item.text === "string" ? item.text : "");
     setTimeout(() => composerInputRef.current?.focus(), 0);
-  }
+  }, []);
 
   async function runSearch() {
     const queryText = searchQuery.trim().toLowerCase();
@@ -2226,7 +2251,7 @@ export default function App() {
     setChannelReloadKey((key) => key + 1);
   }
 
-  async function jumpToReply(replyTo) {
+  const jumpToReply = useCallback(async (replyTo) => {
     const targetId = replyTo?.id;
     if (!targetId || !user) return;
     const existing = document.getElementById(`msg-${targetId}`);
@@ -2252,7 +2277,7 @@ export default function App() {
     } catch (firebaseError) {
       setError(firebaseError.message);
     }
-  }
+  }, [user, activeChannel]);
 
   async function sendMessage(event) {
     event.preventDefault();
@@ -2631,6 +2656,12 @@ export default function App() {
               answerCall={answerCall}
             />
 
+            <ConfirmDialog
+              state={confirmState}
+              onConfirm={() => closeConfirm(true)}
+              onCancel={() => closeConfirm(false)}
+            />
+
             {callStatus === "connected" || callStatus === "calling" ? (
               <ActiveCallBar
                 callStatus={callStatus}
@@ -2705,7 +2736,7 @@ export default function App() {
                   startEditMessage={startEditMessage}
                   handleDeleteMessage={handleDeleteMessage}
                   handleRsvp={handleRsvp}
-                  joinGroupCall={joinGroupCall}
+                  joinGroupCall={joinGroupCallStable}
                   onJumpToMessage={jumpToReply}
                   typingUsers={typingUsers}
                   endRef={endRef}

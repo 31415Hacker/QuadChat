@@ -1,5 +1,6 @@
 import { Clock, MessageCircle, Phone, PhoneIncoming, PhoneOff, UserRound, X } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
+import Dialog from "./Dialog.jsx";
 import { getInitials, getProfileName } from "../utils/names.js";
 import { getStatusColor, getStatusLabel } from "../utils/profile.js";
 
@@ -15,8 +16,11 @@ export function StatusModal({
   if (!statusModalOpen) return null;
 
   return (
-    <div className="modal-backdrop" onClick={() => setStatusModalOpen(false)}>
-      <div className="status-modal" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      onClose={() => setStatusModalOpen(false)}
+      ariaLabel="Set status"
+      className="status-modal"
+    >
         <div className="status-modal-header">
           <Clock size={18} />
           <span>Set status</span>
@@ -123,8 +127,7 @@ export function StatusModal({
             Save
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -138,8 +141,11 @@ export function NewDmModal({
   if (!showNewDm) return null;
 
   return (
-    <div className="modal-backdrop" onClick={() => setShowNewDm(false)}>
-      <div className="status-modal" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      onClose={() => setShowNewDm(false)}
+      ariaLabel="Start a conversation"
+      className="status-modal"
+    >
         <div className="status-modal-header">
           <MessageCircle size={18} />
           <span>Start a conversation</span>
@@ -171,8 +177,7 @@ export function NewDmModal({
             <p className="new-dm-empty">No other users yet.</p>
           ) : null}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -185,8 +190,11 @@ export function AnalyticsModal({
   if (!analyticsTarget) return null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="analytics-modal" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      onClose={onClose}
+      ariaLabel="User analytics"
+      className="analytics-modal"
+    >
         <div className="analytics-modal-header">
           <UserRound size={18} />
           <span>{getProfileName(analyticsTarget, analyticsTarget.email || "")}</span>
@@ -234,8 +242,7 @@ export function AnalyticsModal({
             <p className="analytics-loading">No data available.</p>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -243,8 +250,13 @@ export function IncomingCallModal({ incomingCall, rejectCall, answerCall }) {
   if (!incomingCall) return null;
 
   return (
-    <div className="modal-backdrop">
-      <div className="incoming-call">
+    <Dialog
+      onClose={rejectCall}
+      ariaLabel="Incoming call"
+      className="incoming-call"
+      closeOnBackdrop={false}
+      closeOnEscape={false}
+    >
         <PhoneIncoming size={36} />
         <p><strong>{incomingCall.callerName}</strong> is calling...</p>
         <div className="incoming-call-actions">
@@ -257,8 +269,7 @@ export function IncomingCallModal({ incomingCall, rejectCall, answerCall }) {
             <span>Answer</span>
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -272,13 +283,11 @@ export function GamingPostModal({
   if (!showGamingPost || !gamingPostCard) return null;
 
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        className="settings-modal"
-        aria-label="Create gaming post"
-        role="dialog"
-        aria-modal="true"
-      >
+    <Dialog
+      onClose={() => setShowGamingPost(false)}
+      ariaLabel="Create gaming post"
+      className="settings-modal"
+    >
         <header className="settings-header">
           <div>
             <h2>Gaming Post</h2>
@@ -314,7 +323,6 @@ export function GamingPostModal({
             Cancel
           </button>
         </div>
-      </section>
-    </div>
+    </Dialog>
   );
 }

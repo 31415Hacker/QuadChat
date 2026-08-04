@@ -26,10 +26,18 @@
     // ONE-ON-ONE WEBRTC CALLS
     // -----------------------------------------------------------------
     "calls": {
+      // The client listens with onChildAdded() on the whole collection to
+      // detect incoming calls, so any signed-in user must be able to read
+      // it. Per-call writes below stay locked to the caller/callee pair.
+      ".read": "auth != null",
       "$callId": {
-        // Only caller or callee can view or interact with the call object
-        ".read": "auth != null && (data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid || !data.exists())",
-        ".write": "auth != null && (!data.exists() && newData.child('callerId').val() === auth.uid || data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid)",
+        // Only the caller or callee can create/interact with a call object.
+        // Creation is limited to the caller writing their own callerId.
+        ".write": "auth != null && (
+          (!data.exists() && newData.child('callerId').val() === auth.uid)
+          || data.child('callerId').val() === auth.uid
+          || data.child('calleeId').val() === auth.uid
+        )",
 
         // Caller/callee identities are locked after creation so they can't be rewritten
         "callerId": {
@@ -38,8 +46,35 @@
         "calleeId": {
           ".validate": "!data.exists() || newData.val() === data.val()"
         },
+        "callerName": {
+          ".validate": "newData.isString()"
+        },
+        "calleeName": {
+          ".validate": "newData.isString()"
+        },
         "status": {
           ".validate": "newData.isString()"
+        },
+        "startedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "offer": {
+          ".validate": "newData.hasChildren(['type', 'sdp']) && newData.child('type').isString() && newData.child('sdp').isString()"
+        },
+        "answer": {
+          ".validate": "newData.hasChildren(['type', 'sdp']) && newData.child('type').isString() && newData.child('sdp').isString()"
+        },
+        "callerMuted": {
+          ".validate": "newData.isBoolean()"
+        },
+        "calleeMuted": {
+          ".validate": "newData.isBoolean()"
+        },
+        "screenShareActive": {
+          ".validate": "newData.isBoolean() || (newData.hasChildren(['name']) && newData.child('name').isString())"
+        },
+        "screenShareRequest": {
+          ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name']) && newData.child('uid').isString() && newData.child('name').isString())"
         },
         "candidates": {
           "caller": {
@@ -64,14 +99,29 @@
     "group-calls": {
       "$groupCallId": {
         ".read": "auth != null",
+        // The first joiner creates the call (createdAt + participants) before
+        // any participant entries exist, so the parent write stays open to all
+        // signed-in users. Shape is validated and per-node rules below lock
+        // participants and connections down.
         ".write": "auth != null",
-        
+
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "screenShareActive": {
+          ".validate": "newData.isBoolean() || (newData.hasChildren(['name']) && newData.child('name').isString())"
+        },
+        "screenShareRequest": {
+          ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name']) && newData.child('uid').isString() && newData.child('name').isString())"
+        },
+
         "participants": {
           // Whole-map writes denied; users can only touch their own entry below
           ".write": false,
           "$uid": {
             // Users can only add, modify, or remove their own participant entry
-            ".write": "auth != null && auth.uid === $uid"
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['name', 'joinedAt']) && newData.child('name').isString() && newData.child('joinedAt').isNumber()"
           }
         },
         "connections": {
@@ -79,14 +129,15 @@
           ".read": false,
           ".write": false,
           "$connId": {
-            // Peer connection keys follow the 'uidA_uidB' pattern
-            // Only participants in that pair can read/write candidates/SDP signals
-            ".read": "auth != null && $connId.contains(auth.uid)",
-            ".write": "auth != null && $connId.contains(auth.uid)"
+            // Peer connection keys follow the 'uidA_uidB' pattern (uids sorted).
+            // Only the two participants in that pair can read/write signaling.
+            // auth.uid contains only [A-Za-z0-9], so the '_' delimiters make
+            // this exact-match safe (unlike a plain contains() check).
+            ".read": "auth != null && ($connId.startsWith(auth.uid + '_') || $connId.endsWith('_' + auth.uid))",
+            ".write": "auth != null && ($connId.startsWith(auth.uid + '_') || $connId.endsWith('_' + auth.uid))"
           }
         }
       }
     }
   }
 }
-
