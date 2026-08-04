@@ -856,7 +856,7 @@ export default function App() {
                     : next;
                 }
                 const next = prev.slice();
-                next[existingIndex] = { ...next[existingIndex], ...msg };
+                next[existingIndex] = { ...next[existingIndex], ...msg, pending: false };
                 return next;
               });
               if (change.type === "added") {
@@ -893,7 +893,7 @@ export default function App() {
                     : next;
                 }
                 const next = prev.slice();
-                next[existingIndex] = { ...next[existingIndex], ...msg };
+                next[existingIndex] = { ...next[existingIndex], ...msg, pending: false };
                 return next;
               });
             } else if (change.type === "modified") {
@@ -905,7 +905,7 @@ export default function App() {
                 const idx = prev.findIndex((m) => m.id === msg.id);
                 if (idx === -1) return prev;
                 const next = prev.slice();
-                next[idx] = { ...next[idx], ...msg };
+                next[idx] = { ...next[idx], ...msg, pending: false };
                 return next;
               });
             } else if (change.type === "removed") {
@@ -1208,7 +1208,7 @@ export default function App() {
         id: dm.id,
         label: getDmPartnerName(dm, profilesRef.current, sessionUserId)
       }))
-    ];
+    ].filter(({ id }) => id !== activeChannelRef.current);
 
     const unsubs = watcherChannels.map(({ id: channelId, label: channelLabel }) => {
       const tailQuery = query(
@@ -1266,7 +1266,7 @@ export default function App() {
     });
 
     return () => unsubs.forEach((unsub) => unsub());
-  }, [user, sessionUserId, dmChannelIdsKey]);
+  }, [user, sessionUserId, dmChannelIdsKey, activeChannel]);
 
   async function handleAuth(event) {
     event.preventDefault();
@@ -2375,6 +2375,27 @@ export default function App() {
     }
   }, [user, activeChannel]);
 
+  async function addMessageWithOptimisticState(data) {
+    const messageRef = doc(messagesRef(activeChannel));
+    const optimisticMessage = {
+      id: messageRef.id,
+      ...data,
+      createdAt: Timestamp.now(),
+      pending: true
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+
+    try {
+      await setDoc(messageRef, {
+        ...data,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      setMessages((prev) => prev.filter((message) => message.id !== messageRef.id));
+      throw error;
+    }
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
 
@@ -2453,7 +2474,7 @@ export default function App() {
         if (isDmChannelId(activeChannel)) {
           await updateDmMetadata(messageText);
         }
-        await addDoc(messagesRef(activeChannel), {
+        await addMessageWithOptimisticState({
           text: messageText,
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
@@ -2466,8 +2487,7 @@ export default function App() {
                 }
               }
             : {}),
-          userId: sessionUserId,
-          createdAt: serverTimestamp()
+          userId: sessionUserId
         });
       }
 
@@ -2969,10 +2989,9 @@ export default function App() {
         gamingPostCard={gamingPostCard}
         setGamingPostCard={setGamingPostCard}
         onSend={async () => {
-          await addDoc(messagesRef(activeChannel), {
+          await addMessageWithOptimisticState({
             ...gamingPostCard,
-            userId: sessionUserId,
-            createdAt: serverTimestamp()
+            userId: sessionUserId
           });
           setShowGamingPost(false);
           setGamingPostCard(null);

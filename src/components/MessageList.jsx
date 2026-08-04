@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
 import { formatDayLabel, dayKey, formatTime } from "../utils/format.js";
-import { getProfileName } from "../utils/names.js";
+import { getProfileName, normalizeName } from "../utils/names.js";
 import {
   getReplyPreview,
   renderMessageText,
@@ -33,6 +33,7 @@ const MessageItem = memo(function MessageItem({
   handleToggleReaction,
   isCurrentUserAdmin,
   profiles,
+  knownNames,
   sessionUserId,
   activeName,
   handleRsvp,
@@ -222,7 +223,7 @@ const MessageItem = memo(function MessageItem({
         <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} onJoinGroupCall={joinGroupCall} />
       ) : typeof item.text === "string" && item.text ? (
         <p>
-          {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId)}
+          {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId, knownNames)}
         </p>
       ) : null}
       {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
@@ -313,6 +314,15 @@ const MessageList = memo(function MessageList({
   dmPartnerName,
   isDmChannel
 }) {
+  const mentionNames = useMemo(
+    () => new Set(
+      Object.values(profiles).map((profile) =>
+        normalizeName(getProfileName(profile, ""))
+      )
+    ),
+    [profiles]
+  );
+
   return (
     <>
       {activeChannel === "suggestions" ? (
@@ -386,6 +396,7 @@ const MessageList = memo(function MessageList({
                   handleToggleReaction={handleToggleReaction}
                   isCurrentUserAdmin={isCurrentUserAdmin}
                   profiles={profiles}
+                  knownNames={mentionNames}
                   sessionUserId={sessionUserId}
                   activeName={activeName}
                   handleRsvp={handleRsvp}

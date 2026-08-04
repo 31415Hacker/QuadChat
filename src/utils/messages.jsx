@@ -20,7 +20,14 @@ export function isVideoUrl(str) {
   }
 }
 
-export function renderMessageText(text, profiles, isAdminCommand = false, sessionUserId = null, targetUserId = null) {
+export function renderMessageText(
+  text,
+  profiles,
+  isAdminCommand = false,
+  sessionUserId = null,
+  targetUserId = null,
+  knownNames = null
+) {
   if (!text) {
     return null;
   }
@@ -33,15 +40,17 @@ export function renderMessageText(text, profiles, isAdminCommand = false, sessio
     return <span className="admin-command-text">{displayText}</span>;
   }
 
-  const knownNames = Object.values(profiles).map((profile) =>
-    normalizeName(getProfileName(profile, ""))
+  const mentionNames = knownNames || new Set(
+    Object.values(profiles).map((profile) =>
+      normalizeName(getProfileName(profile, ""))
+    )
   );
 
   return String(text || "").split(/(\s+)/).map((part, index) => {
     if (part.startsWith("@")) {
       const mention = normalizeName(part);
       const isMention =
-        mention === "everyone" || knownNames.some((name) => name === mention);
+        mention === "everyone" || mentionNames.has(mention);
 
       return isMention ? (
         <span className="mention" key={`${part}-${index}`}>
