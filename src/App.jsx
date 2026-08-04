@@ -223,6 +223,7 @@ export default function App() {
   const composerInputRef = useRef(null);
   const pendingJumpRef = useRef(null);
   const highlightTargetRef = useRef(null);
+  const isReplyJumpLoadingRef = useRef(false);
   const attachMenuRef = useRef(null);
   const currentSessionDocRef = useRef(null);
   const endRef = useRef(null);
@@ -727,6 +728,7 @@ export default function App() {
     newestDocSnapRef.current = null;
 
     let cancelled = false;
+    let isJumpLoad = false;
 
     async function loadInitialMessages() {
       const ref = messagesRef(activeChannel);
@@ -737,6 +739,9 @@ export default function App() {
       if (jump && jump.channelId === activeChannel && jump.createdAt) {
         jumpTargetId = jump.messageId;
         pendingJumpRef.current = null;
+        isJumpLoad = true;
+        isReplyJumpLoadingRef.current = true;
+        isNearBottomRef.current = false;
         const beforeSnap = await getDocs(
           query(
             ref,
@@ -897,6 +902,7 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      if (isJumpLoad) isReplyJumpLoadingRef.current = false;
 
       if (newMessagesUnsubRef.current) {
         newMessagesUnsubRef.current();
@@ -991,11 +997,20 @@ export default function App() {
     const targetId = highlightTargetRef.current;
     if (!targetId) return;
     const el = document.getElementById(`msg-${targetId}`);
-    if (!el) return;
+    if (!el) {
+      isReplyJumpLoadingRef.current = false;
+      return;
+    }
     highlightTargetRef.current = null;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const isRemoteJump = isReplyJumpLoadingRef.current;
+    el.scrollIntoView({ behavior: isRemoteJump ? "auto" : "smooth", block: "center" });
     el.classList.add("message-highlight");
     setTimeout(() => el.classList.remove("message-highlight"), 2500);
+    if (isRemoteJump) {
+      requestAnimationFrame(() => {
+        isReplyJumpLoadingRef.current = false;
+      });
+    }
   }, [messages, activeChannel, channelReloadKey]);
 
   useEffect(() => {
@@ -1005,7 +1020,7 @@ export default function App() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
+        if (entries[0].isIntersecting && !isReplyJumpLoadingRef.current) {
           loadMoreMessages();
         }
       },
@@ -2130,7 +2145,12 @@ export default function App() {
   }
 
   async function loadMoreMessages() {
-    if (isLoadingMoreRef.current || !hasMoreMessagesRef.current || !oldestDocSnapRef.current) return;
+    if (
+      isReplyJumpLoadingRef.current ||
+      isLoadingMoreRef.current ||
+      !hasMoreMessagesRef.current ||
+      !oldestDocSnapRef.current
+    ) return;
 
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
@@ -2297,6 +2317,7 @@ export default function App() {
     if (!targetId || !user) return;
     const existing = document.getElementById(`msg-${targetId}`);
     if (existing) {
+      isNearBottomRef.current = false;
       existing.scrollIntoView({ behavior: "smooth", block: "center" });
       existing.classList.add("message-highlight");
       setTimeout(() => existing.classList.remove("message-highlight"), 2500);
@@ -2309,6 +2330,7 @@ export default function App() {
       if (!targetSnap.exists()) return;
       const target = targetSnap.data();
       if (!target.createdAt) return;
+      isNearBottomRef.current = false;
       pendingJumpRef.current = {
         channelId: activeChannel,
         messageId: targetId,

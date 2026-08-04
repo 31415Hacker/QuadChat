@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 1.7.21
+Current: 1.7.22
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -33,7 +33,7 @@ Rules:
 ## 1-to-1 Call — Incoming-Call Detection Broadcast Call Metadata
 - Root cause: the client listened with `onChildAdded` on the whole `calls` collection to detect incoming calls. RTDB grants read at the path you listen on, not per child, so this forced a `.read: auth != null` on `calls` — every signed-in user could read every call's metadata and SDP.
 - Fix: per-user `call-rings/<uid>/<callKey>` nodes. The caller writes a minimal ring (caller/callee ids + names, `startedAt`, `callKey`) into the callee's node (`useCalls.js` `startCall`); the callee listens only on `call-rings/<ownUid>` (`useCalls.js` detect effect). Rules lock rings to the owner (reads) and to the owner-or-verified-caller (writes), and `calls` reads are participant-only again (`database.rules.json`). Rings self-clean on answer/reject/status-change and via the 20s staleness check.
-- Note: a ring for an offline callee is silently discarded on reconnect — there is no missed-call surface yet.
+- Note: a stale ring for an offline callee is moved to the owner-only `missed-calls` node and shown in the notification center on reconnect (see Missed-Call Notifications below).
 
 ## Confirm Dialog Invisible During Settings
 - Root cause: `<ConfirmDialog>` was rendered inside the `.chat-panel` section, and `App.jsx` unmounts the whole `.chat-panel` while Settings is open — so a pending confirm couldn't render until Settings closed, then popped up "out of nowhere". `.modal-backdrop` (z-index 40) was also below `.settings-close-btn` (50), `.toast-container` (60), and `.attach-menu` (100).
@@ -57,6 +57,10 @@ Rules:
 - `.messages` scroll container, typing indicator, and `endRef` live in `App.jsx`; `MessageList` and `MessageItem` are both `memo`'d with stable `useCallback` props so typing doesn't re-run the message map.
 - Keep new props passed to `MessageList`/`MessageItem` stable (useCallback) or the memo is defeated. `handleRsvp`, `handleDeleteMessage`, `handleToggleReaction`, `joinGroupCallStable`, `setReplyTo`, `setOpenMessageMenuId` are all stable.
 - Don't move the scroll container back inside `MessageList` — it would re-run `messages.map` on every keystroke again.
+
+## Reply Jump — Far-Away Messages Scroll Erratically
+- Root cause: loading a remote reply target replaces the current window with messages around that target. The top sentinel could immediately request older messages while `scrollIntoView({ behavior: "smooth" })` and the pagination scroll-preservation adjustment were both running; a stale near-bottom flag could then yank the user back down on the next message update.
+- Fix: remote jumps set `isReplyJumpLoadingRef` and clear `isNearBottomRef` before reloading. The sentinel and `loadMoreMessages()` ignore pagination during the jump; once the target is rendered, it is centered immediately, highlighted, and normal pagination resumes. Direct jumps to an already-rendered message also clear the near-bottom flag.
 
 # Composer
 
