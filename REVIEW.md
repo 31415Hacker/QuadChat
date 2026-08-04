@@ -1,7 +1,7 @@
 # QuadChat — In-Depth Review
 
 **Date:** 2026-08-04
-**Version:** 1.7.18 (HEAD `76d637b`)
+**Version:** 1.7.20 (HEAD `2c685e0`)
 **Context:** A private group chat for a friend group of ~6 people
 **Scope:** `src/App.jsx` (2,900 lines), `src/hooks/` (`useCalls.js` 1,385 lines), `src/components/*`, `src/utils/*`, `src/styles.css` (3,250 lines), `cloudinary.js`, `firebase.js`, `api/*`, `firestore.rules`, `database.rules.json`, `quadchat-worker/` (Cloudflare Durable Object presence server), `game/`, `scripts/`, deploy config.
 
@@ -11,7 +11,7 @@
 
 | Area | Rating | One-line summary |
 |---|---|---|
-| **UI** | **9.0/10** | Reactions are native-feeling: a hover emoji picker on every bubble and chip rows that reflect your own selection — no new visual language bolted on. |
+| **UI** | **9.0/10** | Reactions are native-feeling: the picker lives behind the three-dot menu, chip rows reflect your own selection, and the message row stays uncluttered — no new visual language bolted on. |
 | **UX** | **9.0/10** | Missed calls now surface in the notification center instead of vanishing, and the last dead-ends in the v1.7.15 composer work (Enter-to-send, mentions, emoji). |
 | **Performance** | **7.9/10** | `MessageList` itself is memoized so typing no longer re-runs the message map, and dead deps (`react-pdf`, `cloudinary-react`) are gone. |
 | **Security** | **9.0/10** | Reactions are rule-locked to each user's own map key, and `missed-calls` nodes are owner-only read/write. |
@@ -23,15 +23,17 @@
 
 QuadChat is a private group chat for roughly six friends, and it keeps punching far above its weight: 1-to-1 voice calls, LiveKit group calls with a P2P mesh fallback, screen sharing with a request flow, voice messages with pause/resume, attachments, DMs, typing indicators, presence with statuses and scheduled busy, an in-app notification center, message search with jump-to-result, message editing, threaded replies with jump-to-original, RSVP gaming cards, per-user session analytics, moderation (`?mute`, `?warn`, `?unwarn`, `?purge`) — and now message reactions and missed-call notifications.
 
-This review supersedes the v1.7.15 review and covers the current **v1.7.18** HEAD. Releases since v1.7.15:
+This review supersedes the v1.7.15 review and covers the current **v1.7.20** HEAD. Releases since v1.7.15:
 
 - **v1.7.16 — documentation only.** The composer and confirm-dialog fixes were written up in `AGENTS.md`.
 - **v1.7.17 — composer width fix.** The textarea got `display:block; width:100%` so it fills the full mic↔send column (`styles.css`).
 - **v1.7.18 — a four-item batch:** (1) message reactions, (2) `MessageList` memoization, (3) missed-call notifications, (4) dead-package cleanup.
+- **v1.7.19 — documentation only.** The v1.7.18 batch was written up in `AGENTS.md`.
+- **v1.7.20 — reactions moved behind the menu.** The reaction picker no longer sits as a hover `<Smile>` button on every bubble; it's reached via the three-dot message menu → **React** → the same 6-emoji picker, at the same anchored position the menu used. The message row's hover actions are back to a single overflow button.
 
 ### The four items of v1.7.18
 
-1. **Reactions.** A `reactions` map on each message doc maps `uid → emoji`. The `firestore.rules` update path now allows an update that touches only `reactions`, and only keys it owns — the same pattern as the existing `rsvps` clause (`firestore.rules`). `handleToggleReaction` in `App.jsx` writes `reactions.<uid>` or `deleteField()` when tapping your own emoji again. In the UI each bubble gets a hover `<Smile>` button that opens a 6-emoji picker (`👍 ❤️ 😂 😮 😢 🙏`, `.reaction-picker`), and chips render below the content with per-emoji counts and a name tooltip; your own reaction is highlighted (`.reaction-chip--mine`). Tapping a chip toggles your vote, picker outside-click closes, and a second tap on the same emoji in the picker removes it.
+1. **Reactions.** A `reactions` map on each message doc maps `uid → emoji`. The `firestore.rules` update path now allows an update that touches only `reactions`, and only keys it owns — the same pattern as the existing `rsvps` clause (`firestore.rules`). `handleToggleReaction` in `App.jsx` writes `reactions.<uid>` or `deleteField()` when tapping your own emoji again. The three-dot menu's "React" item opens a 6-emoji picker (`👍 ❤️ 😂 😮 😢 🙏`, `.reaction-picker`), and chips render below the content with per-emoji counts and a name tooltip; your own reaction is highlighted (`.reaction-chip--mine`). Tapping a chip toggles your vote, picker outside-click closes, and a second tap on the same emoji in the picker removes it. (Moved behind the menu in v1.7.20.)
 2. **Memoized `MessageList`.** The scroll container moved out of `MessageList` into `App.jsx` as a `.messages` wrapper (with the typing indicator and `endRef`). `MessageList` and `MessageItem` are both `memo`'d with stable `useCallback` props, so typing in the composer no longer re-runs `messages.map` or every item's prop comparison.
 3. **Missed-call notifications.** When an incoming-call ring goes stale (>20 s), the callee's client now writes it to `missed-calls/<uid>/<callKey>` before clearing the ring (`useCalls.js`). RTDB rules lock the node to the owner (`.read`/`.write: auth.uid === $uid`) and validate `callKey`/`callerId`/`callerName`/`startedAt` types. `App.jsx` listens with `onChildAdded`, pushes a `missed-call` notification into the notification center ("<caller> missed your call", `id: missed-call-<callKey>` so it dedupes), and deletes the node — so offline members learn who tried them on reconnect, and the node self-cleans.
 4. **Dead-package cleanup.** `react-pdf`, `cloudinary-react`, and `cloudinary-core` were uninstalled and `src/MediaRenderer.jsx` (never imported) deleted.
@@ -42,8 +44,8 @@ This review supersedes the v1.7.15 review and covers the current **v1.7.18** HEA
 
 ### Strengths
 
-- **Reactions look and feel native.** The hover picker uses the same `--text-tertiary` icon-button treatment as the overflow menu, sits in the same top-right actions row, and opens upward in a `.reaction-picker` pill that uses the surface/border/radius tokens. The chip row below a message reuses the bubble's `--bg-hover`/`--border-color` language with a blue tint for your own vote. Nothing introduces a fourth design language.
-- **The picker is forgiving.** Outside-click closes it, each option has an `aria-label`, and the toggle button reports `aria-expanded`. The chips' `title` lists who reacted ("Alice, Bob reacted with 👍") using the same `getProfileName` logic that renders names everywhere else.
+- **Reactions look and feel native.** Since v1.7.20 the picker lives behind the three-dot menu — a "React" item with a `<Smile>` icon — so the hover actions on a bubble are back to a single overflow button. The `.reaction-picker` pill opens at the exact position the menu used, with the same surface/border/radius tokens. The chip row below a message reuses the bubble's `--bg-hover`/`--border-color` language with a blue tint for your own vote. Nothing introduces a fourth design language.
+- **The picker is forgiving.** Outside-click closes it, each option has an `aria-label`, and the picker swaps into the menu's slot cleanly (the menu and picker are mutually exclusive states). The chips' `title` lists who reacted ("Alice, Bob reacted with 👍") using the same `getProfileName` logic that renders names everywhere else.
 - **All of v1.7.15–17 still holds:** the multiline composer with auto-grow, the themed lazy emoji picker, caret-aware `@`-mentions that match message rendering, and the confirm dialogs that now show over Settings.
 
 ### Weaknesses
@@ -54,7 +56,7 @@ This review supersedes the v1.7.15 review and covers the current **v1.7.18** HEA
 
 ### Verdict
 
-Reactions were the most-requested missing feature and they landed without a design compromise: the picker and chips are token-native, accessible at the button level, and trivially discoverable on hover.
+Reactions were the most-requested missing feature and they landed without a design compromise: the picker and chips are token-native, accessible at the button level, and — per the v1.7.20 change — tucked behind the overflow menu so the message row stays clean.
 
 ---
 
@@ -64,11 +66,12 @@ Reactions were the most-requested missing feature and they landed without a desi
 
 - **Missed calls are no longer silent.** The v1.7.13 ring design fire-and-forgets stale rings; v1.7.18 persists them to an owner-locked `missed-calls/<uid>` node and the client drains each into the notification center as a "missed your call" item, then deletes it. An offline user reconnects and sees who tried them; the center item uses a distinct red phone icon and dedupes per `callKey`.
 - **The keystroke cost is gone.** Memoizing `MessageList` means typing in the composer no longer maps over every message and prop-compares every item — the lag on older conversations disappears.
-- **Reactions are two taps and reversible.** Hover → tap an emoji, or tap an existing chip to toggle your vote off; the picker outside-click and Escape-free single-close behavior match the message menu.
+- **Reactions are three taps and reversible.** Menu → React → pick an emoji, or tap an existing chip to toggle your vote off; the picker outside-click and single-close behavior match the message menu.
 - **Everything from v1.7.15 still holds:** confirm dialogs render over Settings, Enter-sends/Shift+Enter-newline is IME-safe, mentions walk with arrows, reply-jump reaches scrolled-out messages, and calls survive the 10 s ICE grace.
 
 ### Weaknesses
 
+- **Reactions lost hover discoverability.** Hiding the picker behind the three-dot menu (v1.7.20) declutters the bubble but means a friend has to know the menu exists to find reactions. The chip row still advertises them once someone else has reacted — and it's the exact trade-off the user asked for.
 - **No pins** — the natural next ask after reactions.
 - **The message menu popover and notification panel still aren't keyboard-navigable** (no arrow-key handling, no menu semantics).
 - **An ignored in-session call still doesn't notify until reload or a status change** — the missed-call record is created by the staleness/cleanup path, so a call you watch ring past 20 s without the caller giving up only surfaces as "missed" on reconnect.
@@ -140,7 +143,7 @@ Both new surfaces — reactions and missed-call records — were designed to the
 
 **What it is:** a feature-complete, visually polished private group chat that keeps out-performing its own humble scope. Chat, DMs, voice, group calls with graceful fallback, screen share, files, voice notes, search, editing, replies with jump-to-original, gaming sessions, analytics, moderation — and now reactions, missed-call notifications, a memoized message list, and a leaner dependency tree.
 
-**Why this release matters:** v1.7.18 is the "ask for it next" release. Reactions were the #1 item on the list and they arrived rule-safe and design-native; missed calls turned a silent failure (rings to offline users vanished) into a first-class notification-center event; and the keystroke re-render that had grown visible on long threads is gone because `MessageList` is memoized at the top. The dead packages went with it — the same commit that added features removed bloat.
+**Why this release matters:** v1.7.18 was the "ask for it next" release. Reactions were the #1 item on the list and they arrived rule-safe and design-native; missed calls turned a silent failure (rings to offline users vanished) into a first-class notification-center event; and the keystroke re-render that had grown visible on long threads is gone because `MessageList` is memoized at the top. The dead packages went with it — the same commit that added features removed bloat. v1.7.20 then put reactions where the user wanted them: behind the three-dot menu instead of a hover button, keeping the message row clean.
 
 **What holds it back:** pins are the natural next feature; the message menu and notification panel still aren't keyboard-navigable; an ignored in-session call doesn't notify until reconnect; and the scaling story (whole-collection users listener, per-message name-map rebuild) still waits past six friends. None of it matters to the current circle.
 
@@ -155,4 +158,4 @@ Both new surfaces — reactions and missed-call records — were designed to the
 
 ---
 
-*Review written 2026-08-04 against v1.7.18 (`git rev-parse HEAD` = `76d637b`), superseding the v1.7.15 review.*
+*Review written 2026-08-04 against v1.7.20 (`git rev-parse HEAD` = `2c685e0`), superseding the v1.7.18 review.*
