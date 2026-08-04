@@ -1735,11 +1735,13 @@ button:disabled {
 }
 
 .composer-row textarea {
+  display: block;
   line-height: 1.35;
   max-height: 116px;
   min-height: 48px;
   overflow-y: auto;
   resize: none;
+  width: 100%;
 }
 
 .mention-suggestions {
