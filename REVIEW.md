@@ -1,7 +1,7 @@
 # QuadChat — In-Depth Review
 
 **Date:** 2026-08-04
-**Version:** 1.9.0 (feature HEAD `03b2cc2`)
+**Version:** 1.9.1 (feature HEAD `226890e`)
 **Context:** A private group chat for a friend group of ~6 people
 **Scope:** `src/App.jsx` (2,900 lines), `src/hooks/` (`useCalls.js` 1,385 lines), `src/components/*`, `src/utils/*`, `src/styles.css` (3,250 lines), `cloudinary.js`, `firebase.js`, `api/*`, `firestore.rules`, `database.rules.json`, `quadchat-worker/` (Cloudflare Durable Object presence server), `game/`, `scripts/`, deploy config.
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | **UI** | **9.0/10** | Reactions are native-feeling: the picker lives behind the three-dot menu, chip rows reflect your own selection, and the message row stays uncluttered — no new visual language bolted on. |
 | **UX** | **9.1/10** | Missed calls surface in the notification center, profile pictures appear consistently, and presence recovers cleanly after freezes or sleep. |
-| **Performance** | **8.0/10** | The keystroke render regression is fixed, the critical path remains stable, and heartbeat traffic is negligible for the current group size. |
+| **Performance** | **8.5/10** | Profile-name work is cached, active-channel listener duplication is removed, native Firestore streaming is restored, and text messages render optimistically. |
 | **Security** | **9.1/10** | Reactions and missed calls are rule-scoped, admin profiles cannot be muted, and upload limits are checked server-side. |
 | **Overall** | **9.1/10** | The chat now handles abrupt client suspension more honestly while continuing to close the small UX gaps around identity and presence. |
 
@@ -33,6 +33,7 @@ This review supersedes the v1.7.20 review and covers the current **v1.8.7** HEAD
 - **v1.7.21–v1.7.26 — polish and stability.** The review was refreshed, far-away reply jumps stopped fighting pagination, the chat panel width was tuned to `1100px`, and the version moved to `1.8.0`.
 - **v1.8.1–v1.8.6 — identity and layout.** Admin profiles became unmutable in Firestore rules, admin mic controls disappeared, Cloudinary profile pictures were added to the user list, DM tabs, and header avatar, upload limits rose to 50 MB for messages/voice, and header actions were grouped on the right.
 - **v1.8.7 — presence heartbeat.** The client sends a ping every 10 seconds; the Durable Object records `lastPing`, checks every 15 seconds, and removes sessions stale for more than 25 seconds.
+- **v1.9.1 — performance fixes.** Mention validation now receives a memoized profile-name set instead of rebuilding it per message; the background watcher skips the active channel; Firestore no longer forces long polling; and text/gaming messages render optimistically with rollback on write failure.
 
 ### The four items of v1.7.18
 
@@ -109,18 +110,18 @@ Reactions and missed calls are the two features a friend group most plausibly as
   - CSS 58 KB (11 KB gzip)
   - Critical path ≈ 310 KB gzip (index + firebase + media + CSS).
 - Reaction updates are single-doc `updateDoc` writes with no list re-read; the memoized list reflects them without a full re-render.
+- **Text sends are optimistic.** The client allocates the Firestore message ID locally, inserts the message immediately, reconciles it when the snapshot arrives, and removes it if the write fails. Gaming posts use the same path; Cloudinary-backed file uploads still wait for upload completion.
 
 ### Remaining Performance Risks
 
-1. **The first message-list render still does avoidable profile work.** `renderMessageText` rebuilds a name map while rendering messages (`messages.jsx:36-38`), but this is now an initial/render-window cost rather than a cost paid on every composer keystroke.
-2. **The users listener is intentionally broad.** The whole-collection users listener (`App.jsx`) and cross-channel tail watchers are appropriate for six people, but should be scoped before the app grows materially.
-3. **`experimentalForceLongPolling: true`** (`firebase.js:20`) trades transport efficiency for compatibility and disables Firestore's WebSocket streaming.
-4. **No optimistic message UI.** Sends appear after `addDoc` resolves, and attachments still upload to Cloudinary before the Firestore message is written.
-5. **Heartbeat work is bounded but not free.** Each active browser sends one small ping every 10 seconds and the Durable Object scans its active sessions every 15 seconds; this is negligible at the current scale, but the sweep should be revisited if the presence room becomes large.
+1. **The users listener is intentionally broad.** The whole-collection users listener is required by the current all-users sidebar and profile-picture/status display. It is appropriate for six people, but should be replaced with a narrower roster/profile strategy before the app grows materially.
+2. **Cross-channel watchers still scale with channel count.** The active channel is no longer watched twice, but inactive channels and DMs still each retain a small tail listener for notifications.
+3. **File sends are still serial.** Cloudinary upload completion precedes the Firestore message write, so large files do not get the same immediate optimistic placeholder as text messages.
+4. **Heartbeat work is bounded but not free.** Each active browser sends one small ping every 10 seconds and the Durable Object scans its active sessions every 15 seconds; this is negligible at the current scale, but the sweep should be revisited if the presence room becomes large.
 
 ### Verdict
 
-The major user-facing performance issue from the previous review — remapping every message while typing — is resolved. The remaining criticisms are measured trade-offs: initial profile-map work, broad listeners, long polling, and the lack of optimistic writes. None is currently large enough to outweigh the responsive experience for a six-person room.
+The major user-facing performance issues from the previous review are resolved: mention names are cached, the active channel is not duplicated in the background watcher, Firestore uses native streaming, and text sends appear immediately. The remaining criticisms are measured trade-offs around roster scale, inactive-channel listeners, and large-file latency.
 
 ---
 
@@ -155,20 +156,20 @@ Both new surfaces — reactions and missed-call records — were designed to the
 
 **What it is:** a feature-complete, visually polished private group chat that keeps out-performing its own humble scope. Chat, DMs, voice, group calls with graceful fallback, screen share, files, voice notes, search, editing, replies with jump-to-original, gaming sessions, analytics, moderation — and now reactions, missed-call notifications, a memoized message list, and a leaner dependency tree.
 
-**Why this release matters:** v1.7.18 shipped the major reaction, missed-call, memoization, and dependency cleanup batch. The v1.8.x polish then made identity consistent across avatars, protected admins from mute writes, expanded message/voice uploads to 50 MB, and grouped the header controls. v1.8.7 addresses the hardest presence failure mode: an operating-system freeze or laptop sleep that never delivers a clean WebSocket close. The client ping plus server-side stale-session sweep now gives that failure a deterministic recovery path.
+**Why this release matters:** v1.7.18 shipped the major reaction, missed-call, memoization, and dependency cleanup batch. The v1.8.x polish then made identity consistent across avatars, protected admins from mute writes, expanded message/voice uploads to 50 MB, and grouped the header controls. v1.8.7 addressed frozen presence sessions. v1.9.1 now closes the concrete performance criticisms from the prior review: repeated profile-name work, duplicate active-channel listening, forced long polling, and delayed text-message rendering.
 
-**What holds it back:** pins are the natural next feature; the message menu and notification panel still aren't keyboard-navigable; upload metadata is still client-reported; and the scaling story (whole-collection users listener, per-message name-map rebuild) still waits past six friends. None of it matters to the current circle.
+**What holds it back:** pins are the natural next feature; the message menu and notification panel still aren't keyboard-navigable; upload metadata is still client-reported; inactive-channel listeners and the whole-collection user roster still wait for a larger-scale redesign; and large files still have serial upload latency. None of it matters to the current circle.
 
 ### Top priorities if you keep building
 
 1. **Pins.** The natural follow-up to reactions; the data model is the same per-user-sub-key pattern.
 2. **Keyboard-navigable menus.** Give the message menu popover and the notification panel real menu semantics (arrow keys, Home/End, Escape).
 3. **Persist an ignored in-session call.** When a ring ages past 20 s while the callee is online but unresponsive, write the missed-call record on a timer rather than only on the staleness-cleanup path.
-4. **Scope the users listener + cache the name map.** Replace the whole-collection `onSnapshot` with per-render-needed fetches, and cache the per-message name-map build in `renderMessageText`.
-5. **Finish the upload story.** Sniff file content server-side so a lying client can't upload HTML as `text/plain`.
+4. **Scope the users listener.** Replace the whole-collection `onSnapshot` with a narrower roster/profile strategy if the group grows beyond its current size.
+5. **Finish the upload story.** Sniff file content server-side so a lying client can't upload HTML as `text/plain`, and add an optimistic placeholder for large file sends.
 6. **Deploy the Cloudflare worker automatically.** Add the path-scoped GitHub Actions workflow for `quadchat-worker/**` with Cloudflare credentials and worker tests before `wrangler deploy`.
 7. **Strip or gate the `useCalls.js` console logs** and convert the last `"X"` text button.
 
 ---
 
-*Review written 2026-08-04 for v1.9.0, covering feature HEAD `03b2cc2` and superseding the v1.7.20 review.*
+*Review written 2026-08-04 for v1.9.1, covering feature HEAD `226890e` and superseding the v1.9.0 review.*
