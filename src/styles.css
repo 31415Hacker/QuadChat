@@ -161,9 +161,9 @@ input {
   border-radius: 8px;
   box-shadow: 0 24px 70px var(--shadow-panel);
   margin: 0 auto;
-  max-width: 960px;
+  max-width: 1040px;
   overflow: hidden;
-  width: min(100%, 960px);
+  width: min(100%, 1040px);
 }
 
 .signin-panel {
