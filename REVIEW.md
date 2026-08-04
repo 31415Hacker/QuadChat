@@ -1,7 +1,7 @@
 # QuadChat — In-Depth Review
 
 **Date:** 2026-08-04
-**Version:** 1.8.7 (HEAD `03b2cc2`)
+**Version:** 1.9.0 (feature HEAD `03b2cc2`)
 **Context:** A private group chat for a friend group of ~6 people
 **Scope:** `src/App.jsx` (2,900 lines), `src/hooks/` (`useCalls.js` 1,385 lines), `src/components/*`, `src/utils/*`, `src/styles.css` (3,250 lines), `cloudinary.js`, `firebase.js`, `api/*`, `firestore.rules`, `database.rules.json`, `quadchat-worker/` (Cloudflare Durable Object presence server), `game/`, `scripts/`, deploy config.
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | **UI** | **9.0/10** | Reactions are native-feeling: the picker lives behind the three-dot menu, chip rows reflect your own selection, and the message row stays uncluttered — no new visual language bolted on. |
 | **UX** | **9.1/10** | Missed calls surface in the notification center, profile pictures appear consistently, and presence recovers cleanly after freezes or sleep. |
-| **Performance** | **8.0/10** | `MessageList` is memoized, dead deps are gone, and presence heartbeats prevent stale sessions from lingering. |
+| **Performance** | **8.0/10** | The keystroke render regression is fixed, the critical path remains stable, and heartbeat traffic is negligible for the current group size. |
 | **Security** | **9.1/10** | Reactions and missed calls are rule-scoped, admin profiles cannot be muted, and upload limits are checked server-side. |
 | **Overall** | **9.1/10** | The chat now handles abrupt client suspension more honestly while continuing to close the small UX gaps around identity and presence. |
 
@@ -94,14 +94,14 @@ Reactions and missed calls are the two features a friend group most plausibly as
 
 ---
 
-## 3. Performance — 7.9/10
+## 3. Performance — 8.0/10
 
 ### Strengths
 
 - **`MessageList` is now memoized at the top level.** The `.messages` scroll container (and the typing indicator, `endRef`) moved up into `App.jsx`, and both `MessageList` and `MessageItem` are wrapped in `React.memo` with stable `useCallback` props — the pre-batch gap (O(messages) map + per-item prop diff on every keystroke) is closed. Typing re-renders only the typing indicator.
 - **Dead install-time weight is gone.** `react-pdf`/pdf.js, `cloudinary-react`, and `cloudinary-core` were removed from `package.json` (package-lock shrank ~380 lines) and `MediaRenderer.jsx` was deleted.
 - **The bundle layout holds:**
-  - `index` **283 KB** (87 KB gzip) — app code
+  - `index` **284 KB** (87 KB gzip) — app code
   - `firebase` 674 KB (156 KB gzip) — manual chunk
   - `livekit-client` 532 KB (139 KB gzip) — **lazy**, group call only
   - `EmojiPicker` **510 KB** (111 KB gzip) — **lazy**, emoji picker only
@@ -110,17 +110,17 @@ Reactions and missed calls are the two features a friend group most plausibly as
   - Critical path ≈ 310 KB gzip (index + firebase + media + CSS).
 - Reaction updates are single-doc `updateDoc` writes with no list re-read; the memoized list reflects them without a full re-render.
 
-### Weaknesses
+### Remaining Performance Risks
 
-1. **`renderMessageText` still rebuilds the name map from all profiles for every message** (`messages.jsx:36-38`) — O(profiles × messages) per render; the memo hides most of the cost but it's still wasted work on the first paint.
-2. **Whole-collection users listener** (`App.jsx:607-626`) plus a cross-channel watcher that holds tail listeners on every channel and DM. Fine for 6 users; won't scale past it.
-3. **`experimentalForceLongPolling: true`** (`firebase.js:20`) disables Firestore's WebSocket streaming.
-4. **No optimistic UI.** Sends render only after `addDoc` resolves; attachments go Cloudinary → Firestore serially.
-5. **57 production `console.log`s in `useCalls.js`** still ship to prod.
+1. **The first message-list render still does avoidable profile work.** `renderMessageText` rebuilds a name map while rendering messages (`messages.jsx:36-38`), but this is now an initial/render-window cost rather than a cost paid on every composer keystroke.
+2. **The users listener is intentionally broad.** The whole-collection users listener (`App.jsx`) and cross-channel tail watchers are appropriate for six people, but should be scoped before the app grows materially.
+3. **`experimentalForceLongPolling: true`** (`firebase.js:20`) trades transport efficiency for compatibility and disables Firestore's WebSocket streaming.
+4. **No optimistic message UI.** Sends appear after `addDoc` resolves, and attachments still upload to Cloudinary before the Firestore message is written.
+5. **Heartbeat work is bounded but not free.** Each active browser sends one small ping every 10 seconds and the Durable Object scans its active sessions every 15 seconds; this is negligible at the current scale, but the sweep should be revisited if the presence room becomes large.
 
 ### Verdict
 
-The two structural items on the performance list — memoize the message list and drop the dead deps — are both done. What remains is the scaling story (users listener, name-map rebuild) that only matters past six friends.
+The major user-facing performance issue from the previous review — remapping every message while typing — is resolved. The remaining criticisms are measured trade-offs: initial profile-map work, broad listeners, long polling, and the lack of optimistic writes. None is currently large enough to outweigh the responsive experience for a six-person room.
 
 ---
 
@@ -171,4 +171,4 @@ Both new surfaces — reactions and missed-call records — were designed to the
 
 ---
 
-*Review written 2026-08-04 against v1.8.7 (`git rev-parse HEAD` = `03b2cc2`), superseding the v1.7.20 review.*
+*Review written 2026-08-04 for v1.9.0, covering feature HEAD `03b2cc2` and superseding the v1.7.20 review.*
