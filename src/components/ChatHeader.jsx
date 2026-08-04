@@ -247,8 +247,8 @@ export default function ChatHeader({
             onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)}
             title="Profile options"
           >
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="" />
+            {currentProfile?.photoURL ? (
+              <img src={currentProfile.photoURL} alt="" />
             ) : (
               <span>{getInitials(activeName)}</span>
             )}

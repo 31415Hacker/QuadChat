@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 1.8.2
+Current: 1.8.3
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
