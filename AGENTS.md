@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 1.7.22
+Current: 1.7.23
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -61,6 +61,7 @@ Rules:
 ## Reply Jump — Far-Away Messages Scroll Erratically
 - Root cause: loading a remote reply target replaces the current window with messages around that target. The top sentinel could immediately request older messages while `scrollIntoView({ behavior: "smooth" })` and the pagination scroll-preservation adjustment were both running; a stale near-bottom flag could then yank the user back down on the next message update.
 - Fix: remote jumps set `isReplyJumpLoadingRef` and clear `isNearBottomRef` before reloading. The sentinel and `loadMoreMessages()` ignore pagination during the jump; once the target is rendered, it is centered immediately, highlighted, and normal pagination resumes. Direct jumps to an already-rendered message also clear the near-bottom flag.
+- The remote window includes both target context and the latest `PAGE_SIZE` messages, with separate realtime listeners for each range, so jumping back does not hide recent messages or backfill the skipped middle. `hasTriggeredTopSentinelRef` makes pagination edge-triggered: the sentinel must leave and re-enter view before another page loads.
 
 # Composer
 

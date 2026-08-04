@@ -224,6 +224,7 @@ export default function App() {
   const pendingJumpRef = useRef(null);
   const highlightTargetRef = useRef(null);
   const isReplyJumpLoadingRef = useRef(false);
+  const hasTriggeredTopSentinelRef = useRef(false);
   const attachMenuRef = useRef(null);
   const currentSessionDocRef = useRef(null);
   const endRef = useRef(null);
@@ -721,9 +722,11 @@ export default function App() {
       return;
     }
 
-    setMessages([]);
+    const isRemoteJump = pendingJumpRef.current?.channelId === activeChannel;
+    if (!isRemoteJump) setMessages([]);
     setHasMoreMessages(true);
     hasMoreMessagesRef.current = true;
+    hasTriggeredTopSentinelRef.current = false;
     oldestDocSnapRef.current = null;
     newestDocSnapRef.current = null;
 
@@ -735,6 +738,8 @@ export default function App() {
       const jump = pendingJumpRef.current;
       let snapshot;
       let jumpTargetId = null;
+      let hasMore = true;
+      let modQueryRanges = null;
 
       if (jump && jump.channelId === activeChannel && jump.createdAt) {
         jumpTargetId = jump.messageId;
@@ -742,24 +747,48 @@ export default function App() {
         isJumpLoad = true;
         isReplyJumpLoadingRef.current = true;
         isNearBottomRef.current = false;
-        const beforeSnap = await getDocs(
-          query(
-            ref,
-            orderBy("createdAt", "desc"),
-            startAt(jump.createdAt),
-            limit(15)
+        const [beforeSnap, afterSnap, latestSnap] = await Promise.all([
+          getDocs(
+            query(
+              ref,
+              orderBy("createdAt", "desc"),
+              startAt(jump.createdAt),
+              limit(15)
+            )
+          ),
+          getDocs(
+            query(
+              ref,
+              orderBy("createdAt", "asc"),
+              startAfter(jump.createdAt),
+              limit(25)
+            )
+          ),
+          getDocs(
+            query(
+              ref,
+              orderBy("createdAt", "asc"),
+              limitToLast(PAGE_SIZE)
+            )
           )
-        );
-        const beforeDocs = beforeSnap.docs.slice().reverse();
-        const afterSnap = await getDocs(
-          query(
-            ref,
-            orderBy("createdAt", "asc"),
-            startAfter(jump.createdAt),
-            limit(25)
-          )
-        );
-        snapshot = { docs: [...beforeDocs, ...afterSnap.docs] };
+        ]);
+        const targetDocs = [...beforeSnap.docs.slice().reverse(), ...afterSnap.docs];
+        const docsById = new Map();
+        [...targetDocs, ...latestSnap.docs].forEach((messageDoc) => {
+          docsById.set(messageDoc.id, messageDoc);
+        });
+        snapshot = {
+          docs: [...docsById.values()].sort((a, b) => {
+            const aTime = a.data().createdAt?.toMillis?.() || 0;
+            const bTime = b.data().createdAt?.toMillis?.() || 0;
+            return aTime - bTime || a.id.localeCompare(b.id);
+          })
+        };
+        hasMore = beforeSnap.docs.length >= 15;
+        modQueryRanges = [
+          [targetDocs[0], targetDocs[targetDocs.length - 1]],
+          [latestSnap.docs[0], latestSnap.docs[latestSnap.docs.length - 1]]
+        ].filter(([first, last]) => first && last);
       } else {
         snapshot = await getDocs(
           query(
@@ -768,6 +797,7 @@ export default function App() {
             limitToLast(PAGE_SIZE)
           )
         );
+        hasMore = snapshot.docs.length >= PAGE_SIZE;
       }
 
       if (cancelled) return;
@@ -786,7 +816,6 @@ export default function App() {
           if (el) el.scrollTop = el.scrollHeight;
         }, 0);
       }
-      const hasMore = snapshot.docs.length >= PAGE_SIZE;
       setHasMoreMessages(hasMore);
       hasMoreMessagesRef.current = hasMore;
       oldestDocSnapRef.current = snapshot.docs[0] || null;
@@ -841,17 +870,12 @@ export default function App() {
         );
       }
 
-      const modQuery =
-        oldestDocSnapRef.current && newestDocSnapRef.current
-          ? query(
-              ref,
-              orderBy("createdAt", "asc"),
-              startAfter(oldestDocSnapRef.current),
-              endAt(newestDocSnapRef.current)
-            )
-          : query(ref, orderBy("createdAt", "asc"), limitToLast(PAGE_SIZE));
-      const modUnsub = onSnapshot(
-        modQuery,
+      const fallbackModRange = [oldestDocSnapRef.current, newestDocSnapRef.current];
+      const modUnsubs = (modQueryRanges || [fallbackModRange]).map(([first, last]) =>
+        onSnapshot(
+          first && last
+            ? query(ref, orderBy("createdAt", "asc"), startAfter(first), endAt(last))
+            : query(ref, orderBy("createdAt", "asc"), limitToLast(PAGE_SIZE)),
         (snap) => {
           if (cancelled) return;
           snap.docChanges().forEach((change) => {
@@ -889,12 +913,13 @@ export default function App() {
             }
           });
         }
+        )
       );
 
       if (cancelled) return;
       newMessagesUnsubRef.current = () => {
         if (unsubNew) unsubNew();
-        modUnsub();
+        modUnsubs.forEach((unsub) => unsub());
       };
     }
 
@@ -1020,7 +1045,15 @@ export default function App() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !isReplyJumpLoadingRef.current) {
+        if (!entries[0].isIntersecting) {
+          hasTriggeredTopSentinelRef.current = false;
+          return;
+        }
+        if (
+          !hasTriggeredTopSentinelRef.current &&
+          !isReplyJumpLoadingRef.current
+        ) {
+          hasTriggeredTopSentinelRef.current = true;
           loadMoreMessages();
         }
       },
