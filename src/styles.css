@@ -2109,6 +2109,12 @@ button:disabled {
   width: 24px;
 }
 
+.dm-tab-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 .channel-tab-new-dm {
   color: var(--accent-green);
   margin-top: 8px;

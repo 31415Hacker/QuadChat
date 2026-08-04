@@ -1,6 +1,6 @@
 import { Lightbulb, Megaphone, MessageCircle, Plus } from "lucide-react";
 import { CHANNELS } from "../constants.js";
-import { getDmPartnerName, getInitials } from "../utils/names.js";
+import { dmPartnerId, getDmPartnerName, getInitials } from "../utils/names.js";
 
 export default function ChannelSidebar({
   activeChannel,
@@ -52,7 +52,9 @@ export default function ChannelSidebar({
           <>
             <div className="dm-section-heading">Direct</div>
             {dmChannels.map((dm) => {
+              const partnerId = dmPartnerId(dm.id, sessionUserId, dm);
               const partnerName = getDmPartnerName(dm, profiles, sessionUserId);
+              const partnerProfile = profiles[partnerId];
               return (
                 <button
                   aria-selected={activeChannel === dm.id}
@@ -66,7 +68,11 @@ export default function ChannelSidebar({
                   title={partnerName}
                 >
                   <span className="dm-tab-avatar">
-                    {getInitials(partnerName)}
+                    {partnerProfile?.photoURL ? (
+                      <img src={partnerProfile.photoURL} alt="" />
+                    ) : (
+                      getInitials(partnerName)
+                    )}
                   </span>
                   <span>{partnerName}</span>
                 </button>
