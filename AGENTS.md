@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 1.7.16
+Current: 1.7.19
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -39,6 +39,24 @@ Rules:
 - Root cause: `<ConfirmDialog>` was rendered inside the `.chat-panel` section, and `App.jsx` unmounts the whole `.chat-panel` while Settings is open — so a pending confirm couldn't render until Settings closed, then popped up "out of nowhere". `.modal-backdrop` (z-index 40) was also below `.settings-close-btn` (50), `.toast-container` (60), and `.attach-menu` (100).
 - Fix: moved `<ConfirmDialog>` to app-shell level (right before `<GamingPostModal>`), always rendered regardless of Settings state, and raised `.modal-backdrop` to z-index 200 so all dialogs sit above every app layer.
 - Watch out: any future modal added *inside* `.chat-panel` will silently fail to show over Settings — render global overlays at app-shell level.
+
+## Message Reactions
+- Stored as a `reactions` map on each message doc: `reactions.<uid>` = emoji string (plain map, no nested structure).
+- `handleToggleReaction` (`App.jsx`) writes `reactions.<uid>` or `deleteField()` when the same emoji is tapped again.
+- Rules: the message `update` path allows a diff whose only changed key is `reactions`, and only `reactions.<request.auth.uid>` — the clause mirrors the `rsvps` one in `firestore.rules`. Add/remove the `reactions` allow clause together with `rsvps` if you ever touch the message update path.
+- UI: hover `<Smile>` button (`.message-reaction-button`) opens the `.reaction-picker` (6 emojis, outside-click close); `.reaction-chip` rows show counts + name tooltip, `.reaction-chip--mine` highlights your vote. Tapping a chip toggles it off.
+- If you add reaction emoji, keep `REACTION_EMOJIS` in `MessageList.jsx` in sync with any stored values.
+
+## Missed-Call Notifications
+- Stale rings (>20 s) are not dropped anymore: the callee's client writes `missed-calls/<uid>/<callKey>` (`useCalls.js`) before `clearRing`, and `App.jsx` drains each into the notification center via `onChildAdded`, then deletes the node.
+- Rules (`database.rules.json`): `missed-calls/$uid` is `.read`/`.write` owner-only (`auth.uid === $uid`), `.validate` pins `callKey === $callKey` and type-checks `callerId`/`callerName`/`startedAt`.
+- The notification id is `missed-call-<callKey>` (dedupes). Offline users get the missed-call on reconnect; an ignored in-session call only records a missed-call on the staleness-cleanup path (reload or caller status change).
+- If you ever change the ring staleness timeout (20 s), the missed-call write lives on that same branch.
+
+## MessageList Memoization
+- `.messages` scroll container, typing indicator, and `endRef` live in `App.jsx`; `MessageList` and `MessageItem` are both `memo`'d with stable `useCallback` props so typing doesn't re-run the message map.
+- Keep new props passed to `MessageList`/`MessageItem` stable (useCallback) or the memo is defeated. `handleRsvp`, `handleDeleteMessage`, `handleToggleReaction`, `joinGroupCallStable`, `setReplyTo`, `setOpenMessageMenuId` are all stable.
+- Don't move the scroll container back inside `MessageList` — it would re-run `messages.map` on every keystroke again.
 
 # Composer
 
