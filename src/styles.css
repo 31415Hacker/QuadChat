@@ -202,6 +202,15 @@ input {
   position: relative;
 }
 
+.chat-header-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
 .chat-title {
   align-items: center;
   display: flex;

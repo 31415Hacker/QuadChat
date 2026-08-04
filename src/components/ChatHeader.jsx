@@ -81,7 +81,8 @@ export default function ChatHeader({
           ) : null}
         </div>
       </div>
-      {!isDmChannel ? (
+      <div className="chat-header-actions">
+        {!isDmChannel ? (
         <button
           className={`icon-text-button ${groupCallStatus === "connected" || p2pGroupCallStatus === "connected" ? "group-call-active" : ""}`}
           type="button"
@@ -99,8 +100,8 @@ export default function ChatHeader({
                   : "Group call"}
           </span>
         </button>
-      ) : null}
-      <div className="search-wrap" ref={searchPanelRef}>
+        ) : null}
+        <div className="search-wrap" ref={searchPanelRef}>
         <button
           className="icon-text-button"
           aria-label="Search messages"
@@ -169,8 +170,8 @@ export default function ChatHeader({
             ))}
           </div>
         ) : null}
-      </div>
-      <div className="notif-bell" ref={notificationPanelRef}>
+        </div>
+        <div className="notif-bell" ref={notificationPanelRef}>
         <button
           className="icon-text-button notif-bell-button"
           aria-label="Notifications"
@@ -229,8 +230,8 @@ export default function ChatHeader({
             )}
           </div>
         ) : null}
-      </div>
-      <button
+        </div>
+        <button
         className="icon-text-button"
         type="button"
         onClick={signOut}
@@ -238,8 +239,8 @@ export default function ChatHeader({
       >
         <LogOut size={18} />
         <span>Sign out</span>
-      </button>
-      <div className="profile-actions">
+        </button>
+        <div className="profile-actions">
         <div className="avatar-wrapper">
           <button
             className="avatar-button"
@@ -287,6 +288,7 @@ export default function ChatHeader({
             </button>
           </div>
         ) : null}
+        </div>
       </div>
     </header>
   );
