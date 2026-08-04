@@ -2207,6 +2207,28 @@ button:disabled {
   padding: 5px 12px;
 }
 
+.user-avatar {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  display: flex;
+  flex: 0 0 30px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  overflow: hidden;
+  width: 30px;
+}
+
+.user-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;

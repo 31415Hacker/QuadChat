@@ -1,6 +1,6 @@
 import { MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
 import RelativeTime from "./RelativeTime.jsx";
-import { getProfileName, isAdminEmail } from "../utils/names.js";
+import { getInitials, getProfileName, isAdminEmail } from "../utils/names.js";
 import { getStatusColor, isProfileMuted } from "../utils/profile.js";
 
 export default function UsersSidebar({
@@ -38,6 +38,13 @@ export default function UsersSidebar({
               className={`user-item ${userActive ? "online" : ""}`}
               key={profile.id}
             >
+              <span className="user-avatar" title={name}>
+                {profile.photoURL ? (
+                  <img src={profile.photoURL} alt="" />
+                ) : (
+                  <span>{getInitials(name)}</span>
+                )}
+              </span>
               <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
               <div className="user-info">
                 <button
