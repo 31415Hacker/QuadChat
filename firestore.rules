@@ -51,6 +51,10 @@ service cloud.firestore {
       );
     }
 
+    function isProtectedAdminTarget() {
+      return resource.data.isAdmin == true || request.resource.data.isAdmin == true;
+    }
+
     // Admin-controlled kill switch in /settings/app. When signupEnabled is
     // false, new user documents can only be created by admins. This is
     // enforced by the server, so it blocks signup even from direct SDK /
@@ -155,7 +159,10 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if signedIn();
 
-      allow create: if signedIn() && (
+      allow create: if signedIn()
+        && !(request.resource.data.isAdmin == true &&
+             request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+        && (
         isAdmin() || (
           signupEnabled() &&
           userId == request.auth.uid &&
@@ -164,7 +171,10 @@ service cloud.firestore {
         )
       );
 
-      allow update: if signedIn() && (
+      allow update: if signedIn()
+        && !(isProtectedAdminTarget() &&
+             request.resource.data.diff(resource.data).affectedKeys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+        && (
         isAdmin() || (
           userId == request.auth.uid &&
           (isAdminEmail() ||

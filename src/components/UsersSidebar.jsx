@@ -1,6 +1,6 @@
 import { MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
 import RelativeTime from "./RelativeTime.jsx";
-import { getProfileName } from "../utils/names.js";
+import { getProfileName, isAdminEmail } from "../utils/names.js";
 import { getStatusColor, isProfileMuted } from "../utils/profile.js";
 
 export default function UsersSidebar({
@@ -28,6 +28,7 @@ export default function UsersSidebar({
         {Object.values(profiles).map((profile) => {
           const name = getProfileName(profile, profile.email || "");
           const muted = isProfileMuted(profile);
+          const isProfileAdmin = profile.isAdmin === true || isAdminEmail(profile.email);
           const theirMode = profile.status?.mode;
           const isSelf = profile.id === sessionUserId;
           const userActive = isSelf || onlineUsers.has(profile.id);
@@ -79,7 +80,7 @@ export default function UsersSidebar({
                   <Phone size={10} />
                 </button>
               ) : null}
-              {isCurrentUserAdmin ? (
+              {isProfileAdmin ? null : isCurrentUserAdmin ? (
                 <button
                   className="user-mic-btn"
                   type="button"
