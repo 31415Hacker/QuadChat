@@ -1,9 +1,9 @@
 # QuadChat — In-Depth Review
 
-**Date:** 2026-08-03
-**Version:** 1.6.24 (HEAD after search/editing/worker-auth work)
-**Context:** A small private group chat for a friend group of ~6 people
-**Scope:** `src/App.jsx` (6,307 lines), `src/styles.css` (2,944 lines), `src/GameSessionCard.jsx`, `src/MediaRenderer.jsx`, `firebase.js`, `cloudinary.js`, `api/*`, `firestore.rules`, `database.rules.json`, `presence-worker/`, `game/`, deploy config.
+**Date:** 2026-08-04
+**Version:** 1.7.6 (HEAD `1e1eeb0` after the App.jsx modularization + signed-uploads + worker rework)
+**Context:** A private group chat for a friend group of ~6 people
+**Scope:** `src/App.jsx` (2,814 lines), `src/hooks/` (`useCalls.js` 1,332 lines), `src/components/*`, `src/utils/*`, `src/styles.css` (3,070 lines), `cloudinary.js`, `firebase.js`, `api/*`, `firestore.rules`, `database.rules.json`, `quadchat-worker/` (Cloudflare Durable Object presence server), `game/`, `scripts/`, deploy config.
 
 ---
 
@@ -11,115 +11,149 @@
 
 | Area | Rating | One-line summary |
 |---|---|---|
-| **Security** | **7.5/10** | Rules are careful, self-un-warn is closed, and the presence worker now verifies Firebase ID tokens; uploads remain unsigned. |
-| **Performance** | **5.5/10** | Snappy at this scale; the 30 s client heartbeat is gone, but the 1.4 MB monolith and whole-app re-render remain the ceiling. |
-| **UI/UX** | **7.5/10** | Polished, accessible, and now with message search, editing, and semantic banners; modal keyboard gaps remain. |
-| **Overall** | **7.5/10** | A feature-complete, unusually well-crafted hobby chat. The remaining risk is structural, not functional. |
+| **UI** | **8.5/10** | A cohesive, genuinely attractive dark-first design system, a proper brand splash, and a responsive layout that survives phones. |
+| **UX** | **7.5/10** | Feature-dense and forgiving (search, edit, calls, notifications); modal keyboard gaps and `window.confirm` dialogs hold it back. |
+| **Performance** | **6.0/10** | The monolith split removed the worst structural risk, but whole-tree re-renders and a 1.48 MB unbundled client still cap it. |
+| **Security** | **8.0/10** | Uploads are now signed, the presence worker verifies JWTs, and rules are careful; open signaling nodes and a cosmetic signup gate remain. |
+| **Overall** | **7.8/10** | A feature-complete, unusually well-crafted hobby chat that just had its best release cycle yet — now mostly held back by rendering and remaining UX/security polish. |
 
 ---
 
 ## Summary
 
-QuadChat is a private group chat for roughly six friends, and it is *packed*: 1-to-1 voice calls, LiveKit group calls with P2P fallback, screen sharing, voice messages, attachments, DMs, typing indicators, presence, in-app notifications, RSVP gaming cards, and admin moderation (`?mute`, `?warn`, `?unwarn`, and now `?purge`). For a hobby project the feature density and visual polish are remarkable.
+QuadChat is a private group chat for roughly six friends, and it keeps punching far above its weight: 1-to-1 voice calls, LiveKit group calls with a P2P mesh fallback, screen sharing with a request flow, voice messages with pause/resume, attachments, DMs, typing indicators, presence with statuses and scheduled busy, an in-app notification center, message search with jump-to-result, message editing, RSVP gaming cards, per-user session analytics, and admin moderation (`?mute`, `?warn`, `?unwarn`, `?purge`).
 
-This review supersedes the 2026-08-02 review (v1.6.16). Since then the team has shipped real improvements: the `warning` field is now protected from self-editing in Firestore rules (v1.6.21), presence moved from per-client RTDB heartbeats to a Cloudflare Durable Object WebSocket worker that owns `lastOnline` (v1.6.17–19), live relative timestamps replaced the whole-app 30 s re-render (v1.6.20), and admins gained a `?purge` command with a confirmation step (v1.6.21–23). Most recently (v1.6.24): **message search with jump-to-result**, **message editing** (author-only, with an "(edited)" marker), a **fully authenticated presence worker** (Firebase ID-token JWT verification via Google's JWKS endpoint, replacing the bare `?userId=`), and **semantic banners** (distinct error/warning styles with `role="alert"`).
+This review supersedes the 2026-08-03 review (v1.6.24) and covers the entire **v1.7 line**, which was the healthiest stretch of releases yet:
 
-The structural caveats are unchanged: everything lives in a single 6,307-line React component (~81 `useState`), the whole `users` collection is listened to at once, the client bundle is 1.4 MB with no code splitting. None of this hurts six friends today, but it is the hard ceiling on how far the app can go.
+- **v1.7.1 — the monolith finally split.** `App.jsx` went from 6,307 lines to 2,814. Call logic moved into `useCalls.js` (1,332 lines), presence and notifications into hooks, and the UI into 12 extracted components.
+- **v1.7.1 — Cloudinary uploads are now signed.** The upload preset + API key are no longer baked into the bundle; the client fetches a server-minted signature from a Vercel endpoint that first verifies the Firebase ID token (`api/cloudinary-signature.js`). This closes the biggest gap called out in the previous review.
+- **v1.7.2 — Cloudinary credentials read from `VITE_CLOUDINARY_*` env vars** (plus server-only `CLOUDINARY_API_KEY/SECRET`). No secrets in the client anymore.
+- **v1.7.3 — loading splash + error boundary.** The recurring "black screen" failure mode now has a branded splash in `index.html` and a `fatal-error` fallback with a reload button in `main.jsx`.
+- **v1.7.4–6 — the presence worker was rebuilt from scratch** (`quadchat-worker/`): a Cloudflare Durable Object WebSocket hub that JWT-verifies Firebase ID tokens, tracks connections with a 10 s offline-grace alarm, and writes `lastOnline` directly to Firestore via a service-account REST call — using an `updateMask` so it can *only* ever touch the `lastOnline` field (structurally immune to the old profile-wiping bug). It even ships smoke tests. The old `presence-worker/` is gone.
+
+The remaining caveats are now about *rendering* rather than *architecture*: `App.jsx` still holds 64 `useState`, 30 `useRef`, and 30 `useEffect`, the entire `users` collection is still one `onSnapshot`, nothing is `React.memo`'d (typing in the composer re-renders the whole message list), and the bundle is still a single 1.48 MB chunk. None of this hurts six friends, but it is the ceiling on further growth.
 
 ---
 
-## 1. Security — 7.5/10
+## 1. UI — 8.5/10
 
 ### Strengths
 
-- **Very careful server-side rules.** `firestore.rules` allow-lists the exact message fields that can be created (`firestore.rules:80-85`), forces `userId == request.auth.uid`, restricts admin-command keys to admins (`firestore.rules:86`), locks the `updates` channel to developers (`firestore.rules:95`), and applies `isNotMuted()` server-side (`firestore.rules:43-52`). Message updates are locked down to either the sender's own `rsvps` key **or** the author editing their own text/edited fields (`firestore.rules:98-114`), and deletes require ownership or admin (`firestore.rules:119-120`).
-- **The self-un-warn hole is closed.** Since v1.6.21 the self-update rule protects `isAdmin`, `isDeveloper`, `muted`, `mutedUntil`, `mutedBy`, `mutedUpdatedAt`, **and `warning`** (`firestore.rules:155`). Warnings are now admin-only — a real fix over the previous review.
-- **The presence worker is now authenticated.** The client sends a Firebase ID token (`?token=…`, refreshed on every reconnect, `App.jsx:1213`), and the worker verifies it as a proper JWT — checking `aud`, `iss`, `exp`, and the RSA signature against Google's JWKS endpoint for `securetoken@system.gserviceaccount.com` (`presence-worker/index.js:36-102`) — before using the verified `sub` as the userId. Spoofing another user as online is no longer possible.
-- **DM isolation is enforced on the server.** Messages are readable/writable only by the two participants (`firestore.rules:75, 96`), the DM id must match the canonical sorted-participant id (`firestore.rules:119`), and DM updates are restricted to metadata fields (`firestore.rules:122-124`).
-- **No XSS vector.** All message text renders through React (auto-escaped), there is no `dangerouslySetInnerHTML` or `eval` in `src/`, and every URL goes through `safeUrl`, which only allows `http(s)` (`App.jsx:402-410`). Attachments/files are URLs, never raw HTML.
-- **Server endpoints verify identity.** Both the LiveKit token (`api/livekit-token.js:22-24`) and magic-link (`api/generate-magic-link.js:21-31`) endpoints verify the caller's Firebase ID token; magic links additionally check `isAdmin` server-side before minting.
-- **`?purge` is server-enforced and gated by confirmation.** The command requires admin (rules-side: the `adminCommand` keys are admin-only, and deletes need owner/admin) and prompts with `window.confirm` before deleting (`App.jsx:3535-3552`). Sensible for a destructive bulk op.
-- **No secrets in the client.** Firebase config is public by design; the service account, LiveKit keys, and presence-worker secrets live only server-side (`.env.example`).
+- **A real design system, not a plugin skin.** CSS variables (`styles.css:1-103`), a custom logo/favicon, theme color, dark-first palette with a light theme, and a `--ui-scale` knob (50–100%) that actually scales the whole interface.
+- **The brand splash.** `index.html` ships a styled loading state ("QC" mark, spinner, `prefers-reduced-motion` support) so the app never flashes blank, and the auth screen carries the same visual language.
+- **Semantic banners.** Errors (red), mutes, and warnings (amber) with icons and `role="alert"` are visually distinct and correctly used.
+- **Responsive down to small phones.** Breakpoints at 900/640/400 px, sidebars collapse to icon rails, and the composer pins to the bottom at any width — a long, hard-won battle (v1.6.8–1.6.16 were almost entirely responsive fixes) that paid off.
+- **Rich inline rendering.** Inline images, video/audio players, autolinked URLs, `@name`/`@everyone` mention highlighting, replies, day separators, attachment cards, and a genuinely nice RSVP gaming card (`GameSessionCard.jsx`) with a live participant roster.
+- **Settings organized into tabs** (Account / Security / Appearance / Accessibility / Advanced / Admin) instead of one long scroll, with "Safe" / "Dangerous" tags on destructive actions and a version-in-header toggle.
 
 ### Weaknesses
 
-1. **Unsigned Cloudinary uploads, client-only validation.** Files upload straight from the browser with the upload preset baked into the bundle (`cloudinary.js:1-22`). No server signature, no file-type whitelist, no scanning; the 10 MB size check is client-side only (`App.jsx:135, 3709`). Anyone signed in can push arbitrary content to the account's Cloudinary.
-2. **Signaling nodes are still too open.** Any signed-in user can write to the `group-calls` root (`database.rules.json:64-67`) — spoofing "X is sharing screen" or polluting the shared global room — and the 1-to-1 `calls` node lets a user create a call with *any* `calleeId` (`database.rules.json:32`), enabling targeted notification spam (partially mitigated by a freshness filter).
-3. **Client-side admin checks can lie to the user.** `isCurrentUserAdmin` accepts the hardcoded admin email without checking `email_verified` (`App.jsx:779-782`), while rules require verification (`firestore.rules:37-41`). An unverified account with the admin email sees admin UI but server writes fail — confusing, not an escalation.
-4. **No rate limiting** on the two API endpoints or the presence worker beyond Firebase's own. Low risk at this scale.
-5. **Hardcoded admin email** in the rules (`firestore.rules:40`) and mirrored client-side — fine for six friends, but the admin identity is public in the bundle.
-6. **Minor:** the `game/` page compiles user code via `new AsyncFunction(...)` (`game/script.js:1198, 1284`) — effectively `eval`, but it is a standalone static page (self-XSS only).
+- **Two design languages coexist.** The main app uses hand-rolled BEM-ish classes, but `GameSessionCard.jsx` and the Gaming Post modal are pure Tailwind (slate-800 cards, indigo buttons). Both live side-by-side in the same layout and subtly clash.
+- **Dead `MediaRenderer.jsx`** carries its own fourth visual style (light-themed Tailwind) and is never imported anywhere — dead weight in every sense.
+- **The Gaming Post modal close button is a literal `"X"`** text node (`Modals.jsx:292`), not an icon button.
+- Minor polish: the users-sidebar DM/call/mute actions use 10–12 px icons that are easy to fat-finger.
 
 ### Verdict
-Security is comfortably above average for a hobby chat: rules are careful, warnings are admin-only, and the presence worker no longer trusts client-supplied identities. For a trusted group of six this is plenty safe. If the app ever opens up (sign-up toggle), the unsigned uploads and open signaling nodes become the priority order.
+
+For a hobby project this is a genuinely polished, recognizable visual identity — dark-first, warm, cohesive, and responsive. The two-style drift is the only thing keeping it from an even higher score.
 
 ---
 
-## 2. Performance — 5.5/10
+## 2. UX — 7.5/10
 
 ### Strengths
 
-- **The 30 s per-user client heartbeat is gone.** `lastOnline` is no longer written by every client on a timer; the presence worker writes it once, on disconnect (after a 10 s grace alarm, `presence-worker/index.js:192-237`). This removes the previous "whole app re-renders every few seconds" feedback loop. Live relative timestamps now live in a small self-contained component (`App.jsx:391-398`) instead of a global tick.
-- **Message list is paginated** (`PAGE_SIZE=30`, `MAX_MESSAGES=500` cap, `App.jsx:136-137, 1465-1466`) with scroll-position preservation and infinite scroll.
-- Object URLs for previews are properly revoked (`App.jsx:1700-1709, 3477-3487`); channel-switch listeners are cleaned up with a cancelled guard.
-- Voice calls are aggressively bandwidth-budgeted (opus capped at ~25 kbps) — deliberate and smart for mobile data.
-- `?purge` batches its deletes sequentially instead of one huge transaction, avoiding a single oversized write.
+- **Search is a first-class feature.** A header button opens a panel that queries every channel and DM, groups results per channel with sender + time, and clicking a result jumps to the exact message with a highlighted pulse — including loading a context window around it (`App.jsx:2212-2227`, `720-746`).
+- **Message editing** with an "(edited)" marker, server-enforced to the author and to `text`/`edited`/`editedAt` only.
+- **Calls are robust.** The 10-second ICE grace period before cleanup on `disconnected` (caller and callee, `useCalls.js:415-437, 582-604`) prevents the old Wi-Fi-blip hang-ups; the P2P group call no longer deletes participants who joined >30 s apart; LiveKit fails over to a P2P mesh automatically.
+- **The notification stack is complete**: in-app bell with unread badge, toasts, cross-channel + mention alerts, and desktop notifications — all gated on a sane `document.hidden`/focus heuristic (`App.jsx:1057-1103`).
+- **Forgiving details**: a dedicated voice-message flow with pause/resume/cancel, scheduled busy status that auto-flips to Busy, an admin mute/warn system with in-chat receipts, a `window.confirm` gate before `?purge`, account-safety guards (re-auth to change password, provider-orphan protection), and an error boundary with a reload button instead of a black screen.
+- **Accessibility baseline is above genre average**: `role="log"` + `aria-live="polite"` on the message list, real `tablist`/`tab` semantics, focus-visible styles, `prefers-reduced-motion`, and a UI-scale slider.
 
 ### Weaknesses
 
-1. **One giant component.** All 5,996 lines, ~81 `useState`, ~54 `useRef`, ~37 `useEffect` live in a single `App()` function. Every `setState` re-renders the whole tree — auth screen, settings, modals, composer, sidebars — and ref-mirror patterns (`profilesRef`, `callStatusRef`, `activeChannelRef`, …) are the symptom of an architecture past its limit. This is exactly where the documented P2P group-call bug came from.
-2. **Whole-collection users listener.** The entire `users` collection is one `onSnapshot` (`App.jsx:1127-1143`), and `renderMessageText` rebuilds the name map from *all* profiles for *every* message it renders (`App.jsx:434-436`). No `React.memo` anywhere.
-3. **Listener sprawl.** The active channel keeps up to 3 Firestore listeners (initial tail, new-message tail, bounded modifier query), plus a cross-channel watcher that holds a tail listener on *every* channel and *every* DM (`App.jsx:1755-1822`). Dozens of live listeners total. Fine at this scale; it won't scale past it.
-4. **1.4 MB single JS bundle, no code splitting.** Firestore + Auth + RTDB + LiveKit + React in one chunk (`dist/assets/index-DDbgKl1s.js` ≈ 1.46 MB). No dynamic `import()` anywhere. The ~83 `console.*` calls in `App.jsx` ship to production.
-5. **No optimistic UI.** Messages render only after `addDoc` resolves (`App.jsx:3965-3988`), so sends feel latent — uploads go Cloudinary → Firestore serially.
-6. **`experimentalForceLongPolling: true`** (`firebase.js:20`) disables Firestore's WebSocket streaming — likely a workaround for a restrictive network, but it costs latency and throughput.
-7. **Dead weight in `package.json`:** `react-pdf`/`pdf.js` (used only by the never-imported `MediaRenderer.jsx`), `cloudinary-react`, and `cloudinary-core` inflate the bundle and confuse audits.
+- **Modals still aren't keyboard-usable.** Status, New DM, Analytics, and Incoming Call dialogs have no focus trap, no focus-on-open, and no Escape-to-close (only the search panel gets Escape, `App.jsx:1012-1016`). The Gaming Post modal has `role="dialog" aria-modal` but no trap either.
+- **Seven `window.confirm` calls** for destructive actions (unlink Google/password, remove photo/account, delete message, purge). They block the thread and aren't screen-reader friendly.
+- **The composer is a single-line `<input type="text">`** with `maxLength={500}` (`Composer.jsx:234-248`): no Shift+Enter, no markdown, no `@`-mention suggestions.
+- **No reactions, no pins, no emoji picker** — the features friends will ask for next.
+- **Search is capped at the newest 2,000 messages per channel** (`App.jsx:2183-2185`) and re-runs the full sequential query on every Enter; fine now, brittle later.
+- Some error paths still surface raw `firebaseError.message` (e.g. `App.jsx:449, 559, 610`), while the auth flow is nicely mapped via `getAuthErrorMessage`.
 
 ### Verdict
-For six users, everything responds instantly and this score understates the lived experience. The risk is architectural: one bad refactor away from fragility, and feature growth (search, reactions, history beyond 500) will hit these walls. The heartbeat removal was the right kind of fix; the next one should be splitting the component.
+
+The feature-to-annoyance ratio is excellent, and the recent additions (search, edit, error boundary) were exactly the right calls. The remaining friction is accessibility plumbing: focus-managed modals and a multi-line composer would move this up a full point.
 
 ---
 
-## 3. UI/UX — 7.5/10
+## 3. Performance — 6.0/10
 
 ### Strengths
 
-- **Cohesive, genuinely pretty dark-first design system** with CSS variables (`styles.css:1-103`), a custom logo/favicon, theme color, and a light theme. Layout has been refined over many releases (1.6.8–1.6.16 were almost all responsive fixes).
-- **Accessibility is a real standout:** `role="log"` + `aria-live="polite"` on the message list (`App.jsx:4850`), proper `tablist`/`tab` semantics (`App.jsx:4257-4268`), `aria-modal` dialogs, `prefers-reduced-motion` honored, focus-visible styles, and a UI-scale slider.
-- **Message search is here.** A Search button in the header opens a panel that queries all channels and DMs (last 2,000 messages each), shows per-channel grouped results with sender + time, and clicking a result jumps straight to the message — loading a context window around it and pulsing a highlight (`App.jsx:4047-4071`). Escape or clicking away closes it.
-- **Message editing is here.** Own messages get an Edit action (text messages only) that loads the text into the composer, saves via a server-enforced update, and marks the message with an "(edited)" tag (`App.jsx:4001-4035`). Rules restrict edits to the author and to `text`/`edited`/`editedAt` only.
-- **Semantic banners.** Errors, mutes, and warnings now use distinct error (red) and warning (amber) styles with icons and `role="alert"`; info/success variants exist for future use (`styles.css:1066-1112`).
-- Responsive down to small phones: three breakpoints at 900/640/400 px (`styles.css:1951, 1972, 2063`), sidebars collapse to icon rails, and the composer pins to the bottom at any width.
-- Rich inline rendering: images, inline video/audio, autolinked URLs, `@name`/`@everyone` mentions, replies, day separators, attachment cards, and a slick RSVP gaming card (`GameSessionCard.jsx`).
-- **Feature density is the headline:** DMs with per-conversation tabs and last-message previews, 1-to-1 voice calls with mute + screen share, LiveKit group calls that fall back to P2P mesh, voice messages with pause/resume, attachments (4 × 10 MB), typing indicators, presence dots + statuses + scheduled busy, an in-app notification center (bell + toasts + unread badge), and admin commands with in-chat receipts.
-- Robust call lifecycle (10 s ICE grace period, renegotiation, `onDisconnect` cleanup) and account safety (re-auth on password change, provider-orphan guards).
+- **The architecture risk is largely retired.** Splitting 6,307 lines of `App()` into hooks and components didn't just help maintainability — the P2P-call bug class lived in that monolith, and there's far less surface for that kind of mistake now.
+- **Presence no longer causes re-renders.** `lastOnline` is written once by the worker on disconnect (10 s grace), not by every client on a timer; the live "…m ago" labels live in the small self-contained `RelativeTime` component instead of a global tick.
+- Message list is paginated (`PAGE_SIZE=30`, `MAX_MESSAGES=500`) with scroll-position preservation; object URLs are revoked; channel-switch listeners use a cancelled guard; `?purge` deletes sequentially.
+- Voice calls are aggressively bandwidth-budgeted (opus ~25 kbps), and the P2P host is picked by a computed "capability" score.
 
 ### Weaknesses
 
-- **No reactions, pinned messages, or emoji picker** — features friends will ask for eventually.
-- **Keyboard accessibility gaps:** modals (settings, gaming post, incoming call) have no focus trap, no focus-on-open, and there is **zero Escape-to-close handling** outside the search panel. The message menu and notification panel aren't keyboard-navigable, and 7 `window.confirm` calls are used for destructive actions — they block the thread and aren't accessible.
-- Several handlers surface raw `firebaseError.message` strings instead of the friendly mapped text (`App.jsx:1141, 1173`), leaking implementation details inconsistently.
-- Composer is single-line (`type="text"`, maxLength 500, `App.jsx:5349-5371`): no Shift+Enter, no markdown, no `@`-mention suggestions.
-- The gaming-post modal close control is a literal text `"X"` (`App.jsx:5905-5911`) instead of an icon button.
-- Two design languages coexist: custom BEM-ish classes in `App.jsx`/`styles.css` vs. Tailwind utilities only in `GameSessionCard.jsx` (`styles.css:2545-2546`).
-- Search fetches the newest 2,000 messages per channel per query — fine at this scale, but it won't find messages older than that and could get heavy in a long-lived channel.
+1. **Whole-app re-render on every keystroke.** `App.jsx` still owns the composer text state and passes it down; with no `React.memo` anywhere, each keystroke re-renders the auth/header/modals/sidebars *and* the entire message list.
+2. **`renderMessageText` rebuilds the name map from all profiles for every message** (`messages.jsx:36-38`) — O(profiles × messages) per render, still.
+3. **Whole-collection users listener** (`App.jsx:596-615`) plus a cross-channel watcher that holds tail listeners on *every* channel and *every* DM (`App.jsx:1118-1185`). Fine for 6 users; won't scale past it.
+4. **1.48 MB single JS chunk, no code splitting.** `dist/assets/index-DffNM-xc.js` ≈ 1.48 MB (Firestore + Auth + RTDB + LiveKit + React in one file). No dynamic `import()` anywhere.
+5. **~77 production `console.log`s in `useCalls.js` alone** ship to prod (plus a handful elsewhere). They're useful during development and pure noise after.
+6. **`experimentalForceLongPolling: true`** (`firebase.js:19-21`) disables Firestore's WebSocket streaming — a workaround that costs latency and throughput.
+7. **No optimistic UI.** Sends render only after `addDoc` resolves, and attachments go Cloudinary → Firestore serially, so sends feel latent.
+8. **Dead weight in `package.json`:** `react-pdf`/pdf.js (used only by the never-imported `MediaRenderer.jsx`), `cloudinary-react`, and `cloudinary-core` inflate lockfile and confuse audits.
+
+### Verdict
+
+For six users everything responds instantly, so this score understates the lived experience. The good news: the highest-leverage fix from the last review — splitting the component — is done. The next ones are pure rendering wins (memoize the message list, scope the users listener) and a bundle diet.
 
 ---
 
-## 4. Overall — 7.5/10
+## 4. Security — 8.0/10
 
-**What it is:** a feature-complete, visually polished private group chat that punches far above its weight as a hobby project. For six friends it genuinely does everything you'd want — chat, DMs, voice, group calls with graceful fallback, files, voice notes, gaming sessions, moderation — in a cohesive, friendly package. Recent releases (1.6.17–1.6.24) show healthy engineering instincts: the presence-worker rework fixed both a performance loop and a profile-wiping bug, the `warning`-field rule fix closed a real security hole, and the latest round added the two most-requested chat features (search + edit) while closing the worker's unauthenticated write path.
+### Strengths
 
-**What holds it back:** code health. One 6,307-line component, a 1.4 MB unbundled client, whole-collection listeners, and the remaining UX gaps (no reactions/pins/emoji, modal keyboard accessibility) are what will bite next. Security is above average for the genre; the remaining gaps (unsigned uploads, open signaling nodes) only matter if the group stops being a small trusted circle.
+- **Uploads are now signed.** The browser can no longer upload directly with a public preset; it must fetch a signature from `/api/cloudinary-signature`, which verifies a Firebase ID token first (`cloudinary.js:9-26`, `api/cloudinary-signature.js:22-46`). The previous review's #1 gap is closed.
+- **No credentials in the bundle.** Cloudinary cloud name/preset now come from `VITE_`-prefixed env vars; `apiKey`/`apiSecret` are server-only. The service account and LiveKit keys never touch the client.
+- **The presence worker verifies identity end-to-end.** Clients send a Firebase ID token and the Durable Object verifies `aud`/`iss`/`exp` and the RSA signature against Google's JWKS before using the verified `sub` (`quadchat-worker/src/index.js:47-91`). The worker's Firestore write uses an `updateMask` limited to `lastOnline` (`index.js:177-214`), so it cannot clobber profile fields — the profile-wipe bug is structurally impossible.
+- **Server endpoints verify identity.** LiveKit tokens (`api/livekit-token.js:23-24`) and magic links (`api/generate-magic-link.js:22-31`, with a server-side admin check) both require a verified ID token.
+- **Firestore rules are still meticulous.** Message creates are allow-listed field-by-field and force `userId == request.auth.uid`; admin-command keys require admin; mutes are enforced server-side; message updates are locked to the author's `rsvps` key or the author editing their own `text`/`edited`; DM ids must match the canonical sorted-participant id and be readable/writable only by participants (`firestore.rules:74-135`). The self-edit of `warning`/`mute`/admin fields remains blocked (`firestore.rules:149-155`).
+- **No XSS vector.** All text renders through React (auto-escaped), no `dangerouslySetInnerHTML`/`eval` in the app, every URL runs through `safeUrl` (http/https only), and attachments are URLs.
+- **RTDB signaling is tighter than before.** `group-calls` participants are locked to their own entries and `connections` to pair members (`database.rules.json:69-88`).
+
+### Weaknesses
+
+1. **The 1-to-1 `calls` node still lets any signed-in user create a call with *any* `calleeId`** (`database.rules.json:28-32`), enabling targeted notification spam — mitigated only by a 20 s freshness filter.
+2. **`group-calls` root write is still `auth != null`** (`database.rules.json:64-67`). `participants` and `connections` are locked, but any other key under a call node (e.g. `screenShareActive`) can be written by anyone — spoofing "X is sharing screen" or polluting the shared `global_p2p` room.
+3. **The signup kill-switch is cosmetic.** Hiding the signup tab (`AuthScreen.jsx:102-113`) does not stop someone from creating a Firebase Auth account directly and writing their own profile — the rules allow any signed-in user to self-create a non-admin profile (`firestore.rules:141-147`). `settings/app` write is admin-only, but nothing enforces `signupEnabled` server-side.
+4. **Upload validation is auth-only.** The signature endpoint verifies the caller but not the file; type/size checks remain client-side (`App.jsx:1657-1663`). Any signed-in user can push arbitrary content into the Cloudinary account.
+5. **Presence token rides in the URL query string** (`usePresence.js:25`) — tokens can leak into logs/referrers. Minor, but moving it to a subprotocol or a short-lived one-shot would be cleaner.
+6. **Client admin check still ignores `email_verified`** (`App.jsx:232-235`) while rules require it (`firestore.rules:37-41`) — an unverified account holding the admin email sees admin UI but fails writes. Confusing, not an escalation.
+7. **No rate limiting** on the three API endpoints or the worker beyond Firebase/Cloudflare's own defaults. Low risk at this scale.
+8. **Admin identity is still public** — the hardcoded admin email lives in both the rules and the client bundle (`constants.js:7-8`).
+
+### Verdict
+
+This is comfortably above average for a hobby chat, and the v1.7 work specifically closed the two most meaningful gaps (unsigned uploads, unauthenticated worker). For a trusted circle of six it's plenty. If the app ever opens up, the priority order is: server-enforced signup gating, signed uploads with file-type/size validation, and tightening the `calls`/`group-calls` signaling rules.
+
+---
+
+## 5. Overall — 7.8/10
+
+**What it is:** a feature-complete, visually polished private group chat that keeps out-performing its own humble scope. Chat, DMs, voice, group calls with graceful fallback, screen share, files, voice notes, search, editing, gaming sessions, per-user analytics, and moderation — all in a cohesive package with an actual design identity. The v1.7 line was the project's best release cycle: a 6,300-line monolith became a sane component/hook tree, uploads went signed, the presence backend was rebuilt as a properly authenticated, tested Durable Object, and the black-screen failure mode got both a splash and an error boundary.
+
+**What holds it back:** rendering and remaining polish. The message list re-renders on every keystroke, the whole `users` collection is listened to at once, the bundle is 1.48 MB of single-chunk JS with ~77 production `console.log`s, modals aren't keyboard-manageable, and destructive actions still lean on `window.confirm`. Security is above average for the genre; the leftover gaps (open signaling nodes, cosmetic signup gate) only matter if the group stops being a small trusted circle.
 
 ### Top priorities if you keep building
 
-1. **Split the monolith.** Extract channel, call, and settings logic into hooks/components. The single highest-leverage change; it will prevent the next P2P-call-style bug.
-2. **Tame the re-render.** Memoize the message list (React.memo + stable callbacks) or scope the users listener to visible profiles + online dots; cache the per-message name-map build.
-3. **Move to signed Cloudinary uploads** and tighten the `group-calls`/`calls` write rules — the last two security gaps that matter if the app ever opens up.
-4. **Trim the bundle:** drop unused deps (`react-pdf`, `cloudinary-react`, `cloudinary-core`, dead `MediaRenderer.jsx`), add route-level code splitting, and strip the ~83 production `console.log`s.
-5. **Small UX wins:** focus traps + Escape-to-close on modals, message reactions and pins, `role="alert"` on the remaining raw-error paths, and replacing the last `window.confirm`s.
+1. **Tame the re-render.** `React.memo` the message list + stable callbacks, or move composer state into the `Composer` and scope the users listener to visible profiles + online dots; cache the per-message name-map build. The monolith split was step one; this is the highest-leverage step two.
+2. **Tighten signaling rules.** Restrict `calls` creation to a caller/callee pair and validate `group-calls` top-level keys — the last two security gaps that would matter if the app ever opened up.
+3. **Make the signup gate real.** Enforce `signupEnabled` server-side (Firestore trigger or a custom-claim/auth block) and add file-type/size validation at the signature endpoint.
+4. **Modal accessibility.** Focus traps + focus-on-open + Escape-to-close on all dialogs, replace the `window.confirm`s, and make the message menu / notification panel keyboard-navigable.
+5. **Trim the bundle.** Drop `react-pdf`, `cloudinary-react`, `cloudinary-core`, and dead `MediaRenderer.jsx`; add route-level code splitting; strip the production `console.log`s.
 
 ---
 
-*Review updated 2026-08-03 against the search/editing/worker-auth changes (v1.6.24). Originally generated from `git rev-parse HEAD` = `98944c4`, v1.6.23, superseding the 2026-08-02 review of v1.6.16.*
+*Review written 2026-08-04 against v1.7.6 (`git rev-parse HEAD` = `1e1eeb0`), superseding the 2026-08-03 review of v1.6.24.*

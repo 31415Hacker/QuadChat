@@ -34,6 +34,11 @@
   --accent-yellow: #eab308;
   --accent-brand: #f6c85f;
   --accent-blue: #5bb5f5;
+
+  --quote-bg: rgba(0, 0, 0, 0.25);
+  --quote-border: #38bdf8;
+  --quote-author: #38bdf8;
+  --quote-text: #9ca3af;
   
   --error-bg: #2d1414;
   --error-border: #8a2e2e;
@@ -87,6 +92,11 @@
   --accent-yellow: #f59e0b;
   --accent-brand: #f6c85f;
   --accent-blue: #2b5876;
+
+  --quote-bg: rgba(15, 40, 35, 0.06);
+  --quote-border: #0284c7;
+  --quote-author: #0284c7;
+  --quote-text: #6b7280;
   
   --error-bg: #fff0ed;
   --error-border: #f2b6aa;
@@ -1348,10 +1358,11 @@ button:disabled {
 }
 
 .reply-card {
-  background: rgba(255, 255, 255, 0.58);
-  border-radius: 6px;
-  margin-bottom: 8px;
-  padding: 7px 9px;
+  background: var(--quote-bg);
+  border-left: 3px solid var(--quote-border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  padding: 6px 10px;
 }
 
 .reply-card strong,
@@ -1364,6 +1375,29 @@ button:disabled {
 .reply-composer span {
   color: var(--text-tertiary);
   font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-card strong {
+  color: var(--quote-author);
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-card span {
+  color: var(--quote-text);
+  display: block;
+  font-size: 0.85rem;
+  font-style: italic;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
