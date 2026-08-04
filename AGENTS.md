@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 1.7.19
+Current: 1.7.20
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -44,7 +44,7 @@ Rules:
 - Stored as a `reactions` map on each message doc: `reactions.<uid>` = emoji string (plain map, no nested structure).
 - `handleToggleReaction` (`App.jsx`) writes `reactions.<uid>` or `deleteField()` when the same emoji is tapped again.
 - Rules: the message `update` path allows a diff whose only changed key is `reactions`, and only `reactions.<request.auth.uid>` — the clause mirrors the `rsvps` one in `firestore.rules`. Add/remove the `reactions` allow clause together with `rsvps` if you ever touch the message update path.
-- UI: hover `<Smile>` button (`.message-reaction-button`) opens the `.reaction-picker` (6 emojis, outside-click close); `.reaction-chip` rows show counts + name tooltip, `.reaction-chip--mine` highlights your vote. Tapping a chip toggles it off.
+- UI: the three-dot menu's "React" item opens the `.reaction-picker` (6 emojis, outside-click close, same anchored position as the menu); `.reaction-chip` rows show counts + name tooltip, `.reaction-chip--mine` highlights your vote. Tapping a chip toggles it off.
 - If you add reaction emoji, keep `REACTION_EMOJIS` in `MessageList.jsx` in sync with any stored values.
 
 ## Missed-Call Notifications

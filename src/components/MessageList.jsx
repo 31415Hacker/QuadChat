@@ -85,14 +85,17 @@ const MessageItem = memo(function MessageItem({
       </div>
       <div className="message-actions" ref={reactionPickerRef}>
         <button
-          aria-expanded={showReactions}
-          aria-label="Add reaction"
-          className="message-reaction-button"
-          onClick={() => setShowReactions((prev) => !prev)}
-          title="Add reaction"
+          aria-expanded={isMenuOpen}
+          aria-label="Message options"
+          className="message-menu-button"
+          onClick={() => {
+            setShowReactions(false);
+            setOpenMessageMenuId(isMenuOpen ? "" : item.id);
+          }}
+          title="Message options"
           type="button"
         >
-          <Smile size={16} />
+          <MoreVertical size={16} />
         </button>
         {showReactions ? (
           <div className="reaction-picker" role="menu">
@@ -108,21 +111,18 @@ const MessageItem = memo(function MessageItem({
               </button>
             ))}
           </div>
-        ) : null}
-        <button
-          aria-expanded={isMenuOpen}
-          aria-label="Message options"
-          className="message-menu-button"
-          onClick={() =>
-            setOpenMessageMenuId(isMenuOpen ? "" : item.id)
-          }
-          title="Message options"
-          type="button"
-        >
-          <MoreVertical size={16} />
-        </button>
-        {isMenuOpen ? (
+        ) : isMenuOpen ? (
           <div className="message-menu">
+            <button
+              onClick={() => {
+                setOpenMessageMenuId("");
+                setShowReactions(true);
+              }}
+              type="button"
+            >
+              <Smile size={16} />
+              <span>React</span>
+            </button>
             <button
               onClick={() => {
                 setReplyTo({

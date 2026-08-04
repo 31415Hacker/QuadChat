@@ -1334,8 +1334,7 @@ button:disabled {
   top: 4px;
 }
 
-.message-menu-button,
-.message-reaction-button {
+.message-menu-button {
   background: transparent;
   border-radius: 999px;
   color: var(--text-tertiary);
@@ -1347,16 +1346,12 @@ button:disabled {
 }
 
 .message:hover .message-menu-button,
-.message:hover .message-reaction-button,
 .message-menu-button:focus,
-.message-menu-button[aria-expanded="true"],
-.message-reaction-button:focus,
-.message-reaction-button[aria-expanded="true"] {
+.message-menu-button[aria-expanded="true"] {
   opacity: 1;
 }
 
-.message-menu-button:hover:not(:disabled),
-.message-reaction-button:hover:not(:disabled) {
+.message-menu-button:hover:not(:disabled) {
   background: var(--bg-hover);
   transform: none;
 }
@@ -1367,12 +1362,12 @@ button:disabled {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   box-shadow: 0 14px 34px var(--shadow-dropdown);
-  bottom: calc(100% + 6px);
   display: flex;
   gap: 2px;
   padding: 4px;
   position: absolute;
   right: 0;
+  top: 32px;
   z-index: 15;
 }
 
