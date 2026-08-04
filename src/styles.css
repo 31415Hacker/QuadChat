@@ -1361,6 +1361,7 @@ button:disabled {
   background: var(--quote-bg);
   border-left: 3px solid var(--quote-border);
   border-radius: 4px;
+  cursor: pointer;
   margin-bottom: 6px;
   padding: 6px 10px;
 }

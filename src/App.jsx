@@ -2226,6 +2226,34 @@ export default function App() {
     setChannelReloadKey((key) => key + 1);
   }
 
+  async function jumpToReply(replyTo) {
+    const targetId = replyTo?.id;
+    if (!targetId || !user) return;
+    const existing = document.getElementById(`msg-${targetId}`);
+    if (existing) {
+      existing.scrollIntoView({ behavior: "smooth", block: "center" });
+      existing.classList.add("message-highlight");
+      setTimeout(() => existing.classList.remove("message-highlight"), 2500);
+      return;
+    }
+    try {
+      const targetSnap = await getDoc(
+        doc(db, "messages", activeChannel, "messages", targetId)
+      );
+      if (!targetSnap.exists()) return;
+      const target = targetSnap.data();
+      if (!target.createdAt) return;
+      pendingJumpRef.current = {
+        channelId: activeChannel,
+        messageId: targetId,
+        createdAt: target.createdAt
+      };
+      setChannelReloadKey((key) => key + 1);
+    } catch (firebaseError) {
+      setError(firebaseError.message);
+    }
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
 
@@ -2678,6 +2706,7 @@ export default function App() {
                   handleDeleteMessage={handleDeleteMessage}
                   handleRsvp={handleRsvp}
                   joinGroupCall={joinGroupCall}
+                  onJumpToMessage={jumpToReply}
                   typingUsers={typingUsers}
                   endRef={endRef}
                   dmPartnerName={dmPartnerName}

@@ -32,7 +32,8 @@ function MessageItem({
   sessionUserId,
   activeName,
   handleRsvp,
-  joinGroupCall
+  joinGroupCall,
+  onJumpToMessage
 }) {
   return (
     <article
@@ -105,7 +106,18 @@ function MessageItem({
         ) : null}
       </div>
       {item.replyTo && typeof item.replyTo === "object" ? (
-        <div className="reply-card">
+        <div
+          className="reply-card"
+          onClick={() => onJumpToMessage(item.replyTo)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            onJumpToMessage(item.replyTo);
+          }}
+          role="button"
+          tabIndex={0}
+          title={`Jump to ${item.replyTo.senderName || "the original"}'s message`}
+        >
           <strong>{item.replyTo.senderName || "Unknown"}</strong>
           <span>{item.replyTo.text || "Message unavailable"}</span>
         </div>
@@ -214,6 +226,7 @@ export default function MessageList({
   handleDeleteMessage,
   handleRsvp,
   joinGroupCall,
+  onJumpToMessage,
   typingUsers,
   endRef,
   dmPartnerName,
@@ -295,6 +308,7 @@ export default function MessageList({
                   activeName={activeName}
                   handleRsvp={handleRsvp}
                   joinGroupCall={joinGroupCall}
+                  onJumpToMessage={onJumpToMessage}
                 />
               </Fragment>
             );
