@@ -1,7 +1,7 @@
 # QuadChat — In-Depth Review
 
 **Date:** 2026-08-04
-**Version:** 1.7.20 (HEAD `2c685e0`)
+**Version:** 1.8.7 (HEAD `03b2cc2`)
 **Context:** A private group chat for a friend group of ~6 people
 **Scope:** `src/App.jsx` (2,900 lines), `src/hooks/` (`useCalls.js` 1,385 lines), `src/components/*`, `src/utils/*`, `src/styles.css` (3,250 lines), `cloudinary.js`, `firebase.js`, `api/*`, `firestore.rules`, `database.rules.json`, `quadchat-worker/` (Cloudflare Durable Object presence server), `game/`, `scripts/`, deploy config.
 
@@ -12,24 +12,27 @@
 | Area | Rating | One-line summary |
 |---|---|---|
 | **UI** | **9.0/10** | Reactions are native-feeling: the picker lives behind the three-dot menu, chip rows reflect your own selection, and the message row stays uncluttered — no new visual language bolted on. |
-| **UX** | **9.0/10** | Missed calls now surface in the notification center instead of vanishing, and the last dead-ends in the v1.7.15 composer work (Enter-to-send, mentions, emoji). |
-| **Performance** | **7.9/10** | `MessageList` itself is memoized so typing no longer re-runs the message map, and dead deps (`react-pdf`, `cloudinary-react`) are gone. |
-| **Security** | **9.0/10** | Reactions are rule-locked to each user's own map key, and `missed-calls` nodes are owner-only read/write. |
-| **Overall** | **9.0/10** | The last "six friends will ask for this next" items — reactions and missed calls — are shipped, and the keystroke re-render is gone. |
+| **UX** | **9.1/10** | Missed calls surface in the notification center, profile pictures appear consistently, and presence recovers cleanly after freezes or sleep. |
+| **Performance** | **8.0/10** | `MessageList` is memoized, dead deps are gone, and presence heartbeats prevent stale sessions from lingering. |
+| **Security** | **9.1/10** | Reactions and missed calls are rule-scoped, admin profiles cannot be muted, and upload limits are checked server-side. |
+| **Overall** | **9.1/10** | The chat now handles abrupt client suspension more honestly while continuing to close the small UX gaps around identity and presence. |
 
 ---
 
 ## Summary
 
-QuadChat is a private group chat for roughly six friends, and it keeps punching far above its weight: 1-to-1 voice calls, LiveKit group calls with a P2P mesh fallback, screen sharing with a request flow, voice messages with pause/resume, attachments, DMs, typing indicators, presence with statuses and scheduled busy, an in-app notification center, message search with jump-to-result, message editing, threaded replies with jump-to-original, RSVP gaming cards, per-user session analytics, moderation (`?mute`, `?warn`, `?unwarn`, `?purge`) — and now message reactions and missed-call notifications.
+QuadChat is a private group chat for roughly six friends, and it keeps punching far above its weight: 1-to-1 voice calls, LiveKit group calls with a P2P mesh fallback, screen sharing with a request flow, voice messages with pause/resume, attachments, DMs, typing indicators, presence with statuses and scheduled busy, an in-app notification center, message search with jump-to-result, message editing, threaded replies with jump-to-original, RSVP gaming cards, per-user session analytics, moderation (`?mute`, `?warn`, `?unwarn`, `?purge`), reactions, profile pictures, and missed-call notifications.
 
-This review supersedes the v1.7.15 review and covers the current **v1.7.20** HEAD. Releases since v1.7.15:
+This review supersedes the v1.7.20 review and covers the current **v1.8.7** HEAD. Relevant release history:
 
 - **v1.7.16 — documentation only.** The composer and confirm-dialog fixes were written up in `AGENTS.md`.
 - **v1.7.17 — composer width fix.** The textarea got `display:block; width:100%` so it fills the full mic↔send column (`styles.css`).
 - **v1.7.18 — a four-item batch:** (1) message reactions, (2) `MessageList` memoization, (3) missed-call notifications, (4) dead-package cleanup.
 - **v1.7.19 — documentation only.** The v1.7.18 batch was written up in `AGENTS.md`.
 - **v1.7.20 — reactions moved behind the menu.** The reaction picker no longer sits as a hover `<Smile>` button on every bubble; it's reached via the three-dot message menu → **React** → the same 6-emoji picker, at the same anchored position the menu used. The message row's hover actions are back to a single overflow button.
+- **v1.7.21–v1.7.26 — polish and stability.** The review was refreshed, far-away reply jumps stopped fighting pagination, the chat panel width was tuned to `1100px`, and the version moved to `1.8.0`.
+- **v1.8.1–v1.8.6 — identity and layout.** Admin profiles became unmutable in Firestore rules, admin mic controls disappeared, Cloudinary profile pictures were added to the user list, DM tabs, and header avatar, upload limits rose to 50 MB for messages/voice, and header actions were grouped on the right.
+- **v1.8.7 — presence heartbeat.** The client sends a ping every 10 seconds; the Durable Object records `lastPing`, checks every 15 seconds, and removes sessions stale for more than 25 seconds.
 
 ### The four items of v1.7.18
 
@@ -37,6 +40,10 @@ This review supersedes the v1.7.15 review and covers the current **v1.7.20** HEA
 2. **Memoized `MessageList`.** The scroll container moved out of `MessageList` into `App.jsx` as a `.messages` wrapper (with the typing indicator and `endRef`). `MessageList` and `MessageItem` are both `memo`'d with stable `useCallback` props, so typing in the composer no longer re-runs `messages.map` or every item's prop comparison.
 3. **Missed-call notifications.** When an incoming-call ring goes stale (>20 s), the callee's client now writes it to `missed-calls/<uid>/<callKey>` before clearing the ring (`useCalls.js`). RTDB rules lock the node to the owner (`.read`/`.write: auth.uid === $uid`) and validate `callKey`/`callerId`/`callerName`/`startedAt` types. `App.jsx` listens with `onChildAdded`, pushes a `missed-call` notification into the notification center ("<caller> missed your call", `id: missed-call-<callKey>` so it dedupes), and deletes the node — so offline members learn who tried them on reconnect, and the node self-cleans.
 4. **Dead-package cleanup.** `react-pdf`, `cloudinary-react`, and `cloudinary-core` were uninstalled and `src/MediaRenderer.jsx` (never imported) deleted.
+
+### Presence heartbeat in v1.8.7
+
+The presence worker now stores `{ userId, lastPing }` per WebSocket session. The React `usePresence` hook sends `{"type":"ping"}` every 10 seconds while the connection is open and clears the interval on close, error, reconnect, and unmount. The Durable Object checks sessions every 15 seconds and closes/cleans up any session that has not sent a message for more than 25 seconds. Failed broadcasts use the same disconnect path, so abrupt freezes, lid sleep, and broken sockets no longer leave users falsely online indefinitely.
 
 ---
 
@@ -47,6 +54,7 @@ This review supersedes the v1.7.15 review and covers the current **v1.7.20** HEA
 - **Reactions look and feel native.** Since v1.7.20 the picker lives behind the three-dot menu — a "React" item with a `<Smile>` icon — so the hover actions on a bubble are back to a single overflow button. The `.reaction-picker` pill opens at the exact position the menu used, with the same surface/border/radius tokens. The chip row below a message reuses the bubble's `--bg-hover`/`--border-color` language with a blue tint for your own vote. Nothing introduces a fourth design language.
 - **The picker is forgiving.** Outside-click closes it, each option has an `aria-label`, and the picker swaps into the menu's slot cleanly (the menu and picker are mutually exclusive states). The chips' `title` lists who reacted ("Alice, Bob reacted with 👍") using the same `getProfileName` logic that renders names everywhere else.
 - **All of v1.7.15–17 still holds:** the multiline composer with auto-grow, the themed lazy emoji picker, caret-aware `@`-mentions that match message rendering, and the confirm dialogs that now show over Settings.
+- **Identity is consistent.** The users sidebar, DM tabs, and top-right profile control use Cloudinary-backed profile pictures with initials fallback.
 
 ### Weaknesses
 
@@ -65,6 +73,7 @@ Reactions were the most-requested missing feature and they landed without a desi
 ### Strengths
 
 - **Missed calls are no longer silent.** The v1.7.13 ring design fire-and-forgets stale rings; v1.7.18 persists them to an owner-locked `missed-calls/<uid>` node and the client drains each into the notification center as a "missed your call" item, then deletes it. An offline user reconnects and sees who tried them; the center item uses a distinct red phone icon and dedupes per `callKey`.
+- **Presence no longer trusts a dead socket.** A 10-second client ping and 15-second worker sweep mean a frozen or sleeping browser is removed after roughly 25 seconds instead of remaining online until an eventual socket event.
 - **The keystroke cost is gone.** Memoizing `MessageList` means typing in the composer no longer maps over every message and prop-compares every item — the lag on older conversations disappears.
 - **Reactions are three taps and reversible.** Menu → React → pick an emoji, or tap an existing chip to toggle your vote off; the picker outside-click and single-close behavior match the message menu.
 - **Everything from v1.7.15 still holds:** confirm dialogs render over Settings, Enter-sends/Shift+Enter-newline is IME-safe, mentions walk with arrows, reply-jump reaches scrolled-out messages, and calls survive the 10 s ICE grace.
@@ -72,6 +81,7 @@ Reactions were the most-requested missing feature and they landed without a desi
 ### Weaknesses
 
 - **Reactions lost hover discoverability.** Hiding the picker behind the three-dot menu (v1.7.20) declutters the bubble but means a friend has to know the menu exists to find reactions. The chip row still advertises them once someone else has reacted — and it's the exact trade-off the user asked for.
+- **Heartbeat detection is intentionally bounded.** A healthy connection can be marked offline after a little over 25 seconds without traffic, which is the intended trade-off for clearing frozen sessions quickly.
 - **No pins** — the natural next ask after reactions.
 - **The message menu popover and notification panel still aren't keyboard-navigable** (no arrow-key handling, no menu semantics).
 - **An ignored in-session call still doesn't notify until reload or a status change** — the missed-call record is created by the staleness/cleanup path, so a call you watch ring past 20 s without the caller giving up only surfaces as "missed" on reconnect.
@@ -121,13 +131,15 @@ The two structural items on the performance list — memoize the message list an
 - **Reactions are rule-safe with zero new trust surface.** The update clause allows only `reactions` as the changed key and only `request.auth.uid` as the sub-key (`.affectedKeys().hasOnly(["reactions"])` + the `reactions.<uid>` diff) — mirroring the proven `rsvps` pattern. A user can change their own reaction map key and nothing else on the message.
 - **`missed-calls` nodes are owner-locked.** Reads and writes both require `auth.uid === $uid`, so a caller can't write a fake missed-call into someone else's node, and `.validate` pins `callKey` to the key and type-checks `callerId`/`callerName`/`startedAt`. The callee's client drains and deletes the node, so it's also self-cleaning.
 - **Everything from v1.7.13–15 holds:** call metadata is never broadcast (per-user rings, participant-only `calls` reads), the signup kill-switch is server-side, the Cloudinary signature endpoint validates metadata, signaling rules are shape-locked, and no credentials ship in the bundle.
+- **Admin mute protection is server-enforced.** Firestore rejects mute-state changes when the target is an admin profile, including an attempted demotion-and-mute in the same write. The UI hides admin mic status and mute controls as well.
+- **Presence cleanup is server-authoritative.** The Durable Object, rather than only the browser, decides when a session has gone stale and broadcasts the offline transition.
 - **No new XSS vector.** Reactions render as text through React's auto-escaping and are stored as plain emoji strings.
 
 ### Weaknesses
 
 1. **Any signed-in user can still start a call targeting any `calleeId`** (and write a ring into that user's node) — targeted notification spam, mitigated only by the 20 s freshness filter. (The resulting missed-call record is still written only by the callee's own client.)
 2. **Unknown keys under `group-calls` nodes remain writable** — `.validate` blocks only named keys.
-3. **Upload validation trusts client-reported MIME** — a modified client can claim `text/plain` for an HTML payload.
+3. **Upload validation trusts client-reported size and MIME** — the 50 MB server check rejects honest oversized requests, but a modified client can still lie about metadata because the signature endpoint does not inspect file bytes.
 4. **Presence token rides in the URL query string** (`usePresence.js:25`) — can leak into logs/referrers.
 5. **Client admin check ignores `email_verified`** while rules require it.
 6. **No rate limiting** beyond Firebase/Cloudflare defaults.
@@ -143,9 +155,9 @@ Both new surfaces — reactions and missed-call records — were designed to the
 
 **What it is:** a feature-complete, visually polished private group chat that keeps out-performing its own humble scope. Chat, DMs, voice, group calls with graceful fallback, screen share, files, voice notes, search, editing, replies with jump-to-original, gaming sessions, analytics, moderation — and now reactions, missed-call notifications, a memoized message list, and a leaner dependency tree.
 
-**Why this release matters:** v1.7.18 was the "ask for it next" release. Reactions were the #1 item on the list and they arrived rule-safe and design-native; missed calls turned a silent failure (rings to offline users vanished) into a first-class notification-center event; and the keystroke re-render that had grown visible on long threads is gone because `MessageList` is memoized at the top. The dead packages went with it — the same commit that added features removed bloat. v1.7.20 then put reactions where the user wanted them: behind the three-dot menu instead of a hover button, keeping the message row clean.
+**Why this release matters:** v1.7.18 shipped the major reaction, missed-call, memoization, and dependency cleanup batch. The v1.8.x polish then made identity consistent across avatars, protected admins from mute writes, expanded message/voice uploads to 50 MB, and grouped the header controls. v1.8.7 addresses the hardest presence failure mode: an operating-system freeze or laptop sleep that never delivers a clean WebSocket close. The client ping plus server-side stale-session sweep now gives that failure a deterministic recovery path.
 
-**What holds it back:** pins are the natural next feature; the message menu and notification panel still aren't keyboard-navigable; an ignored in-session call doesn't notify until reconnect; and the scaling story (whole-collection users listener, per-message name-map rebuild) still waits past six friends. None of it matters to the current circle.
+**What holds it back:** pins are the natural next feature; the message menu and notification panel still aren't keyboard-navigable; upload metadata is still client-reported; and the scaling story (whole-collection users listener, per-message name-map rebuild) still waits past six friends. None of it matters to the current circle.
 
 ### Top priorities if you keep building
 
@@ -154,8 +166,9 @@ Both new surfaces — reactions and missed-call records — were designed to the
 3. **Persist an ignored in-session call.** When a ring ages past 20 s while the callee is online but unresponsive, write the missed-call record on a timer rather than only on the staleness-cleanup path.
 4. **Scope the users listener + cache the name map.** Replace the whole-collection `onSnapshot` with per-render-needed fetches, and cache the per-message name-map build in `renderMessageText`.
 5. **Finish the upload story.** Sniff file content server-side so a lying client can't upload HTML as `text/plain`.
-6. **Strip or gate the `useCalls.js` console logs** and convert the last `"X"` text button.
+6. **Deploy the Cloudflare worker automatically.** Add the path-scoped GitHub Actions workflow for `quadchat-worker/**` with Cloudflare credentials and worker tests before `wrangler deploy`.
+7. **Strip or gate the `useCalls.js` console logs** and convert the last `"X"` text button.
 
 ---
 
-*Review written 2026-08-04 against v1.7.20 (`git rev-parse HEAD` = `2c685e0`), superseding the v1.7.18 review.*
+*Review written 2026-08-04 against v1.8.7 (`git rev-parse HEAD` = `03b2cc2`), superseding the v1.7.20 review.*
