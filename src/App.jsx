@@ -1750,7 +1750,7 @@ export default function App() {
           return true;
         }
 
-        setError("Files must be 10 MB or smaller.");
+        setError("Files must be 50 MB or smaller.");
         return false;
       });
 
@@ -2044,7 +2044,7 @@ export default function App() {
     });
 
     if (file.size > maxAttachmentBytes) {
-      setError("Voice message is too large (max 10 MB).");
+      setError("Voice message is too large (max 50 MB).");
       return;
     }
 

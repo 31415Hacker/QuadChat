@@ -9,8 +9,8 @@ if (!admin.apps.length) {
   });
 }
 
-const MAX_MESSAGE_BYTES = 10 * 1024 * 1024; // 10 MB
-const MAX_VOICE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_MESSAGE_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_VOICE_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_PROFILE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // Types that can carry active content and are never allowed, no matter what
@@ -58,7 +58,7 @@ function validateUpload(metadata) {
   if (size > sizeLimit) {
     return kind === "profile"
       ? "Profile pictures must be 5 MB or smaller."
-      : "Files must be 10 MB or smaller.";
+      : "Files must be 50 MB or smaller.";
   }
 
   if (BLOCKED_TYPES.has(fileType)) {

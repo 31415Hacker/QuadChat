@@ -12,7 +12,7 @@ export const notificationsEnabledKey = "quadchat:notificationsEnabled";
 export const notificationIcon = `${import.meta.env.BASE_URL}favicon.svg`;
 
 export const maxAttachments = 4;
-export const maxAttachmentBytes = 10 * 1024 * 1024;
+export const maxAttachmentBytes = 50 * 1024 * 1024;
 export const maxProfilePhotoBytes = 5 * 1024 * 1024;
 export const PAGE_SIZE = 30;
 export const MAX_MESSAGES = 500;
