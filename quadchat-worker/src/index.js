@@ -229,6 +229,17 @@ export class PresenceServer extends DurableObject {
     super(state, env);
     this.env = env;
     this.sessions = new Map();
+    this.healthCheck = setInterval(() => {
+      const now = Date.now();
+      for (const [webSocket, session] of this.sessions) {
+        if (now - session.lastPing <= 25000) continue;
+        try {
+          webSocket.close();
+        } finally {
+          this.handleDisconnect(webSocket);
+        }
+      }
+    }, 15000);
   }
 
   async fetch(request) {
@@ -253,28 +264,39 @@ export class PresenceServer extends DurableObject {
 
   async handleSession(webSocket, userId) {
     webSocket.accept();
-    this.sessions.set(webSocket, userId);
+    this.sessions.set(webSocket, { userId, lastPing: Date.now() });
     await this.cancelPendingOffline(userId);
     this.broadcast({ type: "presence", userId, status: "online" });
-    const onlineUsers = Array.from(new Set(this.sessions.values()));
+    const onlineUsers = Array.from(
+      new Set(Array.from(this.sessions.values()).map((session) => session.userId))
+    );
     webSocket.send(JSON.stringify({ type: "sync", onlineUsers }));
 
-    const handleDisconnect = () => {
-      if (this.sessions.has(webSocket)) {
-        this.sessions.delete(webSocket);
-        const isStillConnected = Array.from(this.sessions.values()).includes(userId);
-        if (!isStillConnected) {
-          this.scheduleOffline(userId);
-        }
-      }
-    };
+    webSocket.addEventListener("message", () => {
+      const session = this.sessions.get(webSocket);
+      if (session) session.lastPing = Date.now();
+    });
+    webSocket.addEventListener("close", () => this.handleDisconnect(webSocket));
+    webSocket.addEventListener("error", () => this.handleDisconnect(webSocket));
+  }
 
-    webSocket.addEventListener("close", handleDisconnect);
-    webSocket.addEventListener("error", handleDisconnect);
+  handleDisconnect(webSocket) {
+    const session = this.sessions.get(webSocket);
+    if (!session) return;
+
+    this.sessions.delete(webSocket);
+    const isStillConnected = Array.from(this.sessions.values()).some(
+      (activeSession) => activeSession.userId === session.userId
+    );
+    if (!isStillConnected) {
+      this.scheduleOffline(session.userId);
+    }
   }
 
   isConnected(userId) {
-    return Array.from(this.sessions.values()).includes(userId);
+    return Array.from(this.sessions.values()).some(
+      (session) => session.userId === userId
+    );
   }
 
   async scheduleOffline(userId) {
@@ -330,7 +352,7 @@ export class PresenceServer extends DurableObject {
       try {
         ws.send(payload);
       } catch (err) {
-        this.sessions.delete(ws);
+        this.handleDisconnect(ws);
       }
     }
   }

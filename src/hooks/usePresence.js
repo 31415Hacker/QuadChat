@@ -17,6 +17,14 @@ export function usePresence(user) {
     let reconnectAttempt = 0;
     const maxReconnectDelay = 30000;
     let closed = false;
+    let pingInterval = null;
+
+    function clearPingInterval() {
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+    }
 
     async function connect() {
       if (closed) return;
@@ -35,6 +43,14 @@ export function usePresence(user) {
 
       ws.onopen = () => {
         reconnectAttempt = 0;
+        clearPingInterval();
+        pingInterval = setInterval(() => {
+          if (ws?.readyState !== WebSocket.OPEN) {
+            clearPingInterval();
+            return;
+          }
+          ws.send(JSON.stringify({ type: "ping" }));
+        }, 10000);
       };
 
       ws.onmessage = (event) => {
@@ -60,6 +76,7 @@ export function usePresence(user) {
       };
 
       ws.onclose = () => {
+        clearPingInterval();
         if (!closed) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), maxReconnectDelay);
           reconnectAttempt++;
@@ -68,6 +85,7 @@ export function usePresence(user) {
       };
 
       ws.onerror = () => {
+        clearPingInterval();
         ws.close();
       };
     }
@@ -77,6 +95,7 @@ export function usePresence(user) {
     return () => {
       closed = true;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      clearPingInterval();
       if (ws) ws.close();
     };
   }, [user]);
