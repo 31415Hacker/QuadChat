@@ -1,4 +1,4 @@
-import { Fragment, memo } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CornerDownLeft,
   FileText,
@@ -7,6 +7,7 @@ import {
   MessageCircle,
   MoreVertical,
   Pencil,
+  Smile,
   Trash2
 } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
@@ -18,6 +19,8 @@ import {
   safeUrl
 } from "../utils/messages.jsx";
 
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
 const MessageItem = memo(function MessageItem({
   item,
   senderName,
@@ -27,6 +30,7 @@ const MessageItem = memo(function MessageItem({
   setReplyTo,
   startEditMessage,
   handleDeleteMessage,
+  handleToggleReaction,
   isCurrentUserAdmin,
   profiles,
   sessionUserId,
@@ -35,6 +39,38 @@ const MessageItem = memo(function MessageItem({
   joinGroupCall,
   onJumpToMessage
 }) {
+  const [showReactions, setShowReactions] = useState(false);
+  const reactionPickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!showReactions) return undefined;
+    const onPointerDown = (event) => {
+      if (!reactionPickerRef.current?.contains(event.target)) {
+        setShowReactions(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [showReactions]);
+
+  const reactionEntries = useMemo(() => {
+    const reactions = item.reactions || {};
+    const byEmoji = new Map();
+    Object.entries(reactions).forEach(([uid, emoji]) => {
+      if (typeof emoji !== "string") return;
+      const entry = byEmoji.get(emoji) || { count: 0, users: [] };
+      entry.count += 1;
+      entry.users.push(uid);
+      byEmoji.set(emoji, entry);
+    });
+    return [...byEmoji.entries()];
+  }, [item.reactions]);
+
+  function toggleReaction(emoji) {
+    setShowReactions(false);
+    handleToggleReaction(item, emoji);
+  }
+
   return (
     <article
       id={`msg-${item.id}`}
@@ -47,7 +83,32 @@ const MessageItem = memo(function MessageItem({
           {item.edited ? <span className="edited-tag"> · edited</span> : null}
         </span>
       </div>
-      <div className="message-actions">
+      <div className="message-actions" ref={reactionPickerRef}>
+        <button
+          aria-expanded={showReactions}
+          aria-label="Add reaction"
+          className="message-reaction-button"
+          onClick={() => setShowReactions((prev) => !prev)}
+          title="Add reaction"
+          type="button"
+        >
+          <Smile size={16} />
+        </button>
+        {showReactions ? (
+          <div className="reaction-picker" role="menu">
+            {REACTION_EMOJIS.map((emoji) => (
+              <button
+                aria-label={`React with ${emoji}`}
+                className="reaction-picker-option"
+                key={emoji}
+                onClick={() => toggleReaction(emoji)}
+                type="button"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <button
           aria-expanded={isMenuOpen}
           aria-label="Message options"
@@ -203,11 +264,33 @@ const MessageItem = memo(function MessageItem({
           )}
         </div>
       ) : null}
+      {reactionEntries.length > 0 ? (
+        <div className="message-reactions">
+          {reactionEntries.map(([emoji, entry]) => {
+            const mine = item.reactions?.[sessionUserId] === emoji;
+            const names = entry.users
+              .map((uid) => getProfileName(profiles[uid], uid))
+              .join(", ");
+            return (
+              <button
+                className={`reaction-chip${mine ? " reaction-chip--mine" : ""}`}
+                key={emoji}
+                onClick={() => handleToggleReaction(item, emoji)}
+                title={`${names || "Someone"} reacted with ${emoji}`}
+                type="button"
+              >
+                <span>{emoji}</span>
+                <span className="reaction-chip-count">{entry.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </article>
   );
 });
 
-export default function MessageList({
+const MessageList = memo(function MessageList({
   activeChannel,
   isCurrentUserDeveloper,
   isCurrentUserAdmin,
@@ -215,7 +298,6 @@ export default function MessageList({
   isLoadingMore,
   hasMoreMessages,
   sentinelRef,
-  messagesContainerRef,
   profiles,
   sessionUserId,
   activeName,
@@ -225,15 +307,14 @@ export default function MessageList({
   startEditMessage,
   handleDeleteMessage,
   handleRsvp,
+  handleToggleReaction,
   joinGroupCall,
   onJumpToMessage,
-  typingUsers,
-  endRef,
   dmPartnerName,
   isDmChannel
 }) {
   return (
-    <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
+    <>
       {activeChannel === "suggestions" ? (
         <div className="channel-description">
           <Lightbulb size={16} />
@@ -302,6 +383,7 @@ export default function MessageList({
                   setReplyTo={setReplyTo}
                   startEditMessage={startEditMessage}
                   handleDeleteMessage={handleDeleteMessage}
+                  handleToggleReaction={handleToggleReaction}
                   isCurrentUserAdmin={isCurrentUserAdmin}
                   profiles={profiles}
                   sessionUserId={sessionUserId}
@@ -313,21 +395,10 @@ export default function MessageList({
               </Fragment>
             );
           })}
-          {Object.keys(typingUsers).length > 0 && (
-            <div className="typing-indicator">
-              <span className="typing-text">
-                {Object.values(typingUsers).join(", ")} {Object.keys(typingUsers).length === 1 ? "is" : "are"} typing
-              </span>
-              <span className="typing-dots">
-                <span className="dot" />
-                <span className="dot" />
-                <span className="dot" />
-              </span>
-            </div>
-          )}
-          <div ref={endRef} />
         </>
       )}
-    </div>
+    </>
   );
-}
+});
+
+export default MessageList;

@@ -128,6 +128,29 @@
     },
 
     // -----------------------------------------------------------------
+    // MISSED-CALL RECORDS
+    // When an incoming call ring goes stale (>20 s), the callee's client
+    // moves it here instead of dropping it, so an offline user learns who
+    // called them on reconnect. Each user only ever sees/writes their own
+    // node; the callee's client drains it into the notification center.
+    // -----------------------------------------------------------------
+    "missed-calls": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$callKey": {
+          ".validate": "!newData.exists() || (
+            newData.child('callKey').val() === $callKey
+            && newData.child('callerId').isString()
+            && newData.child('callerName').isString()
+            && newData.child('startedAt').isNumber()
+            && newData.child('callKey').isString()
+          )"
+        }
+      }
+    },
+
+    // -----------------------------------------------------------------
     // P2P / GROUP CALL SIGNALING
     // -----------------------------------------------------------------
     "group-calls": {

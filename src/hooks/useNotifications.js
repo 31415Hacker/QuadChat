@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { timeAgo } from "../utils/format.js";
 
 export function useNotifications({ activeChannel, onOpenChannel }) {
@@ -18,43 +18,46 @@ export function useNotifications({ activeChannel, onOpenChannel }) {
     }
   };
 
-  const pushInAppNotification = ({
-    type,
-    channelId,
-    channelLabel,
-    senderName,
-    body,
-    id
-  }) => {
-    const notificationId =
-      id ||
-      `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    if (notificationIdsRef.current.has(notificationId)) return;
-    notificationIdsRef.current.add(notificationId);
-    setInAppNotifications((prev) =>
-      [
-        {
-          id: notificationId,
-          type,
-          channelId,
-          channelLabel,
-          senderName,
-          body,
-          createdAt: Date.now(),
-          read: false
-        },
-        ...prev
-      ].slice(0, 100)
-    );
-    if (document.visibilityState === "visible" && !toastIdsRef.current.has(notificationId)) {
-      toastIdsRef.current.add(notificationId);
-      setInAppToasts((prev) =>
-        [...prev, { id: notificationId, type, channelId, channelLabel, senderName, body }].slice(-3)
+  const pushInAppNotification = useCallback(
+    ({
+      type,
+      channelId,
+      channelLabel,
+      senderName,
+      body,
+      id
+    }) => {
+      const notificationId =
+        id ||
+        `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      if (notificationIdsRef.current.has(notificationId)) return;
+      notificationIdsRef.current.add(notificationId);
+      setInAppNotifications((prev) =>
+        [
+          {
+            id: notificationId,
+            type,
+            channelId,
+            channelLabel,
+            senderName,
+            body,
+            createdAt: Date.now(),
+            read: false
+          },
+          ...prev
+        ].slice(0, 100)
       );
-      const timer = window.setTimeout(() => dismissToast(notificationId), 6000);
-      toastTimersRef.current.set(notificationId, timer);
-    }
-  };
+      if (document.visibilityState === "visible" && !toastIdsRef.current.has(notificationId)) {
+        toastIdsRef.current.add(notificationId);
+        setInAppToasts((prev) =>
+          [...prev, { id: notificationId, type, channelId, channelLabel, senderName, body }].slice(-3)
+        );
+        const timer = window.setTimeout(() => dismissToast(notificationId), 6000);
+        toastTimersRef.current.set(notificationId, timer);
+      }
+    },
+    []
+  );
 
   const markAllNotificationsRead = () => {
     setInAppNotifications((prev) =>

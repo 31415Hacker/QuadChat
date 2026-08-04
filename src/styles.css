@@ -1327,12 +1327,15 @@ button:disabled {
 }
 
 .message-actions {
+  display: flex;
+  gap: 2px;
   position: absolute;
   right: 4px;
   top: 4px;
 }
 
-.message-menu-button {
+.message-menu-button,
+.message-reaction-button {
   background: transparent;
   border-radius: 999px;
   color: var(--text-tertiary);
@@ -1344,14 +1347,87 @@ button:disabled {
 }
 
 .message:hover .message-menu-button,
+.message:hover .message-reaction-button,
 .message-menu-button:focus,
-.message-menu-button[aria-expanded="true"] {
+.message-menu-button[aria-expanded="true"],
+.message-reaction-button:focus,
+.message-reaction-button[aria-expanded="true"] {
   opacity: 1;
 }
 
-.message-menu-button:hover:not(:disabled) {
+.message-menu-button:hover:not(:disabled),
+.message-reaction-button:hover:not(:disabled) {
   background: var(--bg-hover);
   transform: none;
+}
+
+.reaction-picker {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  box-shadow: 0 14px 34px var(--shadow-dropdown);
+  bottom: calc(100% + 6px);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  z-index: 15;
+}
+
+.reaction-picker-option {
+  background: transparent;
+  border-radius: 999px;
+  font-size: 1.25rem;
+  height: 34px;
+  padding: 0;
+  transition: transform 120ms ease;
+  width: 34px;
+}
+
+.reaction-picker-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+  transform: scale(1.18);
+}
+
+.message-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.reaction-chip {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  display: flex;
+  font-size: 0.85rem;
+  gap: 5px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.reaction-chip:hover:not(:disabled) {
+  background: var(--bg-hover-alt);
+  transform: none;
+}
+
+.reaction-chip--mine {
+  background: rgba(91, 181, 245, 0.14);
+  border-color: var(--accent-blue);
+}
+
+.reaction-chip-count {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.reaction-chip--mine .reaction-chip-count {
+  color: var(--accent-blue);
 }
 
 .message-menu {
@@ -3120,6 +3196,11 @@ button:disabled {
 .notif-item-icon-call {
   background: rgba(45, 212, 139, 0.16);
   color: var(--accent-green);
+}
+
+.notif-item-icon-missed-call {
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--accent-red);
 }
 
 .notif-item-text {

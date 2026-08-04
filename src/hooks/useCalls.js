@@ -123,6 +123,12 @@ export function useCalls({
 
       if (Date.now() - ring.startedAt >= 20000) {
         console.log(`[CALL-DETECT] filtering out stale ring key=${callKey}`);
+        set(rtdbRef(rtdb, `missed-calls/${sessionUserId}/${callKey}`), {
+          callerId: ring.callerId,
+          callerName: ring.callerName,
+          startedAt: ring.startedAt,
+          callKey
+        }).catch(() => {});
         clearRing(sessionUserId, callKey);
         return;
       }

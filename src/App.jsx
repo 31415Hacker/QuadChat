@@ -36,7 +36,7 @@ import {
   updateDoc,
   where
 } from "firebase/firestore";
-import { onValue, ref as rtdbRef, set, remove } from "firebase/database";
+import { onChildAdded, onValue, ref as rtdbRef, set, remove } from "firebase/database";
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
@@ -932,6 +932,31 @@ export default function App() {
       setTypingUsers({});
     };
   }, [user, activeChannel, sessionUserId]);
+
+  useEffect(() => {
+    if (!user || !sessionUserId) return;
+
+    const missedCallsRef = rtdbRef(rtdb, `missed-calls/${sessionUserId}`);
+    const seenMissedCallsRef = new Set();
+
+    const unsub = onChildAdded(missedCallsRef, (snap) => {
+      const missed = snap.val();
+      const callKey = snap.key;
+      if (!missed || !callKey || seenMissedCallsRef.has(callKey)) return;
+      seenMissedCallsRef.add(callKey);
+      pushInAppNotification({
+        type: "missed-call",
+        channelId: null,
+        channelLabel: null,
+        senderName: missed.callerName || "Someone",
+        body: "missed your call",
+        id: `missed-call-${callKey}`
+      });
+      remove(rtdbRef(rtdb, `missed-calls/${sessionUserId}/${callKey}`)).catch(() => {});
+    });
+
+    return () => unsub();
+  }, [user, sessionUserId, pushInAppNotification]);
 
   useEffect(() => {
     if (isNearBottomRef.current && !highlightTargetRef.current) {
@@ -2170,6 +2195,22 @@ export default function App() {
     });
   }, [sessionUserId, activeChannel, activeName]);
 
+  const handleToggleReaction = useCallback(async (item, emoji) => {
+    if (!sessionUserId || !activeChannel || !item?.id || typeof emoji !== "string") return;
+    const messageRef = doc(db, "messages", activeChannel, "messages", item.id);
+    const current = item.reactions?.[sessionUserId];
+    try {
+      await updateDoc(
+        messageRef,
+        current === emoji
+          ? { [`reactions.${sessionUserId}`]: deleteField() }
+          : { [`reactions.${sessionUserId}`]: emoji }
+      );
+    } catch {
+      // reactions are best-effort; no user-facing error needed
+    }
+  }, [sessionUserId, activeChannel]);
+
   const handleDeleteMessage = useCallback(async (messageId) => {
     const confirmed = await ask("Are you sure you want to delete this message?", {
       title: "Delete message?",
@@ -2712,31 +2753,44 @@ export default function App() {
                   screenVideoRef={screenVideoRef}
                 />
               ) : (
-                <MessageList
-                  activeChannel={activeChannel}
-                  isCurrentUserDeveloper={isCurrentUserDeveloper}
-                  isCurrentUserAdmin={isCurrentUserAdmin}
-                  messages={messages}
-                  isLoadingMore={isLoadingMore}
-                  hasMoreMessages={hasMoreMessages}
-                  sentinelRef={sentinelRef}
-                  messagesContainerRef={messagesContainerRef}
-                  profiles={profiles}
-                  sessionUserId={sessionUserId}
-                  activeName={activeName}
-                  openMessageMenuId={openMessageMenuId}
-                  setOpenMessageMenuId={setOpenMessageMenuId}
-                  setReplyTo={setReplyTo}
-                  startEditMessage={startEditMessage}
-                  handleDeleteMessage={handleDeleteMessage}
-                  handleRsvp={handleRsvp}
-                  joinGroupCall={joinGroupCallStable}
-                  onJumpToMessage={jumpToReply}
-                  typingUsers={typingUsers}
-                  endRef={endRef}
-                  dmPartnerName={dmPartnerName}
-                  isDmChannel={isDmChannelId(activeChannel)}
-                />
+                <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
+                  <MessageList
+                    activeChannel={activeChannel}
+                    isCurrentUserDeveloper={isCurrentUserDeveloper}
+                    isCurrentUserAdmin={isCurrentUserAdmin}
+                    messages={messages}
+                    isLoadingMore={isLoadingMore}
+                    hasMoreMessages={hasMoreMessages}
+                    sentinelRef={sentinelRef}
+                    profiles={profiles}
+                    sessionUserId={sessionUserId}
+                    activeName={activeName}
+                    openMessageMenuId={openMessageMenuId}
+                    setOpenMessageMenuId={setOpenMessageMenuId}
+                    setReplyTo={setReplyTo}
+                    startEditMessage={startEditMessage}
+                    handleDeleteMessage={handleDeleteMessage}
+                    handleRsvp={handleRsvp}
+                    handleToggleReaction={handleToggleReaction}
+                    joinGroupCall={joinGroupCallStable}
+                    onJumpToMessage={jumpToReply}
+                    dmPartnerName={dmPartnerName}
+                    isDmChannel={isDmChannelId(activeChannel)}
+                  />
+                  {Object.keys(typingUsers).length > 0 ? (
+                    <div className="typing-indicator">
+                      <span className="typing-text">
+                        {Object.values(typingUsers).join(", ")} {Object.keys(typingUsers).length === 1 ? "is" : "are"} typing
+                      </span>
+                      <span className="typing-dots">
+                        <span className="dot" />
+                        <span className="dot" />
+                        <span className="dot" />
+                      </span>
+                    </div>
+                  ) : null}
+                  <div ref={endRef} />
+                </div>
               )}
               <UsersSidebar
                 profiles={profiles}

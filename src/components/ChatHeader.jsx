@@ -207,7 +207,7 @@ export default function ChatHeader({
                   onClick={() => openNotification(notification)}
                 >
                   <span className={`notif-item-icon notif-item-icon-${notification.type}`}>
-                    {notification.type === "call" ? (
+                    {notification.type === "call" || notification.type === "missed-call" ? (
                       <Phone size={15} />
                     ) : notification.type === "mention" ? (
                       <MessageCircle size={15} />
@@ -218,7 +218,7 @@ export default function ChatHeader({
                   <span className="notif-item-text">
                     <strong>{notification.channelLabel || notification.senderName}</strong>
                     <span>
-                      {notification.type === "call"
+                      {notification.type === "call" || notification.type === "missed-call"
                         ? `${notification.senderName} ${notification.body}`
                         : `${notification.senderName}: ${notification.body}`}
                     </span>
