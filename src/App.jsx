@@ -2656,12 +2656,6 @@ export default function App() {
               answerCall={answerCall}
             />
 
-            <ConfirmDialog
-              state={confirmState}
-              onConfirm={() => closeConfirm(true)}
-              onCancel={() => closeConfirm(false)}
-            />
-
             {callStatus === "connected" || callStatus === "calling" ? (
               <ActiveCallBar
                 callStatus={callStatus}
@@ -2797,6 +2791,8 @@ export default function App() {
               addPendingFiles={addPendingFiles}
               composerInputRef={composerInputRef}
               sessionUserId={sessionUserId}
+              profiles={profiles}
+              isDarkTheme={isDarkTheme}
             />
           </div>
         </section>
@@ -2853,6 +2849,11 @@ export default function App() {
           profiles={profiles}
         />
       ) : null}
+      <ConfirmDialog
+        state={confirmState}
+        onConfirm={() => closeConfirm(true)}
+        onCancel={() => closeConfirm(false)}
+      />
       <GamingPostModal
         showGamingPost={showGamingPost}
         setShowGamingPost={setShowGamingPost}
