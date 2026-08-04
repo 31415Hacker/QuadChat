@@ -26,11 +26,11 @@
     // ONE-ON-ONE WEBRTC CALLS
     // -----------------------------------------------------------------
     "calls": {
-      // The client listens with onChildAdded() on the whole collection to
-      // detect incoming calls, so any signed-in user must be able to read
-      // it. Per-call writes below stay locked to the caller/callee pair.
-      ".read": "auth != null",
       "$callId": {
+        // Only the caller or callee can read or interact with a call object.
+        // (Incoming-call detection no longer listens on the whole collection;
+        // it uses per-user "call-rings" nodes below, so read stays private.)
+        ".read": "auth != null && (data.child('callerId').val() === auth.uid || data.child('calleeId').val() === auth.uid)",
         // Only the caller or callee can create/interact with a call object.
         // Creation is limited to the caller writing their own callerId.
         ".write": "auth != null && (
@@ -89,6 +89,40 @@
         "renego": {
           ".read": "auth != null && (data.parent().child('callerId').val() === auth.uid || data.parent().child('calleeId').val() === auth.uid)",
           ".write": "auth != null && (data.parent().child('callerId').val() === auth.uid || data.parent().child('calleeId').val() === auth.uid)"
+        }
+      }
+    },
+
+    // -----------------------------------------------------------------
+    // INCOMING-CALL RINGS
+    // Each user has their own node under call-rings/$uid. A caller writes a
+    // small ring entry into the callee's node when starting a call, and the
+    // callee listens only on their own node (onChildAdded). Nobody else can
+    // see or write a user's rings, so call metadata is never broadcast.
+    // -----------------------------------------------------------------
+    "call-rings": {
+      "$uid": {
+        // Only the ring owner can read their own rings.
+        ".read": "auth != null && auth.uid === $uid",
+        // The owner can manage their rings; a caller can write a ring into the
+        // callee's node only while it identifies themselves as the caller
+        // (shape/identity is enforced by the .validate below).
+        ".write": "auth != null && (
+          auth.uid === $uid
+          || (newData.child('callerId').val() === auth.uid && newData.child('calleeId').val() === $uid)
+        )",
+        "$callKey": {
+          ".validate": "!newData.exists() || (
+            newData.child('callKey').val() === $callKey
+            && newData.child('calleeId').val() === $uid
+            && newData.child('callerId').val() === auth.uid
+            && newData.child('callerId').isString()
+            && newData.child('calleeId').isString()
+            && newData.child('callerName').isString()
+            && newData.child('calleeName').isString()
+            && newData.child('startedAt').isNumber()
+            && newData.child('callKey').isString()
+          )"
         }
       }
     },

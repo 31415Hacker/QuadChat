@@ -98,21 +98,52 @@ export function useCalls({
     }
   }, [remoteScreenStream]);
 
+  function clearRing(calleeId, callKey) {
+    if (!calleeId || !callKey) return;
+    remove(rtdbRef(rtdb, `call-rings/${calleeId}/${callKey}`)).catch(() => {});
+  }
+
   useEffect(() => {
     if (callStatus !== "idle") return;
-    const callsRef = rtdbRef(rtdb, "calls");
+    const ringsRef = rtdbRef(rtdb, `call-rings/${sessionUserId}`);
     const statusUnsubs = {};
 
-    const unsub = onChildAdded(callsRef, (snap) => {
-      const data = snap.val();
-      if (data.calleeId !== sessionUserId || seenCallIdsRef.current.has(snap.key)) return;
-      seenCallIdsRef.current.add(snap.key);
-
+    const unsub = onChildAdded(ringsRef, async (snap) => {
+      const ring = snap.val();
       const callKey = snap.key;
-      console.log(`[CALL-DETECT] new child key=${callKey} status=${data.status} calleeId=${data.calleeId} callerName=${data.callerName} startedAt=${data.startedAt} age=${Date.now() - data.startedAt}ms`);
+      if (!ring || !callKey) return;
 
-      if (data.status !== "calling" || Date.now() - data.startedAt >= 20000) {
-        console.log(`[CALL-DETECT] filtering out stale/ended call key=${callKey}`);
+      console.log(`[CALL-DETECT] new ring key=${callKey} callerName=${ring.callerName} startedAt=${ring.startedAt} age=${Date.now() - ring.startedAt}ms`);
+
+      if (ring.calleeId !== sessionUserId || seenCallIdsRef.current.has(callKey)) {
+        clearRing(sessionUserId, callKey);
+        return;
+      }
+      seenCallIdsRef.current.add(callKey);
+
+      if (Date.now() - ring.startedAt >= 20000) {
+        console.log(`[CALL-DETECT] filtering out stale ring key=${callKey}`);
+        clearRing(sessionUserId, callKey);
+        return;
+      }
+
+      let data;
+      try {
+        const callSnap = await rtdbGet(rtdbRef(rtdb, `calls/${callKey}`));
+        if (!callSnap.exists()) {
+          console.log(`[CALL-DETECT] call node gone, clearing ring key=${callKey}`);
+          clearRing(sessionUserId, callKey);
+          return;
+        }
+        data = { key: callKey, ...callSnap.val() };
+      } catch (firebaseError) {
+        console.error("[CALL-DETECT] failed to read call node:", firebaseError);
+        clearRing(sessionUserId, callKey);
+        return;
+      }
+
+      if (data.calleeId !== sessionUserId || data.status !== "calling") {
+        clearRing(sessionUserId, callKey);
         return;
       }
 
@@ -146,13 +177,14 @@ export function useCalls({
             statusUnsubs[callKey]();
             delete statusUnsubs[callKey];
           }
+          clearRing(sessionUserId, callKey);
         }
       });
     });
 
     return () => {
       console.log("[CALL-DETECT] cleaning up incoming call listener");
-      off(callsRef);
+      off(ringsRef);
       Object.values(statusUnsubs).forEach(fn => fn());
     };
   }, [sessionUserId, callStatus]);
@@ -183,6 +215,9 @@ export function useCalls({
       console.log("[CALL-CLEANUP] cancelling onDisconnect + writing ended + removing node");
       onDisconnect(nodeRef).cancel();
       update(nodeRef, { status: "ended" }).then(() => remove(nodeRef)).catch(() => {});
+      if (!isCallerRef.current) {
+        clearRing(sessionUserId, nodeRef.key);
+      }
     }
     console.log("[CALL-CLEANUP] resetting state variables");
     setRemoteStream(null);
@@ -298,6 +333,16 @@ export function useCalls({
         offer: { type: offer.type, sdp: offer.sdp }
       });
       console.log("[CALL-START] call data written to RTDB");
+
+      await set(rtdbRef(rtdb, `call-rings/${calleeId}/${callRef.key}`), {
+        callerId: sessionUserId,
+        calleeId,
+        callerName: activeName,
+        calleeName,
+        startedAt: Date.now(),
+        callKey: callRef.key
+      }).catch(() => {});
+      console.log("[CALL-START] ring written for callee");
 
       setCallStatus("calling");
       setCallPartnerId(calleeId);
@@ -451,6 +496,7 @@ export function useCalls({
     answerCallLockRef.current = true;
 
     try {
+      clearRing(sessionUserId, incomingCall.key);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       console.log("[CALL-ANSWER] got local media stream");
       localStreamRef.current = stream;
@@ -612,6 +658,7 @@ export function useCalls({
   function rejectCall() {
     console.log("[CALL-REJECT] rejecting incoming call", incomingCall?.key);
     if (incomingCall) {
+      clearRing(sessionUserId, incomingCall.key);
       remove(rtdbRef(rtdb, `calls/${incomingCall.key}`));
       setIncomingCall(null);
     }
