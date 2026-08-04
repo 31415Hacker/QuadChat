@@ -285,7 +285,7 @@ export default function App() {
     }
   };
 
-  const { onlineUsers } = usePresence(user);
+  const [onlineUsers] = usePresence(user);
 
   const {
     inAppNotifications,
