@@ -39,13 +39,39 @@ function MessageItem({
       id={`msg-${item.id}`}
       className={`message ${isMine ? "message-mine" : ""}`}
     >
-      <div className="message-meta">
-        <strong>{senderName}</strong>
-        <span>
-          {formatTime(item.createdAt)}
-          {item.edited ? <span className="edited-tag"> · edited</span> : null}
-        </span>
-      </div>
+      {item.replyTo && typeof item.replyTo === "object" ? (
+        <div
+          className="reply-card"
+          onClick={() => {
+            const target = document.getElementById(`msg-${item.replyTo.id}`);
+            if (!target) return;
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.classList.add("message-highlight");
+            setTimeout(() => target.classList.remove("message-highlight"), 2500);
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            document
+              .getElementById(`msg-${item.replyTo.id}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+          role="button"
+          tabIndex={0}
+          title={`Jump to ${item.replyTo.senderName || "the original"}'s message`}
+        >
+          <strong>{item.replyTo.senderName || "Unknown"}</strong>
+          <span>{item.replyTo.text || "Original message deleted"}</span>
+        </div>
+      ) : null}
+      <div className="message-bubble">
+        <div className="message-meta">
+          <strong>{senderName}</strong>
+          <span>
+            {formatTime(item.createdAt)}
+            {item.edited ? <span className="edited-tag"> · edited</span> : null}
+          </span>
+        </div>
       <div className="message-actions">
         <button
           aria-expanded={isMenuOpen}
@@ -104,12 +130,6 @@ function MessageItem({
           </div>
         ) : null}
       </div>
-      {item.replyTo && typeof item.replyTo === "object" ? (
-        <div className="reply-card">
-          <strong>{item.replyTo.senderName || "Unknown"}</strong>
-          <span>{item.replyTo.text || "Message unavailable"}</span>
-        </div>
-      ) : null}
       {item.isFile ? (
         typeof item.fileType === "string" && item.fileType.startsWith("video/") ? (
           <video
@@ -191,6 +211,7 @@ function MessageItem({
           )}
         </div>
       ) : null}
+      </div>
     </article>
   );
 }
