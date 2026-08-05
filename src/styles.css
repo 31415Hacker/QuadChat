@@ -154,6 +154,70 @@ input {
   transform-origin: center center;
 }
 
+.app-loading-screen {
+  align-items: center;
+  background: var(--bg-page);
+  box-sizing: border-box;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
+  text-align: center;
+}
+
+.app-loading-mark {
+  align-items: center;
+  background: var(--accent-brand);
+  border-radius: 12px;
+  color: #3d3520;
+  display: flex;
+  font-size: 1.5rem;
+  font-weight: 800;
+  height: 56px;
+  justify-content: center;
+  width: 56px;
+}
+
+.app-loading-screen h1,
+.app-loading-screen p {
+  margin: 0;
+}
+
+.app-loading-screen h1 {
+  font-size: 1.4rem;
+}
+
+.app-loading-screen p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.app-loading-spinner {
+  animation: app-loading-spin 0.9s linear infinite;
+  border: 3px solid rgba(127, 193, 204, 0.25);
+  border-radius: 50%;
+  border-top-color: var(--text-accent);
+  height: 26px;
+  margin-top: 6px;
+  width: 26px;
+}
+
+@keyframes app-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-spinner {
+    animation: none;
+  }
+}
+
 .chat-panel,
 .signin-panel {
   background: var(--bg-panel);

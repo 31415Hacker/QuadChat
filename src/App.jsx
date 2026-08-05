@@ -112,10 +112,23 @@ import {
 } from "./components/CallUI.jsx";
 import ToastContainer from "./components/Toasts.jsx";
 
+function AppLoadingScreen({ message }) {
+  return (
+    <main className="app-loading-screen" aria-label="Loading QuadChat">
+      <div className="app-loading-mark">QC</div>
+      <h1>QuadChat</h1>
+      <p>{message}</p>
+      <div className="app-loading-spinner" aria-hidden="true" />
+    </main>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [sessionUserId, setSessionUserId] = useState(readSessionUserId);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isProfilesReady, setIsProfilesReady] = useState(false);
+  const [isInitialMessagesReady, setIsInitialMessagesReady] = useState(false);
   const [authView, setAuthView] = useState("signin");
   const [draftName, setDraftName] = useState("");
   const [email, setEmail] = useState("");
@@ -485,6 +498,8 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setIsAuthReady(true);
+      setIsProfilesReady(!firebaseUser);
+      setIsInitialMessagesReady(!firebaseUser);
 
       if (firebaseUser) {
         writeSessionUserId(firebaseUser.uid);
@@ -603,21 +618,23 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setProfiles({});
+      setIsProfilesReady(false);
       return undefined;
     }
 
     const unsubscribe = onSnapshot(
       usersRef,
       (snapshot) => {
-        setProfiles(
+         setProfiles(
           snapshot.docs.reduce((nextProfiles, profileDoc) => {
             nextProfiles[profileDoc.id] = {
               id: profileDoc.id,
               ...profileDoc.data()
             };
             return nextProfiles;
-          }, {})
-        );
+            }, {})
+         );
+        setIsProfilesReady(true);
       },
       (firebaseError) => {
         setError(firebaseError.message);
@@ -711,6 +728,7 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setMessages([]);
+      setIsInitialMessagesReady(false);
       setHasMoreMessages(true);
       hasMoreMessagesRef.current = true;
       oldestDocSnapRef.current = null;
@@ -808,6 +826,7 @@ export default function App() {
       }));
 
       setMessages(msgs);
+      setIsInitialMessagesReady(true);
       if (jumpTargetId) {
         highlightTargetRef.current = jumpTargetId;
       } else {
@@ -2636,6 +2655,14 @@ export default function App() {
     });
     setShowGamingPost(true);
   };
+
+  if (!isAuthReady) {
+    return <AppLoadingScreen message="Checking your session…" />;
+  }
+
+  if (user && (!isProfilesReady || !isInitialMessagesReady)) {
+    return <AppLoadingScreen message="Loading your chat…" />;
+  }
 
   return (
     <main className={`app-shell${isSettingsOpen && user ? " app-shell--settings" : ""}`}>
