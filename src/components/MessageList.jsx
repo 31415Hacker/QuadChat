@@ -11,6 +11,7 @@ import {
   Trash2
 } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
+import { getFileKind, getImagePreviewUrl } from "./FilePreviewModal.jsx";
 import { formatDayLabel, dayKey, formatTime } from "../utils/format.js";
 import { getProfileName, normalizeName } from "../utils/names.js";
 import {
@@ -38,7 +39,8 @@ const MessageItem = memo(function MessageItem({
   activeName,
   handleRsvp,
   joinGroupCall,
-  onJumpToMessage
+  onJumpToMessage,
+  onPreviewFile
 }) {
   const [showReactions, setShowReactions] = useState(false);
   const reactionPickerRef = useRef(null);
@@ -206,6 +208,25 @@ const MessageItem = memo(function MessageItem({
               type={item.fileType}
             />
           </audio>
+        ) : getFileKind({ name: item.fileName, type: item.fileType }) !== "file" ? (
+          <button
+            className="message-image-link message-preview-button"
+            type="button"
+            onClick={() => onPreviewFile({ url: item.text, name: item.fileName, type: item.fileType })}
+            title={`Preview ${item.fileName || "file"}`}
+          >
+            {getFileKind({ name: item.fileName, type: item.fileType }) === "image" ? (
+              <img
+                src={getImagePreviewUrl(item.text)}
+                alt={item.fileName || "Uploaded image"}
+              />
+            ) : (
+              <>
+                <FileText size={18} />
+                <span>{item.fileName || "Preview file"}</span>
+              </>
+            )}
+          </button>
         ) : (
           <a
             className="message-image-link"
@@ -229,16 +250,15 @@ const MessageItem = memo(function MessageItem({
       {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
         <div className="message-attachments">
           {item.attachments.map((attachment) =>
-            attachment && typeof attachment.type === "string" && attachment.type.startsWith("image/") ? (
-              <a
-                className="message-image-link"
-                href={safeUrl(attachment.url)}
+            attachment && getFileKind(attachment) === "image" ? (
+              <button
+                className="message-image-link message-preview-button"
                 key={attachment.path || attachment.url}
-                rel="noreferrer"
-                target="_blank"
+                onClick={() => onPreviewFile(attachment)}
+                type="button"
               >
-                <img src={safeUrl(attachment.url)} alt={attachment.name} />
-              </a>
+                <img src={getImagePreviewUrl(attachment.url)} alt={attachment.name} />
+              </button>
             ) : attachment && typeof attachment.type === "string" && attachment.type.startsWith("video/") ? (
               <video
                 controls
@@ -250,6 +270,16 @@ const MessageItem = memo(function MessageItem({
                   type={attachment.type}
                 />
               </video>
+            ) : attachment && (getFileKind(attachment) === "text" || getFileKind(attachment) === "document") ? (
+              <button
+                className="message-file-link"
+                key={attachment?.path || attachment?.url}
+                onClick={() => onPreviewFile({ ...attachment, url: attachment.viewUrl || attachment.url })}
+                type="button"
+              >
+                <FileText size={18} />
+                <span>{attachment?.name}</span>
+              </button>
             ) : (
               <a
                 className="message-file-link"
@@ -311,6 +341,7 @@ const MessageList = memo(function MessageList({
   handleToggleReaction,
   joinGroupCall,
   onJumpToMessage,
+  onPreviewFile,
   dmPartnerName,
   isDmChannel
 }) {
@@ -402,6 +433,7 @@ const MessageList = memo(function MessageList({
                   handleRsvp={handleRsvp}
                   joinGroupCall={joinGroupCall}
                   onJumpToMessage={onJumpToMessage}
+                  onPreviewFile={onPreviewFile}
                 />
               </Fragment>
             );

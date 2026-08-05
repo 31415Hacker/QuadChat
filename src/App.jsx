@@ -93,6 +93,7 @@ import AuthScreen from "./components/AuthScreen.jsx";
 import ChannelSidebar from "./components/ChannelSidebar.jsx";
 import ChatHeader from "./components/ChatHeader.jsx";
 import MessageList from "./components/MessageList.jsx";
+import FilePreviewModal from "./components/FilePreviewModal.jsx";
 import UsersSidebar from "./components/UsersSidebar.jsx";
 import Composer from "./components/Composer.jsx";
 import SettingsPage from "./components/SettingsPage.jsx";
@@ -199,6 +200,7 @@ export default function App() {
   const [analyticsTarget, setAnalyticsTarget] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [filePreview, setFilePreview] = useState(null);
 
   const [typingUsers, setTypingUsers] = useState({});
   const typingTimeoutRef = useRef(null);
@@ -2876,6 +2878,7 @@ export default function App() {
                     handleToggleReaction={handleToggleReaction}
                     joinGroupCall={joinGroupCallStable}
                     onJumpToMessage={jumpToReply}
+                    onPreviewFile={setFilePreview}
                     dmPartnerName={dmPartnerName}
                     isDmChannel={isDmChannelId(activeChannel)}
                   />
@@ -3005,6 +3008,7 @@ export default function App() {
           profiles={profiles}
         />
       ) : null}
+      <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />
       <ConfirmDialog
         state={confirmState}
         onConfirm={() => closeConfirm(true)}

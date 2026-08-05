@@ -318,7 +318,7 @@ export default function Composer({
                   <button
                     type="button"
                     onClick={() => {
-                      fileInputRef.current.accept = "image/*,video/*";
+                      fileInputRef.current.accept = "image/*,.heic,.heif,.avif,.jxl,video/*";
                       fileInputRef.current.click();
                       setShowAttachMenu(false);
                     }}
