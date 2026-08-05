@@ -70,7 +70,7 @@ export default function ChatHeader({
           <MessageCircle size={26} strokeWidth={2.3} />
         </div>
         <div>
-          <h1>{showVersionInHeader ? `QuadChat v${APP_VERSION}` : "QuadChat"}</h1>
+           <h1>{`QuadChat v${showVersionInHeader ? APP_VERSION : APP_VERSION.split(".")[0]}`}</h1>
           <p>
             Signed in as {activeName}
           </p>

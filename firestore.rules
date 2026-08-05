@@ -164,6 +164,9 @@ service cloud.firestore {
       allow create: if signedIn()
         && !(request.resource.data.isAdmin == true &&
              request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+        && (!("bio" in request.resource.data) ||
+            (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
+        && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
         && (
         isAdmin() || (
           signupEnabled() &&
@@ -176,6 +179,9 @@ service cloud.firestore {
       allow update: if signedIn()
         && !(isProtectedAdminTarget() &&
              request.resource.data.diff(resource.data).affectedKeys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+        && (!("bio" in request.resource.data) ||
+            (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
+        && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
         && (
         isAdmin() || (
           userId == request.auth.uid &&

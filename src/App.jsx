@@ -83,6 +83,7 @@ import {
   readNotificationsEnabled,
   writeNotificationsEnabled
 } from "./utils/auth.js";
+import { createDefaultSchedule, normalizeSchedule } from "./utils/schedule.js";
 
 import { usePresence } from "./hooks/usePresence.js";
 import { useNotifications } from "./hooks/useNotifications.js";
@@ -174,6 +175,8 @@ export default function App() {
     return stored && value >= 50 && value <= 100 ? value : 100;
   });
   const [settingsName, setSettingsName] = useState("");
+  const [settingsBio, setSettingsBio] = useState("");
+  const [settingsSchedule, setSettingsSchedule] = useState(createDefaultSchedule);
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
   const [settingsPhotoFile, setSettingsPhotoFile] = useState(null);
@@ -1502,6 +1505,8 @@ export default function App() {
 
   function openSettings() {
     setSettingsName(activeName || "");
+    setSettingsBio(currentProfile?.bio || "");
+    setSettingsSchedule(normalizeSchedule(currentProfile?.schedule));
     setSettingsCurrentPassword("");
     setSettingsPassword("");
     setSettingsPhotoFile(null);
@@ -1599,7 +1604,7 @@ export default function App() {
     const cleanCurrentPassword = settingsCurrentPassword.trim();
     const cleanPassword = settingsPassword.trim();
 
-    if (!user || (!cleanName && !cleanPassword)) {
+    if (!user) {
       return;
     }
 
@@ -1624,6 +1629,11 @@ export default function App() {
       if (cleanName) {
         await saveUserProfile(user, cleanName);
       }
+      await setDoc(
+        doc(db, "users", user.uid),
+        { bio: settingsBio.trim(), schedule: settingsSchedule },
+        { merge: true }
+      );
 
       if (cleanPassword) {
         if (hasEmailProvider) {
@@ -2966,6 +2976,10 @@ export default function App() {
           activeName={activeName}
           settingsName={settingsName}
           setSettingsName={setSettingsName}
+          settingsBio={settingsBio}
+          setSettingsBio={setSettingsBio}
+          settingsSchedule={settingsSchedule}
+          setSettingsSchedule={setSettingsSchedule}
           settingsPhotoPreview={settingsPhotoPreview}
           settingsPhotoFile={settingsPhotoFile}
           handlePhotoFileChange={handlePhotoFileChange}

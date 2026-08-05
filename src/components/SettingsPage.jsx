@@ -15,6 +15,7 @@ import {
   X
 } from "lucide-react";
 import { getInitials, getProfileName } from "../utils/names.js";
+import ScheduleEditor from "./ScheduleEditor.jsx";
 
 export default function SettingsPage({
   onClose,
@@ -25,6 +26,10 @@ export default function SettingsPage({
   activeName,
   settingsName,
   setSettingsName,
+  settingsBio,
+  setSettingsBio,
+  settingsSchedule,
+  setSettingsSchedule,
   settingsPhotoPreview,
   settingsPhotoFile,
   handlePhotoFileChange,
@@ -158,6 +163,19 @@ export default function SettingsPage({
                   placeholder="Username without spaces"
                 />
 
+                <label htmlFor="settings-bio">
+                  <CircleUserRound size={18} />
+                  <span>Bio</span>
+                </label>
+                <textarea
+                  id="settings-bio"
+                  maxLength={280}
+                  onChange={(event) => setSettingsBio(event.target.value)}
+                  placeholder="A short introduction"
+                  rows={3}
+                  value={settingsBio}
+                />
+
                 <section className="settings-photo-section">
                   <div className="settings-photo-row">
                     <div className="settings-photo-preview" aria-hidden="true">
@@ -217,6 +235,8 @@ export default function SettingsPage({
                     JPG, PNG, GIF, or WEBP. Max 5 MB. Stored on Cloudinary.
                   </p>
                 </section>
+
+                <ScheduleEditor schedule={settingsSchedule} setSchedule={setSettingsSchedule} />
 
                 {settingsMessage ? (
                   <div className="error-banner inline-error settings-note">
@@ -471,9 +491,9 @@ export default function SettingsPage({
                 <section className="settings-section-box">
                   <div>
                     <h3>
-                      Show version in header
+                       Show full version in header
                     </h3>
-                    <p>Display the app version next to "QuadChat" in the header bar.</p>
+                    <p>The major version is always shown. Enable this to include minor and patch numbers.</p>
                   </div>
                   <label className="toggle-row">
                     <input

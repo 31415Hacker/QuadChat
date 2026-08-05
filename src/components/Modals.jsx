@@ -3,6 +3,7 @@ import GameSessionCard from "../GameSessionCard.jsx";
 import Dialog from "./Dialog.jsx";
 import { getInitials, getProfileName } from "../utils/names.js";
 import { getStatusColor, getStatusLabel } from "../utils/profile.js";
+import { SCHEDULE_DAYS, normalizeSchedule } from "../utils/schedule.js";
 
 export function StatusModal({
   statusModalOpen,
@@ -188,6 +189,7 @@ export function AnalyticsModal({
   analyticsLoading
 }) {
   if (!analyticsTarget) return null;
+  const schedule = normalizeSchedule(analyticsTarget.schedule);
 
   return (
     <Dialog
@@ -242,6 +244,39 @@ export function AnalyticsModal({
             <p className="analytics-loading">No data available.</p>
           )}
         </div>
+        <div className="profile-divider" />
+        <section className="profile-bio">
+          <h3>Bio</h3>
+          <p>{analyticsTarget.bio?.trim() || "No bio yet."}</p>
+        </section>
+        <details className="profile-schedule">
+          <summary>Schedule</summary>
+          <div className="profile-schedule-body">
+            <span className="profile-schedule-timezone">{schedule.timezone}</span>
+            <div className="profile-schedule-weekly">
+              {SCHEDULE_DAYS.map(({ key, label }) => {
+                const day = schedule.weekly[key];
+                return (
+                  <div className="profile-schedule-row" key={key}>
+                    <strong>{label}</strong>
+                    <span>{day.enabled ? `${day.start} to ${day.end}` : "Offline"}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {schedule.overrides.length > 0 ? (
+              <div className="profile-schedule-overrides">
+                <strong>Specific dates</strong>
+                {schedule.overrides.map((override, index) => (
+                  <div className="profile-schedule-row" key={`${override.date}-${index}`}>
+                    <strong>{override.date || "Unscheduled date"}</strong>
+                    <span>{override.enabled === false ? "Offline" : `${override.start} to ${override.end}`}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </details>
     </Dialog>
   );
 }
