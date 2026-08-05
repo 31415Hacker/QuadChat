@@ -1,7 +1,7 @@
 # QuadChat — In-Depth Review
 
 **Date:** 2026-08-04
-**Version:** 1.9.7 (review HEAD after feature `226890e`)
+**Version:** 1.9.9 (feature HEAD `b7b9140`)
 **Context:** A private group chat for a friend group of ~6 people
 **Scope:** `src/App.jsx` (2,900 lines), `src/hooks/` (`useCalls.js` 1,385 lines), `src/components/*`, `src/utils/*`, `src/styles.css` (3,250 lines), `cloudinary.js`, `firebase.js`, `api/*`, `firestore.rules`, `database.rules.json`, `quadchat-worker/` (Cloudflare Durable Object presence server), `game/`, `scripts/`, deploy config.
 
@@ -35,6 +35,7 @@ This review supersedes the v1.9.1 review and covers the current **v1.9.7** relea
 - **v1.8.7 — presence heartbeat.** The client sends a ping every 10 seconds; the Durable Object records `lastPing`, checks every 15 seconds, and removes sessions stale for more than 25 seconds.
 - **v1.9.1 — performance fixes.** Mention validation now receives a memoized profile-name set instead of rebuilding it per message; the background watcher skips the active channel; Firestore no longer forces long polling; and text/gaming messages render optimistically with rollback on write failure.
 - **v1.9.2–v1.9.7 — review and release maintenance.** The performance findings were incorporated into the review, and the project version was advanced to the current minor release without introducing a new runtime surface.
+- **v1.9.9 — startup loading gate.** The static splash now hands off to a React-level loading screen that keeps the app shell hidden until auth, profiles, and the first message snapshot are ready.
 
 ### The four items of v1.7.18
 
@@ -59,6 +60,7 @@ The presence worker now stores `{ userId, lastPing }` per WebSocket session. The
 - **Identity is consistent.** The users sidebar, DM tabs, and top-right profile control use Cloudinary-backed profile pictures with initials fallback.
 - **The header has a clear hierarchy.** Search, Notifications, Sign out, and the profile control stay together as one right-aligned action cluster instead of being distributed across the whole header. The `1100px` panel cap gives the main chat area enough breathing room without changing the mobile full-width layout.
 - **The roster is information-dense without being noisy.** Avatars, presence dots, names, last-online text, and contextual actions occupy predictable columns; admin profiles intentionally omit mute controls and mic indicators.
+- **Startup presentation is deliberate.** The app no longer reveals the header, sidebars, composer, and message area as independent pieces while Firebase initializes; a single branded loading state owns that transition.
 
 ### Weaknesses
 
@@ -82,6 +84,7 @@ The UI now has a consistent identity language: avatars use the same Cloudinary-b
 - **Reactions are three taps and reversible.** Menu → React → pick an emoji, or tap an existing chip to toggle your vote off; the picker outside-click and single-close behavior match the message menu.
 - **Reply navigation is resilient.** Far-away replies preserve the latest messages, position the target without competing smooth-scroll/pagination effects, and require the top sentinel to leave and re-enter before another older page loads.
 - **Text sends feel immediate.** Optimistic rendering shows text and gaming messages before Firestore acknowledgment and removes them on failure rather than leaving a phantom message behind.
+- **Initial loading is calm.** Signed-in users see one loading state until the profile roster and first message snapshot are available, instead of briefly seeing an incomplete chat shell.
 - **Everything from v1.7.15 still holds:** confirm dialogs render over Settings, Enter-sends/Shift+Enter-newline is IME-safe, mentions walk with arrows, reply-jump reaches scrolled-out messages, and calls survive the 10 s ICE grace.
 
 ### Weaknesses
@@ -163,7 +166,7 @@ The trust boundary is strongest where it matters: message reactions are limited 
 
 **What it is:** a feature-complete, visually polished private group chat that keeps out-performing its own humble scope. Chat, DMs, voice, group calls with graceful fallback, screen share, files, voice notes, search, editing, stable reply jumps, gaming sessions, analytics, moderation, reactions, missed-call notifications, consistent avatars, and resilient presence.
 
-**Why this release matters:** the project moved from feature accumulation to coherence. Identity is consistent across every avatar surface, header actions are grouped, admin protection is enforced rather than merely visual, presence survives operating-system suspension, reply navigation preserves recency, and the previously criticized message-rendering and transport paths are now materially cheaper.
+**Why this release matters:** the project moved from feature accumulation to coherence. Identity is consistent across every avatar surface, header actions are grouped, admin protection is enforced rather than merely visual, presence survives operating-system suspension, reply navigation preserves recency, the previously criticized message-rendering and transport paths are cheaper, and startup no longer exposes a half-built interface.
 
 **What holds it back:** pins are the natural next feature; the message menu and notification panel still aren't keyboard-navigable; upload metadata is still client-reported; the all-users roster and inactive-channel listeners are designed for a small group; and large files still have serial upload latency. These are clear next improvements, not current reliability blockers.
 
@@ -179,4 +182,4 @@ The trust boundary is strongest where it matters: message reactions are limited 
 
 ---
 
-*Review written 2026-08-04 for v1.9.7, covering feature HEAD `226890e` and superseding the v1.9.1 review.*
+*Review written 2026-08-04 for v1.9.9, covering feature HEAD `b7b9140` and superseding the v1.9.7 review.*
