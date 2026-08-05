@@ -22,10 +22,10 @@
 			}
 		]
 	},
-	"migrations": [
-		{
-			"tag": "v1",
-			"new_sqlite_classes": ["PresenceServer"]
+	"exports": {
+		"PresenceServer": {
+			"type": "durable-object",
+			"storage": "sqlite"
 		}
-	]
+	}
 }
