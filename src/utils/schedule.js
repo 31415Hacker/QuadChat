@@ -9,7 +9,20 @@ export const SCHEDULE_DAYS = [
 ];
 
 function defaultDay() {
-  return { enabled: false, start: "09:00", end: "17:00" };
+  return { enabled: false, slots: [{ start: "09:00", end: "17:00" }] };
+}
+
+function normalizeSlots(day) {
+  if (Array.isArray(day?.slots) && day.slots.length > 0) {
+    return day.slots
+      .filter((slot) => slot && typeof slot.start === "string" && typeof slot.end === "string")
+      .slice(0, 8)
+      .map((slot) => ({ start: slot.start, end: slot.end }));
+  }
+  if (typeof day?.start === "string" && typeof day?.end === "string") {
+    return [{ start: day.start, end: day.end }];
+  }
+  return [{ start: "09:00", end: "17:00" }];
 }
 
 export function createDefaultSchedule(timezone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
@@ -32,13 +45,20 @@ export function normalizeSchedule(schedule) {
       SCHEDULE_DAYS.map(({ key }) => [
         key,
         {
-          ...base.weekly[key],
-          ...(schedule.weekly?.[key] || {})
+          enabled: Boolean(schedule.weekly?.[key]?.enabled),
+          slots: normalizeSlots(schedule.weekly?.[key])
         }
       ])
     ),
     overrides: Array.isArray(schedule.overrides)
-      ? schedule.overrides.filter((override) => override && typeof override.date === "string").slice(0, 31)
+      ? schedule.overrides
+        .filter((override) => override && typeof override.date === "string")
+        .slice(0, 31)
+        .map((override) => ({
+          date: override.date,
+          enabled: override.enabled !== false,
+          slots: normalizeSlots(override)
+        }))
       : []
   };
 }

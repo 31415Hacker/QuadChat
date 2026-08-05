@@ -259,7 +259,7 @@ export function AnalyticsModal({
                 return (
                   <div className="profile-schedule-row" key={key}>
                     <strong>{label}</strong>
-                    <span>{day.enabled ? `${day.start} to ${day.end}` : "Offline"}</span>
+                    <span>{day.enabled ? day.slots.map((slot) => `${slot.start} to ${slot.end}`).join(" · ") : "Offline"}</span>
                   </div>
                 );
               })}
@@ -270,7 +270,7 @@ export function AnalyticsModal({
                 {schedule.overrides.map((override, index) => (
                   <div className="profile-schedule-row" key={`${override.date}-${index}`}>
                     <strong>{override.date || "Unscheduled date"}</strong>
-                    <span>{override.enabled === false ? "Offline" : `${override.start} to ${override.end}`}</span>
+                    <span>{override.enabled === false ? "Offline" : override.slots.map((slot) => `${slot.start} to ${slot.end}`).join(" · ")}</span>
                   </div>
                 ))}
               </div>

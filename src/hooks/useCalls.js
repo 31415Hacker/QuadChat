@@ -54,6 +54,7 @@ export function useCalls({
 
   const [groupCallStatus, setGroupCallStatus] = useState("idle");
   const groupCallRoomRef = useRef(null);
+  const groupCallSoloTimeoutRef = useRef(null);
   const [groupCallParticipants, setGroupCallParticipants] = useState({});
   const [groupCallLocalMuted, setGroupCallLocalMuted] = useState(false);
   const groupCallLocalStreamRef = useRef(null);
@@ -764,6 +765,8 @@ export function useCalls({
   function cleanupGroupCall() {
     if (groupCallCleaningRef.current) return;
     groupCallCleaningRef.current = true;
+    clearTimeout(groupCallSoloTimeoutRef.current);
+    groupCallSoloTimeoutRef.current = null;
     if (groupCallRoomRef.current) {
       groupCallRoomRef.current.disconnect();
       groupCallRoomRef.current = null;
@@ -785,6 +788,16 @@ export function useCalls({
     stopScreenShare();
     setGroupCallStatus("idle");
     groupCallCleaningRef.current = false;
+  }
+
+  function scheduleSoloGroupCallTimeout() {
+    clearTimeout(groupCallSoloTimeoutRef.current);
+    groupCallSoloTimeoutRef.current = setTimeout(() => {
+      groupCallSoloTimeoutRef.current = null;
+      if (groupCallRoomRef.current?.remoteParticipants.size === 0) {
+        cleanupGroupCall();
+      }
+    }, 10 * 60 * 1000);
   }
 
   function cleanupP2PGroupCall() {
@@ -1219,6 +1232,8 @@ export function useCalls({
       });
 
       room.on(RoomEvent.ParticipantConnected, (participant) => {
+        clearTimeout(groupCallSoloTimeoutRef.current);
+        groupCallSoloTimeoutRef.current = null;
         setGroupCallParticipants((prev) => ({
           ...prev,
           [participant.identity]: {
@@ -1257,6 +1272,9 @@ export function useCalls({
             icon: notificationIcon,
             tag: `group-leave-${participant.identity}`,
           });
+        }
+        if (room.remoteParticipants.size === 0) {
+          scheduleSoloGroupCallTimeout();
         }
       });
 
@@ -1306,6 +1324,9 @@ export function useCalls({
       setGroupCallParticipants(participants);
 
       setGroupCallStatus("connected");
+      if (room.remoteParticipants.size === 0) {
+        scheduleSoloGroupCallTimeout();
+      }
     } catch (e) {
       console.error("[GROUP-CALL] join error:", e);
       cleanupGroupCall();
