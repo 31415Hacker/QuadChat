@@ -1529,6 +1529,42 @@ button.message-preview-button:hover:not(:disabled) {
   transform: none;
 }
 
+.message-document-preview {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-input);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-height: 104px;
+  padding: 14px 18px;
+  width: 150px;
+}
+
+button.message-document-preview {
+  min-height: 104px;
+  padding: 14px 18px;
+}
+
+.message-document-preview svg {
+  color: var(--text-accent);
+  height: 34px;
+  width: 34px;
+}
+
+.message-document-preview span {
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-file-link span {
   overflow: hidden;
   text-overflow: ellipsis;

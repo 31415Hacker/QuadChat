@@ -210,7 +210,7 @@ const MessageItem = memo(function MessageItem({
           </audio>
         ) : getFileKind({ name: item.fileName, type: item.fileType }) !== "file" ? (
           <button
-            className="message-image-link message-preview-button"
+            className={`message-image-link message-preview-button${getFileKind({ name: item.fileName, type: item.fileType }) === "document" ? " message-document-preview" : ""}`}
             type="button"
             onClick={() => onPreviewFile({ url: item.text, name: item.fileName, type: item.fileType })}
             title={`Preview ${item.fileName || "file"}`}
@@ -272,7 +272,7 @@ const MessageItem = memo(function MessageItem({
               </video>
             ) : attachment && (getFileKind(attachment) === "text" || getFileKind(attachment) === "document") ? (
               <button
-                className="message-file-link"
+                className={`message-file-link${getFileKind(attachment) === "document" ? " message-document-preview" : ""}`}
                 key={attachment?.path || attachment?.url}
                 onClick={() => onPreviewFile({ ...attachment, url: attachment.viewUrl || attachment.url })}
                 type="button"
