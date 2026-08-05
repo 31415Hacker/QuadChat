@@ -17,6 +17,7 @@ import {
 import { getReplyPreview } from "../utils/messages.jsx";
 import { getInitials, getProfileName } from "../utils/names.js";
 import { formatDuration } from "../utils/format.js";
+import { MAX_MESSAGE_CHARS } from "../constants.js";
 
 const EmojiPicker = lazy(() => import("./EmojiPicker.jsx"));
 
@@ -441,7 +442,7 @@ export default function Composer({
                     ? `Message ${dmPartnerName}`
                     : "Type a message"
               }
-              maxLength={500}
+              maxLength={MAX_MESSAGE_CHARS}
             />
             {mentionCandidates.length > 0 ? (
               <div className="mention-suggestions" role="listbox">

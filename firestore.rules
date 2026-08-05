@@ -98,6 +98,7 @@ service cloud.firestore {
         ])
         && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin())
         && (!("text" in request.resource.data) || request.resource.data.text is string)
+        && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2500)
         && (!("attachments" in request.resource.data) || request.resource.data.attachments is list)
         && (!("fileName" in request.resource.data) || request.resource.data.fileName is string)
         && (!("fileType" in request.resource.data) || request.resource.data.fileType is string)
@@ -113,8 +114,9 @@ service cloud.firestore {
         && (
           (
             request.auth.uid == resource.data.userId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited", "editedAt"])
-            && (!("text" in request.resource.data) || request.resource.data.text is string)
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited", "editedAt"])
+             && (!("text" in request.resource.data) || request.resource.data.text is string)
+             && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2500)
             && (!("edited" in request.resource.data) || request.resource.data.edited is bool)
           )
           || (
