@@ -85,7 +85,7 @@ import {
 } from "./utils/auth.js";
 import { createDefaultSchedule, normalizeSchedule } from "./utils/schedule.js";
 import { startCallRingtone, stopCallRingtone, unlockCallAudio, resumeCallAudio } from "./utils/callRingtone.js";
-import { playDmSendSound } from "./utils/dmSound.js";
+import { playDmReceiveSound } from "./utils/dmSound.js";
 
 import { usePresence } from "./hooks/usePresence.js";
 import { useNotifications } from "./hooks/useNotifications.js";
@@ -1224,6 +1224,10 @@ export default function App() {
           });
         }
 
+        if (isDmChannelId(activeChannel)) {
+          playDmReceiveSound();
+        }
+
         if (shouldNotify) {
           const notification = new Notification(`QuadChat: ${senderName}`, {
             body,
@@ -1296,6 +1300,9 @@ export default function App() {
                     : "Sent a message")
             );
             const isMention = isMentionOf(data.text, activeNameRef.current);
+            if (isDmChannelId(channelId)) {
+              playDmReceiveSound();
+            }
             if (channelId === activeChannelRef.current && !isMention) return;
             pushInAppNotification({
               type: isMention ? "mention" : "message",
@@ -2500,7 +2507,6 @@ export default function App() {
 
     const cleanMessage = message.trim();
     const hasAttachments = pendingFiles.length > 0;
-    const sendingDm = isDmChannelId(activeChannel);
 
     if (
       (!cleanMessage && !hasAttachments) ||
@@ -2561,10 +2567,6 @@ export default function App() {
           userId: sessionUserId,
           createdAt: serverTimestamp()
         });
-      }
-
-      if (sendingDm) {
-        playDmSendSound();
       }
 
       setMessage("");
