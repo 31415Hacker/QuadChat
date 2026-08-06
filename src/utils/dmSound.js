@@ -1,4 +1,4 @@
-const dmAudio = new Audio("/sounds/dm.mp3");
+const dmAudio = new Audio("/sounds/discord-notification.mp3");
 dmAudio.preload = "auto";
 dmAudio.volume = 0.55;
 
