@@ -104,14 +104,14 @@
       "$uid": {
         // Only the ring owner can read their own rings.
         ".read": "auth != null && auth.uid === $uid",
-        // The owner can manage their rings; a caller can write a ring into the
-        // callee's node only while it identifies themselves as the caller
-        // (shape/identity is enforced by the .validate below).
-        ".write": "auth != null && (
-          auth.uid === $uid
-          || (newData.child('callerId').val() === auth.uid && newData.child('calleeId').val() === $uid)
-        )",
+        // The owner can manage the collection. Callers are authorized at the
+        // individual ring node below, where callerId/calleeId are present.
+        ".write": "auth != null && auth.uid === $uid",
         "$callKey": {
+          ".write": "auth != null && (
+            auth.uid === $uid
+            || (newData.child('callerId').val() === auth.uid && newData.child('calleeId').val() === $uid)
+          )",
           ".validate": "!newData.exists() || (
             newData.child('callKey').val() === $callKey
             && newData.child('calleeId').val() === $uid
@@ -188,10 +188,11 @@
           "$connId": {
             // Peer connection keys follow the 'uidA_uidB' pattern (uids sorted).
             // Only the two participants in that pair can read/write signaling.
-            // auth.uid contains only [A-Za-z0-9], so the '_' delimiters make
-            // this exact-match safe (unlike a plain contains() check).
-            ".read": "auth != null && ($connId.startsWith(auth.uid + '_') || $connId.endsWith('_' + auth.uid))",
-            ".write": "auth != null && ($connId.startsWith(auth.uid + '_') || $connId.endsWith('_' + auth.uid))"
+            // Firebase rules has no startsWith() method. Firebase UIDs are
+            // alphanumeric, and the connection key contains exactly two UIDs
+            // separated by '_', so these delimiter checks identify a pair.
+            ".read": "auth != null && ($connId.contains(auth.uid + '_') || $connId.endsWith('_' + auth.uid))",
+            ".write": "auth != null && ($connId.contains(auth.uid + '_') || $connId.endsWith('_' + auth.uid))"
           }
         }
       }

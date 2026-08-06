@@ -84,6 +84,8 @@ import {
   writeNotificationsEnabled
 } from "./utils/auth.js";
 import { createDefaultSchedule, normalizeSchedule } from "./utils/schedule.js";
+import { startCallRingtone, stopCallRingtone, unlockCallAudio, resumeCallAudio } from "./utils/callRingtone.js";
+import { playDmSendSound } from "./utils/dmSound.js";
 
 import { usePresence } from "./hooks/usePresence.js";
 import { useNotifications } from "./hooks/useNotifications.js";
@@ -520,6 +522,29 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    const unlockAudio = () => unlockCallAudio();
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+    window.addEventListener("touchstart", unlockAudio);
+    document.addEventListener("visibilitychange", resumeCallAudio);
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      document.removeEventListener("visibilitychange", resumeCallAudio);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (incomingCall || callStatus === "calling") {
+      startCallRingtone();
+    } else {
+      stopCallRingtone();
+    }
+    return stopCallRingtone;
+  }, [incomingCall, callStatus]);
 
   useEffect(() => {
     if (!user) return;
@@ -2475,6 +2500,7 @@ export default function App() {
 
     const cleanMessage = message.trim();
     const hasAttachments = pendingFiles.length > 0;
+    const sendingDm = isDmChannelId(activeChannel);
 
     if (
       (!cleanMessage && !hasAttachments) ||
@@ -2535,6 +2561,10 @@ export default function App() {
           userId: sessionUserId,
           createdAt: serverTimestamp()
         });
+      }
+
+      if (sendingDm) {
+        playDmSendSound();
       }
 
       setMessage("");
