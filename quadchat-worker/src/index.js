@@ -1,21 +1,25 @@
-var __defProp = Object.defineProperty;
-var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
-
-// index.js
 import { DurableObject } from "cloudflare:workers";
-var TOKEN_URL = "https://oauth2.googleapis.com/token";
-var FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
-var JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
-var FIREBASE_PROJECT_ID = "quadchat-cf697";
-var FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
-var tokenCache = null;
-var jwksCache = { keys: null, fetchedAt: 0 };
+
+const TOKEN_URL = "https://oauth2.googleapis.com/token";
+const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
+const JWKS_URL =
+  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+const FIREBASE_PROJECT_ID = "quadchat-cf697";
+const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+const MAX_SESSIONS_PER_USER = 3;
+const MAX_CONNECTION_ATTEMPTS_PER_MINUTE = 10;
+const MAX_MESSAGES_PER_MINUTE = 12;
+
+let tokenCache = null;
+let jwksCache = { keys: null, fetchedAt: 0 };
+
 function base64UrlEncode(str) {
   return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
-__name(base64UrlEncode, "base64UrlEncode");
+
 function base64UrlDecode(str) {
-  const pad = str.length % 4 === 0 ? "" : "=".repeat(4 - str.length % 4);
+  const pad = str.length % 4 === 0 ? "" : "=".repeat(4 - (str.length % 4));
   const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + pad;
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -24,10 +28,10 @@ function base64UrlDecode(str) {
   }
   return bytes.buffer;
 }
-__name(base64UrlDecode, "base64UrlDecode");
+
 async function getFirebaseJwks() {
   const age = Date.now() - jwksCache.fetchedAt;
-  if (jwksCache.keys && age < 36e5) {
+  if (jwksCache.keys && age < 3600000) {
     return jwksCache.keys;
   }
   const response = await fetch(JWKS_URL);
@@ -42,7 +46,7 @@ async function getFirebaseJwks() {
   jwksCache = { keys, fetchedAt: Date.now() };
   return keys;
 }
-__name(getFirebaseJwks, "getFirebaseJwks");
+
 async function verifyFirebaseIdToken(token) {
   const parts = token.split(".");
   if (parts.length !== 3) {
@@ -51,18 +55,20 @@ async function verifyFirebaseIdToken(token) {
   const [headerB64, payloadB64, signatureB64] = parts;
   const header = JSON.parse(new TextDecoder().decode(base64UrlDecode(headerB64)));
   const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64)));
+
   if (payload.aud !== FIREBASE_PROJECT_ID) {
     throw new Error("Wrong audience");
   }
   if (payload.iss !== FIREBASE_ISSUER) {
     throw new Error("Wrong issuer");
   }
-  if (!payload.exp || payload.exp * 1e3 < Date.now()) {
+  if (!payload.exp || payload.exp * 1000 < Date.now()) {
     throw new Error("Token expired");
   }
   if (!payload.sub) {
     throw new Error("Missing subject");
   }
+
   const jwks = await getFirebaseJwks();
   const jwk = jwks[header.kid];
   if (!jwk) {
@@ -86,9 +92,12 @@ async function verifyFirebaseIdToken(token) {
   }
   return payload.sub;
 }
-__name(verifyFirebaseIdToken, "verifyFirebaseIdToken");
+
 function pemToArrayBuffer(pem) {
-  const base64 = pem.replace(/-----BEGIN PRIVATE KEY-----/, "").replace(/-----END PRIVATE KEY-----/, "").replace(/\s+/g, "");
+  const base64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s+/g, "");
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -96,7 +105,7 @@ function pemToArrayBuffer(pem) {
   }
   return bytes.buffer;
 }
-__name(pemToArrayBuffer, "pemToArrayBuffer");
+
 function parseServiceAccount(raw) {
   if (typeof raw !== "string" || !raw.trim()) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY is missing");
@@ -107,12 +116,13 @@ function parseServiceAccount(raw) {
   }
   return account;
 }
-__name(parseServiceAccount, "parseServiceAccount");
+
 async function getAccessToken(account) {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 3e5) {
+  if (tokenCache && tokenCache.expiresAt > Date.now() + 300000) {
     return tokenCache.token;
   }
-  const now = Math.floor(Date.now() / 1e3);
+
+  const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
   const claims = {
     iss: account.client_email,
@@ -121,7 +131,11 @@ async function getAccessToken(account) {
     iat: now,
     exp: now + 3600
   };
-  const unsignedToken = base64UrlEncode(JSON.stringify(header)) + "." + base64UrlEncode(JSON.stringify(claims));
+  const unsignedToken =
+    base64UrlEncode(JSON.stringify(header)) +
+    "." +
+    base64UrlEncode(JSON.stringify(claims));
+
   const key = await crypto.subtle.importKey(
     "pkcs8",
     pemToArrayBuffer(account.private_key),
@@ -129,15 +143,18 @@ async function getAccessToken(account) {
     false,
     ["sign"]
   );
+
   const signature = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
     key,
     new TextEncoder().encode(unsignedToken)
   );
+
   const signatureBase64 = base64UrlEncode(
     String.fromCharCode(...new Uint8Array(signature))
   );
   const assertion = unsignedToken + "." + signatureBase64;
+
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -146,24 +163,28 @@ async function getAccessToken(account) {
       assertion
     })
   });
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Failed to obtain OAuth2 token: ${response.status} ${text}`);
   }
+
   const data = await response.json();
   tokenCache = {
     token: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1e3
+    expiresAt: Date.now() + data.expires_in * 1000
   };
   return data.access_token;
 }
-__name(getAccessToken, "getAccessToken");
+
 async function updateLastOnline(env, userId) {
   const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
   const accessToken = await getAccessToken(account);
+
   const databasePath = `projects/${account.project_id}/databases/(default)`;
   const documentName = `${databasePath}/documents/users/${userId}`;
   const url = `https://firestore.googleapis.com/v1/${databasePath}/documents:commit`;
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -188,13 +209,14 @@ async function updateLastOnline(env, userId) {
       ]
     })
   });
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Firestore write failed: ${response.status} ${text}`);
   }
 }
-__name(updateLastOnline, "updateLastOnline");
-var index_default = {
+
+export default {
   async fetch(request, env, ctx) {
     if (request.headers.get("Upgrade") === "websocket") {
       const id = env.PRESENCE.idFromName("global-presence");
@@ -204,58 +226,118 @@ var index_default = {
     return new Response("QuadChat Presence Server running", { status: 200 });
   }
 };
-var PresenceServer = class extends DurableObject {
-  static {
-    __name(this, "PresenceServer");
-  }
+
+export class PresenceServer extends DurableObject {
   constructor(state, env) {
     super(state, env);
     this.env = env;
-    this.sessions = /* @__PURE__ */ new Map();
+    this.sessions = new Map();
+    this.connectionAttempts = new Map();
+    this.messageWindows = new Map();
+    this.healthCheck = setInterval(() => {
+      const now = Date.now();
+      for (const [webSocket, session] of this.sessions) {
+        if (now - session.lastPing <= 25000) continue;
+        try {
+          webSocket.close();
+        } finally {
+          this.handleDisconnect(webSocket);
+        }
+      }
+    }, 15000);
   }
+
   async fetch(request) {
     const url = new URL(request.url);
     const token = url.searchParams.get("token");
     if (!token) {
       return new Response("Missing token query parameter", { status: 400 });
     }
+
     let userId;
     try {
       userId = await verifyFirebaseIdToken(token);
     } catch (err) {
       return new Response(`Unauthorized: ${err.message}`, { status: 401 });
     }
+
+    const now = Date.now();
+    const attempts = (this.connectionAttempts.get(userId) || []).filter(
+      (timestamp) => now - timestamp < 60000
+    );
+    const activeSessions = Array.from(this.sessions.values()).filter(
+      (session) => session.userId === userId
+    ).length;
+    if (
+      activeSessions >= MAX_SESSIONS_PER_USER ||
+      attempts.length >= MAX_CONNECTION_ATTEMPTS_PER_MINUTE
+    ) {
+      return new Response("Presence connection rate limit exceeded", { status: 429 });
+    }
+    attempts.push(now);
+    this.connectionAttempts.set(userId, attempts);
+
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.handleSession(server, userId);
     return new Response(null, { status: 101, webSocket: client });
   }
+
   async handleSession(webSocket, userId) {
     webSocket.accept();
-    this.sessions.set(webSocket, userId);
+    this.sessions.set(webSocket, { userId, lastPing: Date.now() });
     await this.cancelPendingOffline(userId);
     this.broadcast({ type: "presence", userId, status: "online" });
-    const onlineUsers = Array.from(new Set(this.sessions.values()));
+    const onlineUsers = Array.from(
+      new Set(Array.from(this.sessions.values()).map((session) => session.userId))
+    );
     webSocket.send(JSON.stringify({ type: "sync", onlineUsers }));
-    const handleDisconnect = /* @__PURE__ */ __name(() => {
-      if (this.sessions.has(webSocket)) {
-        this.sessions.delete(webSocket);
-        const isStillConnected = Array.from(this.sessions.values()).includes(userId);
-        if (!isStillConnected) {
-          this.scheduleOffline(userId);
-        }
+
+    webSocket.addEventListener("message", () => {
+      const session = this.sessions.get(webSocket);
+      if (!session) return;
+
+      const now = Date.now();
+      const recentMessages = (this.messageWindows.get(webSocket) || []).filter(
+        (timestamp) => now - timestamp < 60000
+      );
+      if (recentMessages.length >= MAX_MESSAGES_PER_MINUTE) {
+        webSocket.close(1008, "Presence message rate limit exceeded");
+        this.handleDisconnect(webSocket);
+        return;
       }
-    }, "handleDisconnect");
-    webSocket.addEventListener("close", handleDisconnect);
-    webSocket.addEventListener("error", handleDisconnect);
+      recentMessages.push(now);
+      this.messageWindows.set(webSocket, recentMessages);
+      session.lastPing = now;
+    });
+    webSocket.addEventListener("close", () => this.handleDisconnect(webSocket));
+    webSocket.addEventListener("error", () => this.handleDisconnect(webSocket));
   }
+
+  handleDisconnect(webSocket) {
+    const session = this.sessions.get(webSocket);
+    if (!session) return;
+
+    this.sessions.delete(webSocket);
+    this.messageWindows.delete(webSocket);
+    const isStillConnected = Array.from(this.sessions.values()).some(
+      (activeSession) => activeSession.userId === session.userId
+    );
+    if (!isStillConnected) {
+      this.scheduleOffline(session.userId);
+    }
+  }
+
   isConnected(userId) {
-    return Array.from(this.sessions.values()).includes(userId);
+    return Array.from(this.sessions.values()).some(
+      (session) => session.userId === userId
+    );
   }
+
   async scheduleOffline(userId) {
-    const pending = await this.ctx.storage.get("pendingOffline") || {};
+    const pending = (await this.ctx.storage.get("pendingOffline")) || {};
     if (!pending[userId]) {
-      pending[userId] = Date.now() + 1e4;
+      pending[userId] = Date.now() + 10000;
       await this.ctx.storage.put("pendingOffline", pending);
       const currentAlarm = await this.ctx.storage.getAlarm();
       const nextAlarm = Math.min(...Object.values(pending));
@@ -264,8 +346,9 @@ var PresenceServer = class extends DurableObject {
       }
     }
   }
+
   async cancelPendingOffline(userId) {
-    const pending = await this.ctx.storage.get("pendingOffline") || {};
+    const pending = (await this.ctx.storage.get("pendingOffline")) || {};
     if (pending[userId]) {
       delete pending[userId];
       if (Object.keys(pending).length === 0) {
@@ -276,8 +359,9 @@ var PresenceServer = class extends DurableObject {
       }
     }
   }
+
   async alarm() {
-    const pending = await this.ctx.storage.get("pendingOffline") || {};
+    const pending = (await this.ctx.storage.get("pendingOffline")) || {};
     const now = Date.now();
     for (const [userId, deadline] of Object.entries(pending)) {
       if (deadline <= now) {
@@ -296,16 +380,18 @@ var PresenceServer = class extends DurableObject {
       await this.ctx.storage.delete("pendingOffline");
     }
   }
+
   broadcast(data) {
     const payload = JSON.stringify(data);
     for (const [ws] of this.sessions) {
       try {
         ws.send(payload);
       } catch (err) {
-        this.sessions.delete(ws);
+        this.handleDisconnect(ws);
       }
     }
   }
+
   async writeLastOnline(userId) {
     try {
       await updateLastOnline(this.env, userId);
@@ -313,9 +399,4 @@ var PresenceServer = class extends DurableObject {
       console.error(`Failed to write lastOnline for ${userId}:`, err);
     }
   }
-};
-export {
-  PresenceServer,
-  index_default as default
-};
-//# sourceMappingURL=index.js.map
+}
