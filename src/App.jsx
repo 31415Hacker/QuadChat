@@ -909,6 +909,9 @@ export default function App() {
                 return next;
               });
               if (change.type === "added") {
+                if (isDmChannelId(activeChannel) && msg.userId !== sessionUserId) {
+                  playDmReceiveSound();
+                }
                 newestDocSnapRef.current = change.doc;
               }
             });
@@ -1222,10 +1225,6 @@ export default function App() {
             body,
             id: `msg-${activeChannel}-${item.id}`
           });
-        }
-
-        if (isDmChannelId(activeChannel)) {
-          playDmReceiveSound();
         }
 
         if (shouldNotify) {
