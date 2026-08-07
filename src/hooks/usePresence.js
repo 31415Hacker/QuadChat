@@ -2,15 +2,20 @@ import { useEffect, useState } from "react";
 
 export function usePresence(user) {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [presenceReady, setPresenceReady] = useState(false);
 
   useEffect(() => {
     if (!user) {
       setOnlineUsers(new Set());
+      setPresenceReady(false);
       return;
     }
 
     const presenceUrl = import.meta.env.VITE_PRESENCE_WORKER_URL;
-    if (!presenceUrl) return;
+    if (!presenceUrl) {
+      setPresenceReady(false);
+      return;
+    }
 
     let ws = null;
     let reconnectTimeout = null;
@@ -59,6 +64,7 @@ export function usePresence(user) {
 
           if (data.type === "sync") {
             setOnlineUsers(new Set(data.onlineUsers));
+            setPresenceReady(true);
           } else if (data.type === "presence") {
             setOnlineUsers((prev) => {
               const next = new Set(prev);
@@ -100,5 +106,5 @@ export function usePresence(user) {
     };
   }, [user]);
 
-  return [onlineUsers, setOnlineUsers];
+  return [onlineUsers, setOnlineUsers, presenceReady];
 }

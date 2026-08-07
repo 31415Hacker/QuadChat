@@ -309,7 +309,7 @@ export default function App() {
     }
   };
 
-  const [onlineUsers] = usePresence(user);
+  const [onlineUsers, , presenceReady] = usePresence(user);
 
   const {
     inAppNotifications,
@@ -324,6 +324,50 @@ export default function App() {
     openNotification,
     openToast
   } = useNotifications({ activeChannel, onOpenChannel: handleNotificationOpen });
+
+  const previousOnlineUsersRef = useRef(new Set());
+  const hasInitializedPresenceRef = useRef(false);
+
+  useEffect(() => {
+    if (!user || !presenceReady) {
+      previousOnlineUsersRef.current = new Set();
+      hasInitializedPresenceRef.current = false;
+      return;
+    }
+
+    if (!hasInitializedPresenceRef.current) {
+      previousOnlineUsersRef.current = new Set(onlineUsers);
+      hasInitializedPresenceRef.current = true;
+      return;
+    }
+
+    const previousOnlineUsers = previousOnlineUsersRef.current;
+    onlineUsers.forEach((userId) => {
+      if (userId === sessionUserId || previousOnlineUsers.has(userId)) return;
+      const name = getProfileName(profiles[userId], "Someone");
+      pushInAppNotification({
+        type: "presence",
+        channelId: null,
+        channelLabel: null,
+        senderName: name,
+        body: "is now online",
+        id: `presence-${userId}-online-${Date.now()}`
+      });
+    });
+    previousOnlineUsers.forEach((userId) => {
+      if (userId === sessionUserId || onlineUsers.has(userId)) return;
+      const name = getProfileName(profiles[userId], "Someone");
+      pushInAppNotification({
+        type: "presence",
+        channelId: null,
+        channelLabel: null,
+        senderName: name,
+        body: "went offline",
+        id: `presence-${userId}-offline-${Date.now()}`
+      });
+    });
+    previousOnlineUsersRef.current = new Set(onlineUsers);
+  }, [onlineUsers, presenceReady, profiles, pushInAppNotification, sessionUserId, user]);
 
   const {
     callStatus,
