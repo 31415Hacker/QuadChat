@@ -18,6 +18,7 @@ const PLAYER_EYE_HEIGHT = 1.6;
 const world = new Map();
 const blockGroups = new Map();
 const pistonChannels = new Map();
+const pistonPowered = new Map();
 const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
@@ -109,11 +110,16 @@ function addBlockMesh(block) {
   if (block.type === 'piston') {
     const channel = pistonCount++ % 4;
     pistonChannels.set(key(block.x, block.y, block.z), channel);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.28), pistonHeadMaterial);
+    pistonPowered.set(key(block.x, block.y, block.z), false);
+    const rod = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.62), pistonHeadMaterial);
+    rod.position.set(0, 0, 0.58);
+    group.add(rod);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.24), pistonHeadMaterial);
     head.position.set(0, 0, 0.5);
     head.userData.block = block;
     head.userData.pistonHead = true;
     group.add(head);
+    group.userData.pistonRod = rod;
     group.userData.pistonHead = head;
   }
   group.position.set(0, 0, 0);
@@ -127,6 +133,30 @@ function removeBlockMesh(blockKey) {
   scene.remove(group);
   blockGroups.delete(blockKey);
   pistonChannels.delete(blockKey);
+  pistonPowered.delete(blockKey);
+}
+
+function pushBlockForward(blockKey) {
+  const piston = getBlock(...blockKey.split(',').map(Number));
+  if (!piston) return;
+  const blocksToPush = [];
+  for (let distance = 1; distance <= 12; distance += 1) {
+    const target = getBlock(piston.x, piston.y, piston.z + distance);
+    if (!target) break;
+    if (target.type === 'piston') return;
+    blocksToPush.push(target);
+  }
+  if (!blocksToPush.length || getBlock(piston.x, piston.y, piston.z + blocksToPush.length + 1)) return;
+
+  for (let i = blocksToPush.length - 1; i >= 0; i -= 1) {
+    const target = blocksToPush[i];
+    const targetKey = key(target.x, target.y, target.z);
+    removeBlockMesh(targetKey);
+    world.delete(targetKey);
+    target.z += 1;
+    setBlock(target.x, target.y, target.z, target.type);
+    addBlockMesh(target);
+  }
 }
 
 function refreshPistons() {
@@ -134,6 +164,11 @@ function refreshPistons() {
     const group = blockGroups.get(blockKey);
     if (!group?.userData.pistonHead) continue;
     const powered = chip.pins[channel]?.value > 0;
+    const wasPowered = pistonPowered.get(blockKey) === true;
+    if (powered && !wasPowered) pushBlockForward(blockKey);
+    pistonPowered.set(blockKey, powered);
+    group.userData.pistonRod.position.z = powered ? 0.82 : 0.58;
+    group.userData.pistonRod.scale.z = powered ? 1.8 : 1;
     group.userData.pistonHead.position.z = powered ? 1.05 : 0.5;
   }
   chipStatus.textContent = `Chip connected · D0 ${chip.pins[0]?.value ? 'HIGH' : 'LOW'} · D1 ${chip.pins[1]?.value ? 'HIGH' : 'LOW'} · D2 ${chip.pins[2]?.value ? 'HIGH' : 'LOW'} · D3 ${chip.pins[3]?.value ? 'HIGH' : 'LOW'}`;
