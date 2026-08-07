@@ -475,7 +475,12 @@ function simplifyWaypoints(pts) {
 
 function roundCorners(pts, r) {
   if (pts.length < 2) return '';
-  const wps = simplifyWaypoints(pts);
+  const cleanPts = pts.filter((point, index) => {
+    if (index === 0) return true;
+    const previous = pts[index - 1];
+    return point.x !== previous.x || point.y !== previous.y;
+  });
+  const wps = simplifyWaypoints(cleanPts);
   if (wps.length < 2) return `M ${pts[0].x} ${pts[0].y}`;
 
   let d = `M ${wps[0].x} ${wps[0].y}`;
@@ -487,12 +492,14 @@ function roundCorners(pts, r) {
     const dOut = Math.abs(p2.x - p1.x) + Math.abs(p2.y - p1.y);
     const cr = Math.min(r, di / 2, dOut / 2);
 
+    if (cr <= 0) {
+      d += ` L ${p1.x} ${p1.y}`;
+      continue;
+    }
+
     const preX = p1.x - cr * dx0, preY = p1.y - cr * dy0;
     const postX = p1.x + cr * dx1, postY = p1.y + cr * dy1;
-    const sweep = dx0 !== 0
-      ? (dx0 === dy1 ? 1 : 0)
-      : (dy0 !== dx1 ? 1 : 0);
-    d += ` L ${preX} ${preY} A ${cr} ${cr} 0 0 ${sweep} ${postX} ${postY}`;
+    d += ` L ${preX} ${preY} Q ${p1.x} ${p1.y} ${postX} ${postY}`;
   }
   d += ` L ${wps[wps.length-1].x} ${wps[wps.length-1].y}`;
   return d;
