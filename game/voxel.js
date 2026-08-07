@@ -6,11 +6,15 @@ const BLOCKS = [
   { id: 'stone', label: 'Stone', color: 0x81878b },
   { id: 'wood', label: 'Wood', color: 0x9a6738 },
   { id: 'glass', label: 'Glass', color: 0x9de6f2, transparent: true },
-  { id: 'piston', label: 'Piston', color: 0xb6a68a }
+  { id: 'piston', label: 'Piston', color: 0xb6a68a },
+  { id: 'chip', label: 'Chip', color: 0x504b82 }
 ];
 const BLOCK_BY_ID = Object.fromEntries(BLOCKS.map((block) => [block.id, block]));
 const WORLD_SIZE = 24;
 const WORLD_HEIGHT = 10;
+const PLAYER_WIDTH = 0.6;
+const PLAYER_HEIGHT = 1.8;
+const PLAYER_EYE_HEIGHT = 1.6;
 const world = new Map();
 const blockGroups = new Map();
 const pistonChannels = new Map();
@@ -57,6 +61,7 @@ let grounded = false;
 const raycaster = new THREE.Raycaster();
 const center = new THREE.Vector2(0, 0);
 const chipStatus = document.getElementById('chipStatus');
+const inventory = Object.fromEntries(BLOCKS.map((block) => [block.id, 64]));
 
 function key(x, y, z) { return `${x},${y},${z}`; }
 function setBlock(x, y, z, type) { world.set(key(x, y, z), { x, y, z, type }); }
@@ -155,6 +160,8 @@ function mine() {
   const blockKey = key(block.x, block.y, block.z);
   removeBlockMesh(blockKey);
   world.delete(blockKey);
+  if (inventory[block.type] !== undefined) inventory[block.type] += 1;
+  updateHotbar();
 }
 
 function place() {
@@ -167,16 +174,62 @@ function place() {
   const z = block.z + Math.round(normal.z);
   if (y < 0 || y >= WORLD_HEIGHT || getBlock(x, y, z)) return;
   const type = BLOCKS[selectedBlock].id;
+  if (inventory[type] <= 0) return;
   const newBlock = { x, y, z, type };
   setBlock(x, y, z, type);
   addBlockMesh(newBlock);
+  inventory[type] -= 1;
+  updateHotbar();
   refreshPistons();
 }
 
 function updateHotbar() {
   const hotbar = document.getElementById('hotbar');
-  hotbar.innerHTML = BLOCKS.map((block, index) => `<div class="hotbar-slot${index === selectedBlock ? ' selected' : ''}"><div class="hotbar-swatch" style="background:#${block.color.toString(16).padStart(6, '0')}"></div>${index + 1}: ${block.label}</div>`).join('');
-  document.getElementById('blockHint').textContent = `Selected: ${BLOCKS[selectedBlock].label}`;
+  hotbar.innerHTML = BLOCKS.map((block, index) => `<div class="hotbar-slot${index === selectedBlock ? ' selected' : ''}"><div class="hotbar-swatch" style="background:#${block.color.toString(16).padStart(6, '0')}"></div>${index + 1}: ${block.label}<b>x${inventory[block.id]}</b></div>`).join('');
+  document.getElementById('blockHint').textContent = `Selected: ${BLOCKS[selectedBlock].label} x${inventory[BLOCKS[selectedBlock].id]}`;
+}
+
+function playerCollidesAt(position) {
+  const halfWidth = PLAYER_WIDTH / 2;
+  const minX = position.x - halfWidth;
+  const maxX = position.x + halfWidth;
+  const minY = position.y - PLAYER_EYE_HEIGHT;
+  const maxY = minY + PLAYER_HEIGHT;
+  const minZ = position.z - halfWidth;
+  const maxZ = position.z + halfWidth;
+
+  for (let x = Math.floor(minX - 0.5); x <= Math.floor(maxX + 0.5); x += 1) {
+    for (let y = Math.floor(minY - 0.5); y <= Math.floor(maxY + 0.5); y += 1) {
+      for (let z = Math.floor(minZ - 0.5); z <= Math.floor(maxZ + 0.5); z += 1) {
+        const block = getBlock(x, y, z);
+        if (!block) continue;
+        if (
+          maxX > x - 0.5 && minX < x + 0.5 &&
+          maxY > y - 0.5 && minY < y + 0.5 &&
+          maxZ > z - 0.5 && minZ < z + 0.5
+        ) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function movePlayerAxis(axis, distance) {
+  const steps = Math.max(1, Math.ceil(Math.abs(distance) / 0.08));
+  const step = distance / steps;
+  for (let i = 0; i < steps; i += 1) {
+    const next = camera.position.clone();
+    next[axis] += step;
+    if (playerCollidesAt(next)) {
+      if (axis === 'y') {
+        if (step < 0) grounded = true;
+        velocity.y = 0;
+      }
+      return;
+    }
+    camera.position.copy(next);
+    if (axis === 'y') grounded = false;
+  }
 }
 
 function movePlayer(delta) {
@@ -187,15 +240,11 @@ function movePlayer(delta) {
   );
   if (direction.lengthSq()) {
     direction.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-    camera.position.addScaledVector(direction, delta * 7);
+    movePlayerAxis('x', direction.x * delta * 7);
+    movePlayerAxis('z', direction.z * delta * 7);
   }
   velocity.y -= delta * 20;
-  camera.position.y += velocity.y * delta;
-  if (camera.position.y < 4.2) {
-    camera.position.y = 4.2;
-    velocity.y = 0;
-    grounded = true;
-  }
+  movePlayerAxis('y', velocity.y * delta);
 }
 
 function animate() {
