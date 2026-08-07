@@ -60,6 +60,7 @@ const wireModeCheck = document.getElementById('wireMode');
 const runBtn = document.getElementById('runBtn');
 const stopBtn = document.getElementById('stopBtn');
 const clearBtn = document.getElementById('clearBtn');
+const voxelBtn = document.getElementById('voxelBtn');
 
 // --- Helpers ---
 function svg(tag, attrs = {}) {
@@ -78,6 +79,25 @@ function log(msg, type = 'log') {
 
 function clearConsole() {
   consoleOut.innerHTML = '';
+}
+
+function exportChipToVoxelWorld() {
+  const chip = Object.values(state.components).find(comp => comp.type === 'chip');
+  if (!chip) {
+    updateStatus('Place a microchip before opening the voxel world');
+    return;
+  }
+
+  localStorage.setItem('quadchat-chip', JSON.stringify({
+    exportedAt: Date.now(),
+    pins: Object.fromEntries(
+      Object.entries(state.chipPins).map(([pin, data]) => [pin, {
+        mode: data.mode,
+        value: data.value > 0 ? 1 : 0
+      }])
+    )
+  }));
+  window.location.href = 'voxel.html';
 }
 
 function updateStatus(msg) {
@@ -1294,6 +1314,7 @@ const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 runBtn.addEventListener('click', runCode);
 stopBtn.addEventListener('click', stopCode);
 clearBtn.addEventListener('click', clearBoard);
+voxelBtn.addEventListener('click', exportChipToVoxelWorld);
 
 wireModeCheck.addEventListener('change', () => {
   if (!wireModeCheck.checked) {
