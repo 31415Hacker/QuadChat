@@ -419,18 +419,25 @@ export function useCalls({
         const s = snap.exists() ? snap.val() : null;
         console.log(`[CALL-START] cancel listener: status=${s} cleaningUp=${cleaningUp} nodeRef=${!!callNodeRef.current}`);
         if (cleaningUp) return;
-        if ((!snap.exists() || snap.val() === "ended") && callNodeRef.current) {
+        if ((!snap.exists() || snap.val() === "ended" || snap.val() === "declined") && callNodeRef.current) {
           cleaningUp = true;
+          const wasDeclined = snap.val() === "declined";
           if (typeof Notification !== "undefined") {
-            try { new Notification("QuadChat", { body: `${calleeName} has ended the call.` }); } catch (_) {}
+            try {
+              new Notification("QuadChat", {
+                body: wasDeclined
+                  ? `${calleeName} declined your call.`
+                  : `${calleeName} has ended the call.`
+              });
+            } catch (_) {}
           }
           pushInAppNotification({
             type: "call",
             channelId: null,
             channelLabel: null,
             senderName: calleeName,
-            body: "has ended the call",
-            id: `call-end-${callRef.key}`
+            body: wasDeclined ? "declined your call" : "has ended the call",
+            id: `call-${wasDeclined ? "declined" : "end"}-${callRef.key}`
           });
           console.log("[CALL-START] cancel listener → cleanupCall");
           cleanupCall();
@@ -666,7 +673,7 @@ export function useCalls({
     console.log("[CALL-REJECT] rejecting incoming call", incomingCall?.key);
     if (incomingCall) {
       clearRing(sessionUserId, incomingCall.key);
-      remove(rtdbRef(rtdb, `calls/${incomingCall.key}`));
+      update(rtdbRef(rtdb, `calls/${incomingCall.key}`), { status: "declined" }).catch(() => {});
       setIncomingCall(null);
     }
   }
