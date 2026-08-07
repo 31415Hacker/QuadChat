@@ -7,7 +7,8 @@ const BLOCKS = [
   { id: 'wood', label: 'Wood', color: 0x9a6738 },
   { id: 'glass', label: 'Glass', color: 0x9de6f2, transparent: true },
   { id: 'piston', label: 'Piston', color: 0xb6a68a },
-  { id: 'chip', label: 'Chip', color: 0x504b82 }
+  { id: 'chip', label: 'Chip', color: 0x504b82 },
+  { id: 'redstone', label: 'Redstone', color: 0x751b28 }
 ];
 const BLOCK_BY_ID = Object.fromEntries(BLOCKS.map((block) => [block.id, block]));
 const WORLD_SIZE = 24;
@@ -19,6 +20,7 @@ const world = new Map();
 const blockGroups = new Map();
 const pistonChannels = new Map();
 const pistonPowered = new Map();
+const redstoneWireGroup = new THREE.Group();
 const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
@@ -36,6 +38,7 @@ const sun = new THREE.DirectionalLight(0xfff1cf, 2.2);
 sun.position.set(-12, 22, 10);
 sun.castShadow = true;
 scene.add(sun);
+scene.add(redstoneWireGroup);
 
 const materials = Object.fromEntries(BLOCKS.map((block) => [block.id, new THREE.MeshLambertMaterial({
   color: block.color,
@@ -46,6 +49,8 @@ const pistonBodyMaterial = new THREE.MeshLambertMaterial({ color: 0x8d887b });
 const pistonBandMaterial = new THREE.MeshLambertMaterial({ color: 0x4f514e });
 const pistonFaceMaterial = new THREE.MeshLambertMaterial({ color: 0xb68a52 });
 const pistonHeadMaterial = new THREE.MeshLambertMaterial({ color: 0x6f9b9a });
+const redstoneOffMaterial = new THREE.MeshLambertMaterial({ color: 0x4a1119 });
+const redstoneOnMaterial = new THREE.MeshLambertMaterial({ color: 0xff263d, emissive: 0x7c0817, emissiveIntensity: 1.5 });
 const outline = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1.02, 1.02)),
   new THREE.LineBasicMaterial({ color: 0xffffff })
@@ -140,6 +145,12 @@ function addBlockMesh(block) {
       group.add(pin);
     }
   }
+  if (block.type === 'redstone') {
+    const node = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.08, 8), redstoneOffMaterial.clone());
+    node.position.y = 0.54;
+    group.add(node);
+    group.userData.redstoneNode = node;
+  }
   group.position.set(0, 0, 0);
   blockGroups.set(key(block.x, block.y, block.z), group);
   scene.add(group);
@@ -152,6 +163,64 @@ function removeBlockMesh(blockKey) {
   blockGroups.delete(blockKey);
   pistonChannels.delete(blockKey);
   pistonPowered.delete(blockKey);
+}
+
+function adjacentBlocks(block) {
+  return [
+    getBlock(block.x + 1, block.y, block.z),
+    getBlock(block.x - 1, block.y, block.z),
+    getBlock(block.x, block.y + 1, block.z),
+    getBlock(block.x, block.y - 1, block.z),
+    getBlock(block.x, block.y, block.z + 1),
+    getBlock(block.x, block.y, block.z - 1)
+  ].filter(Boolean);
+}
+
+function redstoneNetworkPowered(startBlock) {
+  if (!startBlock) return false;
+  const queue = adjacentBlocks(startBlock).filter((block) => block.type === 'redstone');
+  const visited = new Set(queue.map((block) => key(block.x, block.y, block.z)));
+  while (queue.length) {
+    const current = queue.shift();
+    if (adjacentBlocks(current).some((block) => block.type === 'chip' && chip.pins[0]?.value > 0)) return true;
+    adjacentBlocks(current).filter((block) => block.type === 'redstone').forEach((block) => {
+      const blockKey = key(block.x, block.y, block.z);
+      if (!visited.has(blockKey)) {
+        visited.add(blockKey);
+        queue.push(block);
+      }
+    });
+  }
+  return false;
+}
+
+function addRedstoneWire(a, b, powered) {
+  const start = new THREE.Vector3(a.x, a.y + 0.56, a.z);
+  const end = new THREE.Vector3(b.x, b.y + 0.56, b.z);
+  const midpoint = start.clone().lerp(end, 0.5);
+  midpoint.y += 0.24;
+  const curve = new THREE.CatmullRomCurve3([start, midpoint, end]);
+  const geometry = new THREE.TubeGeometry(curve, 8, 0.055, 6, false);
+  redstoneWireGroup.add(new THREE.Mesh(geometry, powered ? redstoneOnMaterial : redstoneOffMaterial));
+}
+
+function renderRedstoneWires() {
+  redstoneWireGroup.clear();
+  const directions = [[1, 0, 0], [0, 0, 1], [-1, 0, 0], [0, 0, -1]];
+  for (const block of world.values()) {
+    if (block.type !== 'redstone') continue;
+    const powered = redstoneNetworkPowered(block);
+    const group = blockGroups.get(key(block.x, block.y, block.z));
+    if (group?.userData.redstoneNode) group.userData.redstoneNode.material = powered ? redstoneOnMaterial : redstoneOffMaterial;
+    directions.forEach(([dx, dy, dz]) => {
+      const other = getBlock(block.x + dx, block.y + dy, block.z + dz);
+      if (!other || !['redstone', 'chip', 'piston'].includes(other.type)) return;
+      const currentKey = key(block.x, block.y, block.z);
+      const otherKey = key(other.x, other.y, other.z);
+      if (other.type === 'redstone' && currentKey > otherKey) return;
+      addRedstoneWire(block, other, powered);
+    });
+  }
 }
 
 function pushBlockForward(blockKey) {
@@ -181,7 +250,7 @@ function refreshPistons() {
   for (const [blockKey, channel] of pistonChannels) {
     const group = blockGroups.get(blockKey);
     if (!group?.userData.pistonHead) continue;
-    const powered = chip.pins[channel]?.value > 0;
+    const powered = chip.pins[channel]?.value > 0 && redstoneNetworkPowered(getBlock(...blockKey.split(',').map(Number)));
     const wasPowered = pistonPowered.get(blockKey) === true;
     if (powered && !wasPowered) pushBlockForward(blockKey);
     pistonPowered.set(blockKey, powered);
@@ -189,6 +258,7 @@ function refreshPistons() {
     group.userData.pistonRod.scale.z = powered ? 1.8 : 1;
     group.userData.pistonHead.position.z = powered ? 1.08 : 0.56;
   }
+  renderRedstoneWires();
   chipStatus.textContent = `Chip connected · D0 ${chip.pins[0]?.value ? 'HIGH' : 'LOW'} · D1 ${chip.pins[1]?.value ? 'HIGH' : 'LOW'} · D2 ${chip.pins[2]?.value ? 'HIGH' : 'LOW'} · D3 ${chip.pins[3]?.value ? 'HIGH' : 'LOW'}`;
 }
 
@@ -201,11 +271,14 @@ function loadChip() {
 }
 
 function createDefaultCircuit() {
-  const chipBlock = { x: 0, y: 4, z: -1, type: 'chip' };
+  const chipBlock = { x: 0, y: 4, z: -2, type: 'chip' };
+  const redstoneBlock = { x: 0, y: 4, z: -1, type: 'redstone' };
   const pistonBlock = { x: 0, y: 4, z: 0, type: 'piston' };
   setBlock(chipBlock.x, chipBlock.y, chipBlock.z, chipBlock.type);
+  setBlock(redstoneBlock.x, redstoneBlock.y, redstoneBlock.z, redstoneBlock.type);
   setBlock(pistonBlock.x, pistonBlock.y, pistonBlock.z, pistonBlock.type);
   addBlockMesh(chipBlock);
+  addBlockMesh(redstoneBlock);
   addBlockMesh(pistonBlock);
 }
 
@@ -224,6 +297,7 @@ function mine() {
   world.delete(blockKey);
   if (inventory[block.type] !== undefined) inventory[block.type] += 1;
   updateHotbar();
+  refreshPistons();
 }
 
 function place() {
