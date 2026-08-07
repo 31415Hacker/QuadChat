@@ -42,6 +42,9 @@ const materials = Object.fromEntries(BLOCKS.map((block) => [block.id, new THREE.
   transparent: !!block.transparent,
   opacity: block.transparent ? 0.45 : 1
 })]));
+const pistonBodyMaterial = new THREE.MeshLambertMaterial({ color: 0x8d887b });
+const pistonBandMaterial = new THREE.MeshLambertMaterial({ color: 0x4f514e });
+const pistonFaceMaterial = new THREE.MeshLambertMaterial({ color: 0xb68a52 });
 const pistonHeadMaterial = new THREE.MeshLambertMaterial({ color: 0x6f9b9a });
 const outline = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1.02, 1.02)),
@@ -51,7 +54,7 @@ outline.visible = false;
 scene.add(outline);
 
 let selectedBlock = 0;
-let chip = { pins: { 0: { value: 0 }, 1: { value: 0 }, 2: { value: 0 }, 3: { value: 0 } } };
+let chip = { pins: { 0: { value: 1 }, 1: { value: 0 }, 2: { value: 0 }, 3: { value: 0 } } };
 let pistonCount = 0;
 let yaw = 0;
 let pitch = 0;
@@ -91,7 +94,9 @@ function buildWorld() {
 }
 
 function makeMesh(block) {
-  const material = materials[block.type] || new THREE.MeshLambertMaterial({ color: 0x4d8f51 });
+  const material = block.type === 'piston'
+    ? pistonBodyMaterial
+    : materials[block.type] || new THREE.MeshLambertMaterial({ color: 0x4d8f51 });
   const mesh = new THREE.Mesh(blockGeometry, material);
   mesh.position.set(block.x, block.y, block.z);
   mesh.castShadow = true;
@@ -111,16 +116,29 @@ function addBlockMesh(block) {
     const channel = pistonCount++ % 4;
     pistonChannels.set(key(block.x, block.y, block.z), channel);
     pistonPowered.set(key(block.x, block.y, block.z), false);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.78, 0.08), pistonBandMaterial);
+    band.position.set(0, 0, 0.45);
+    group.add(band);
     const rod = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.62), pistonHeadMaterial);
     rod.position.set(0, 0, 0.58);
     group.add(rod);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.24), pistonHeadMaterial);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.24), pistonFaceMaterial);
     head.position.set(0, 0, 0.5);
     head.userData.block = block;
     head.userData.pistonHead = true;
     group.add(head);
     group.userData.pistonRod = rod;
     group.userData.pistonHead = head;
+  }
+  if (block.type === 'chip') {
+    const chipTop = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.08, 0.72), new THREE.MeshLambertMaterial({ color: 0x332d5e }));
+    chipTop.position.y = 0.5;
+    group.add(chipTop);
+    for (let i = -1; i <= 1; i += 1) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.2), pistonBandMaterial);
+      pin.position.set(i * 0.22, 0.53, 0.42);
+      group.add(pin);
+    }
   }
   group.position.set(0, 0, 0);
   blockGroups.set(key(block.x, block.y, block.z), group);
@@ -180,6 +198,15 @@ function loadChip() {
     if (saved?.pins) chip = saved;
   } catch (_) { /* Keep the default LOW chip. */ }
   refreshPistons();
+}
+
+function createDefaultCircuit() {
+  const chipBlock = { x: 0, y: 4, z: -1, type: 'chip' };
+  const pistonBlock = { x: 0, y: 4, z: 0, type: 'piston' };
+  setBlock(chipBlock.x, chipBlock.y, chipBlock.z, chipBlock.type);
+  setBlock(pistonBlock.x, pistonBlock.y, pistonBlock.z, pistonBlock.type);
+  addBlockMesh(chipBlock);
+  addBlockMesh(pistonBlock);
 }
 
 function getTarget() {
@@ -297,6 +324,7 @@ function animate() {
 
 const clock = new THREE.Clock();
 buildWorld();
+createDefaultCircuit();
 loadChip();
 updateHotbar();
 document.getElementById('reloadChipBtn').addEventListener('click', loadChip);
