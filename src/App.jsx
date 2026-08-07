@@ -909,7 +909,13 @@ export default function App() {
                 return next;
               });
               if (change.type === "added") {
-                if (isDmChannelId(activeChannel) && msg.userId !== sessionUserId) {
+                const messageVisible =
+                  !document.hidden && document.hasFocus() && isNearBottomRef.current;
+                if (
+                  isDmChannelId(activeChannel) &&
+                  msg.userId !== sessionUserId &&
+                  !messageVisible
+                ) {
                   playDmReceiveSound();
                 }
                 newestDocSnapRef.current = change.doc;
