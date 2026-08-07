@@ -122,8 +122,8 @@ function addBlockMesh(block) {
     const rod = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.62), pistonHeadMaterial);
     rod.position.set(0, 0, 0.58);
     group.add(rod);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.24), pistonFaceMaterial);
-    head.position.set(0, 0, 0.5);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.12), pistonFaceMaterial);
+    head.position.set(0, 0, 0.56);
     head.userData.block = block;
     head.userData.pistonHead = true;
     group.add(head);
@@ -187,7 +187,7 @@ function refreshPistons() {
     pistonPowered.set(blockKey, powered);
     group.userData.pistonRod.position.z = powered ? 0.82 : 0.58;
     group.userData.pistonRod.scale.z = powered ? 1.8 : 1;
-    group.userData.pistonHead.position.z = powered ? 1.05 : 0.5;
+    group.userData.pistonHead.position.z = powered ? 1.08 : 0.56;
   }
   chipStatus.textContent = `Chip connected · D0 ${chip.pins[0]?.value ? 'HIGH' : 'LOW'} · D1 ${chip.pins[1]?.value ? 'HIGH' : 'LOW'} · D2 ${chip.pins[2]?.value ? 'HIGH' : 'LOW'} · D3 ${chip.pins[3]?.value ? 'HIGH' : 'LOW'}`;
 }
@@ -195,7 +195,7 @@ function refreshPistons() {
 function loadChip() {
   try {
     const saved = JSON.parse(localStorage.getItem('quadchat-chip') || 'null');
-    if (saved?.pins) chip = saved;
+    if (new URLSearchParams(location.search).has('fromCircuit') && saved?.pins) chip = saved;
   } catch (_) { /* Keep the default LOW chip. */ }
   refreshPistons();
 }

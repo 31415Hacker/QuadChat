@@ -97,7 +97,7 @@ function exportChipToVoxelWorld() {
       }])
     )
   }));
-  window.location.href = 'voxel.html';
+  window.location.href = 'voxel.html?fromCircuit=1';
 }
 
 function updateStatus(msg) {
