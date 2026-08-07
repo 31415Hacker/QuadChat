@@ -1311,9 +1311,10 @@ log('Welcome to Circuit Game!', 'success');
 log('Drag components from the left, toggle Wire mode to connect them.', 'log');
 
 // Place initial components for demo
-addComponent('battery', 140, 200);
-addComponent('chip', 420, 200);
-addComponent('bulb', 700, 200);
+addComponent('battery', 42, 78);
+addComponent('chip', 354, 384);
+state.components['comp-2'].rotation = 90;
+addComponent('bulb', 602, 72);
 
 // Pre-wire a working circuit: battery -> chip -> bulb
 const batteryId = 'comp-1';
