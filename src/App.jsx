@@ -342,32 +342,64 @@ export default function App() {
     }
 
     const previousOnlineUsers = previousOnlineUsersRef.current;
+    const shouldNotifyExternally =
+      notificationsEnabled &&
+      notificationPermission === "granted" &&
+      (document.hidden || !document.hasFocus());
+
     onlineUsers.forEach((userId) => {
       if (userId === sessionUserId || previousOnlineUsers.has(userId)) return;
       const name = getProfileName(profiles[userId], "Someone");
+      const body = "is now online";
       pushInAppNotification({
         type: "presence",
         channelId: null,
         channelLabel: null,
         senderName: name,
-        body: "is now online",
+        body,
         id: `presence-${userId}-online-${Date.now()}`
       });
+      if (shouldNotifyExternally) {
+        const notification = new Notification(`QuadChat: ${name}`, {
+          body,
+          icon: notificationIcon,
+          tag: `quadchat-presence-${userId}-online`
+        });
+        window.setTimeout(() => notification.close(), 7000);
+      }
     });
     previousOnlineUsers.forEach((userId) => {
       if (userId === sessionUserId || onlineUsers.has(userId)) return;
       const name = getProfileName(profiles[userId], "Someone");
+      const body = "went offline";
       pushInAppNotification({
         type: "presence",
         channelId: null,
         channelLabel: null,
         senderName: name,
-        body: "went offline",
+        body,
         id: `presence-${userId}-offline-${Date.now()}`
       });
+      if (shouldNotifyExternally) {
+        const notification = new Notification(`QuadChat: ${name}`, {
+          body,
+          icon: notificationIcon,
+          tag: `quadchat-presence-${userId}-offline`
+        });
+        window.setTimeout(() => notification.close(), 7000);
+      }
     });
     previousOnlineUsersRef.current = new Set(onlineUsers);
-  }, [onlineUsers, presenceReady, profiles, pushInAppNotification, sessionUserId, user]);
+  }, [
+    onlineUsers,
+    notificationPermission,
+    notificationsEnabled,
+    presenceReady,
+    profiles,
+    pushInAppNotification,
+    sessionUserId,
+    user
+  ]);
 
   const {
     callStatus,

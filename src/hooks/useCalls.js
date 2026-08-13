@@ -97,7 +97,7 @@ export function useCalls({
     if (!remoteScreenStream && viewingScreen) {
       setViewingScreen(false);
     }
-  }, [remoteScreenStream]);
+  }, [remoteScreenStream, viewingScreen]);
 
   function clearRing(calleeId, callKey) {
     if (!calleeId || !callKey) return;
