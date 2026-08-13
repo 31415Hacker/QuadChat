@@ -251,7 +251,7 @@ export function useCalls({
 
     pc.onicecandidate = (e) => {
       if (e.candidate && callNodeRefVal) {
-        if (process.env.NODE_ENV !== "production") {
+        if (import.meta.env.DEV) {
           console.log(`[CALL-ICE] sending ${isCaller ? "caller" : "callee"} candidate`);
         }
         const candidateRef = rtdbRef(rtdb, `calls/${callNodeRefVal.key}/candidates/${isCaller ? "caller" : "callee"}/${Date.now()}`);
