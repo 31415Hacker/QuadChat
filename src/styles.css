@@ -2638,6 +2638,21 @@ button.message-document-preview {
   transition: background 0.15s;
 }
 
+.user-voice-mic-btn {
+  background: none;
+  border: none;
+  color: var(--accent-green);
+  cursor: pointer;
+  display: inline-flex;
+  margin-left: 4px;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.user-voice-mic-btn:hover {
+  color: var(--accent-red);
+}
+
 .user-mic-btn:hover {
   background: var(--bg-hover);
 }

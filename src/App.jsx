@@ -65,6 +65,7 @@ import {
 import {
   parseDuration,
   isProfileMuted,
+  isProfileVoiceMuted,
   getMuteLabel,
   getWarningLabel
 } from "./utils/profile.js";
@@ -264,6 +265,7 @@ export default function App() {
     (provider) => provider.providerId === "password"
   );
   const muteLabel = getMuteLabel(currentProfile);
+  const isVoiceMuted = isProfileVoiceMuted(currentProfile);
   const warningLabel = getWarningLabel(currentProfile);
 
   const canPostInActiveChannel =
@@ -310,6 +312,19 @@ export default function App() {
   };
 
   const [onlineUsers, , presenceReady] = usePresence(user);
+
+  const { confirmState, ask, closeConfirm } = useConfirmDialog();
+
+  const requestScreenShare = useCallback(
+    (sharerName) =>
+      ask(`${sharerName} is sharing their screen. Send a request to share your screen?`, {
+        title: "Screen already being shared",
+        confirmLabel: "Send request",
+        cancelLabel: "Cancel",
+        danger: false
+      }),
+    [ask]
+  );
 
   const {
     inAppNotifications,
@@ -444,10 +459,11 @@ export default function App() {
     pushInAppNotification,
     notificationsEnabled,
     notificationPermission,
-    onCallError: (msg) => setSettingsMessage(msg)
+    onCallError: (msg) => setSettingsMessage(msg),
+    onScreenShareConflict: requestScreenShare,
+    isVoiceMuted,
+    voiceMutedUntil: currentProfile?.voiceMutedUntil
   });
-
-  const { confirmState, ask, closeConfirm } = useConfirmDialog();
 
   const joinGroupCallRef = useRef(joinGroupCall);
   joinGroupCallRef.current = joinGroupCall;
@@ -1950,7 +1966,7 @@ export default function App() {
     const parts = cleanMessage.trim().split(/\s+/);
     const command = parts[0]?.toLowerCase();
 
-    if (!["?mute", "?unmute", "?warn", "?unwarn", "?purge"].includes(command)) {
+    if (!["?mute", "?unmute", "?mute-v", "?warn", "?unwarn", "?purge"].includes(command)) {
       return null;
     }
 
@@ -2095,7 +2111,7 @@ export default function App() {
     const targetName = parts[1];
 
     if (!targetName) {
-      setError("Use ?mute username, ?mute username -t 10m, or ?unmute username.");
+      setError("Use ?mute username, ?mute username -t 10m, ?mute-v username -t 10m, or ?unmute username.");
       return { handled: true };
     }
 
@@ -2107,7 +2123,7 @@ export default function App() {
     }
 
     if (
-      command === "?mute" &&
+      (command === "?mute" || command === "?mute-v") &&
       targets.some((target) => target.isAdmin || isAdminEmail(target.email))
     ) {
       setError("cannot mute admins");
@@ -2152,11 +2168,19 @@ export default function App() {
       return { handled: true };
     }
 
+    const voiceMute = command === "?mute-v";
     await Promise.all(
       targets.map((target) =>
         setDoc(
           doc(db, "users", target.id),
-          {
+          voiceMute ? {
+            voiceMuted: true,
+            voiceMutedUntil: duration
+              ? Timestamp.fromDate(new Date(Date.now() + duration))
+              : null,
+            voiceMutedBy: sessionUserId,
+            voiceMutedUpdatedAt: serverTimestamp()
+          } : {
             muted: true,
             mutedUntil: duration
               ? Timestamp.fromDate(new Date(Date.now() + duration))
@@ -2176,7 +2200,7 @@ export default function App() {
         adminCommand: true,
         command,
         commandTarget: targetName,
-        notificationText: `🔇 @${name} was muted${durationStr ? ` for ${durationStr}` : ''}`,
+          notificationText: `${voiceMute ? "🎙️" : "🔇"} @${name} was muted${voiceMute ? " in voice chat" : ""}${durationStr ? ` for ${durationStr}` : ''}`,
         targetUserId: targets[0].id
       }
     };
@@ -2750,6 +2774,40 @@ export default function App() {
     }
   }
 
+  async function toggleVoiceMute(profile) {
+    if (!isCurrentUserAdmin || !profile || profile.isAdmin || isAdminEmail(profile.email)) return;
+
+    const targetName = getProfileName(profile, profile.email || "");
+    const voiceMuted = isProfileVoiceMuted(profile);
+    try {
+      await setDoc(
+        doc(db, "users", profile.id),
+        {
+          voiceMuted: !voiceMuted,
+          voiceMutedUntil: null,
+          voiceMutedBy: sessionUserId,
+          voiceMutedUpdatedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+      const notificationText = voiceMuted
+        ? `🎙️ @${targetName} was unmuted in voice chat`
+        : `🎙️ @${targetName} was muted in voice chat`;
+      await addDoc(messagesRef(activeChannel), {
+        text: notificationText,
+        adminCommand: true,
+        command: "?mute-v",
+        commandTarget: targetName,
+        notificationText,
+        targetUserId: profile.id,
+        userId: sessionUserId,
+        createdAt: serverTimestamp()
+      });
+    } catch (firebaseError) {
+      console.error("toggleVoiceMute failed:", firebaseError);
+    }
+  }
+
   const saveStatus = async () => {
     const scheduled = scheduledBusy.map((s) => ({
       start: Timestamp.fromDate(s.start),
@@ -3029,6 +3087,7 @@ export default function App() {
                 startCall={startCall}
                 callStatus={callStatus}
                 toggleUserMute={toggleUserMute}
+                toggleVoiceMute={toggleVoiceMute}
                 isCurrentUserAdmin={isCurrentUserAdmin}
                 groupCallStatus={groupCallStatus}
                 groupCallParticipants={groupCallParticipants}

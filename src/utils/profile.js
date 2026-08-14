@@ -37,6 +37,18 @@ export function isProfileMuted(profile) {
   return toDate(profile.mutedUntil).getTime() > Date.now();
 }
 
+export function isProfileVoiceMuted(profile) {
+  if (!profile?.voiceMuted) {
+    return false;
+  }
+
+  if (!profile.voiceMutedUntil) {
+    return true;
+  }
+
+  return toDate(profile.voiceMutedUntil).getTime() > Date.now();
+}
+
 export function getMuteLabel(profile) {
   if (!isProfileMuted(profile)) {
     return "";

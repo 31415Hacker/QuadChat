@@ -163,7 +163,7 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && !(request.resource.data.isAdmin == true &&
-             request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+              request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt"]))
         && (!("bio" in request.resource.data) ||
             (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
         && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
@@ -172,13 +172,13 @@ service cloud.firestore {
           signupEnabled() &&
           userId == request.auth.uid &&
           (isAdminEmail() ||
-           !request.resource.data.keys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+            !request.resource.data.keys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt"]))
         )
       );
 
       allow update: if signedIn()
         && !(isProtectedAdminTarget() &&
-             request.resource.data.diff(resource.data).affectedKeys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]))
+              request.resource.data.diff(resource.data).affectedKeys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt"]))
         && (!("bio" in request.resource.data) ||
             (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
         && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
@@ -186,7 +186,7 @@ service cloud.firestore {
         isAdmin() || (
           userId == request.auth.uid &&
           (isAdminEmail() ||
-           !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "warning"]))
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "warning"]))
         )
       );
 

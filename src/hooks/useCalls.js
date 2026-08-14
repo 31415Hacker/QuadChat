@@ -23,7 +23,10 @@ export function useCalls({
   pushInAppNotification,
   notificationsEnabled,
   notificationPermission,
-  onCallError
+  onCallError,
+  onScreenShareConflict,
+  isVoiceMuted,
+  voiceMutedUntil
 }) {
   const [callStatus, setCallStatus] = useState("idle");
   const [callPartnerId, setCallPartnerId] = useState(null);
@@ -65,6 +68,7 @@ export function useCalls({
   const [p2pGroupCallHostId, setP2pGroupCallHostId] = useState(null);
   const [p2pGroupCallParticipants, setP2pGroupCallParticipants] = useState({});
   const [p2pGroupCallLocalMuted, setP2pGroupCallLocalMuted] = useState(false);
+  const [voiceMuteExpired, setVoiceMuteExpired] = useState(false);
   const p2pGroupCallStreamRef = useRef(null);
   const p2pGroupCallConnectionsRef = useRef({});
   const p2pGroupCallAudioContainerRef = useRef(null);
@@ -91,6 +95,30 @@ export function useCalls({
   }, [isSharingScreen]);
 
   useEffect(() => {
+    const expiresAt = voiceMutedUntil?.toDate
+      ? voiceMutedUntil.toDate().getTime()
+      : new Date(voiceMutedUntil).getTime();
+    setVoiceMuteExpired(false);
+    if (!isVoiceMuted || !Number.isFinite(expiresAt)) return;
+    const timer = window.setTimeout(() => setVoiceMuteExpired(true), Math.max(0, expiresAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [isVoiceMuted, voiceMutedUntil]);
+
+  const voiceMuteActive = isVoiceMuted && !voiceMuteExpired;
+
+  useEffect(() => {
+    const applyVoiceMute = (stream, setMuted) => {
+      const audioTrack = stream?.getAudioTracks()[0];
+      if (!audioTrack) return;
+      audioTrack.enabled = !voiceMuteActive;
+      setMuted(voiceMuteActive);
+    };
+
+    applyVoiceMute(groupCallLocalStreamRef.current, setGroupCallLocalMuted);
+    applyVoiceMute(p2pGroupCallStreamRef.current, setP2pGroupCallLocalMuted);
+  }, [voiceMuteActive]);
+
+  useEffect(() => {
     if (screenVideoRef.current && remoteScreenStream) {
       screenVideoRef.current.srcObject = remoteScreenStream;
     }
@@ -98,6 +126,12 @@ export function useCalls({
       setViewingScreen(false);
     }
   }, [remoteScreenStream, viewingScreen]);
+
+  function clearRemoteScreenShare() {
+    setRemoteScreenStream(null);
+    setViewingScreen(false);
+    setScreenSharedByName(null);
+  }
 
   function clearRing(calleeId, callKey) {
     if (!calleeId || !callKey) return;
@@ -263,7 +297,8 @@ export function useCalls({
       if (e.track.kind === "video") {
         console.log("[CALL] ontrack — screen video received");
         setRemoteScreenStream(e.streams[0]);
-        e.track.onmute = () => setRemoteScreenStream(null);
+        e.track.onmute = clearRemoteScreenShare;
+        e.track.onended = clearRemoteScreenShare;
       } else {
         console.log("[CALL] ontrack — remote audio received");
         setRemoteStream(e.streams[0]);
@@ -392,7 +427,11 @@ export function useCalls({
       const screenShareRef = rtdbRef(rtdb, `calls/${callRef.key}/screenShareActive`);
       const unsubScreen = onValue(screenShareRef, (snap) => {
         const val = snap.val();
-        setScreenSharedByName(val && typeof val === "object" ? val.name : null);
+        if (val && typeof val === "object") {
+          setScreenSharedByName(val.name);
+        } else {
+          clearRemoteScreenShare();
+        }
       });
       callCleanupsRef.current.push(unsubScreen);
 
@@ -567,7 +606,11 @@ export function useCalls({
       const screenShareRef = rtdbRef(rtdb, `calls/${callRef.key}/screenShareActive`);
       const unsubScreen = onValue(screenShareRef, (snap) => {
         const val = snap.val();
-        setScreenSharedByName(val && typeof val === "object" ? val.name : null);
+        if (val && typeof val === "object") {
+          setScreenSharedByName(val.name);
+        } else {
+          clearRemoteScreenShare();
+        }
       });
       callCleanupsRef.current.push(unsubScreen);
 
@@ -682,6 +725,7 @@ export function useCalls({
     if (groupCallLocalStreamRef.current) {
       const audioTrack = groupCallLocalStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
+        if (voiceMuteActive && !audioTrack.enabled) return;
         audioTrack.enabled = !audioTrack.enabled;
         setGroupCallLocalMuted(!audioTrack.enabled);
       }
@@ -694,6 +738,8 @@ export function useCalls({
       return;
     }
     if (!isSharingScreen && screenSharedByName !== null) {
+      const shouldRequest = await onScreenShareConflict?.(screenSharedByName);
+      if (!shouldRequest) return;
       const reqPath = callNodeRef.current
         ? `calls/${callNodeRef.current.key}/screenShareRequest`
         : p2pGroupCallNodeRef.current
@@ -868,7 +914,8 @@ export function useCalls({
       if (e.track.kind === "video") {
         console.log("[P2P] ontrack — screen video from", remoteUid);
         setRemoteScreenStream(e.streams[0]);
-        e.track.onmute = () => setRemoteScreenStream(null);
+        e.track.onmute = clearRemoteScreenShare;
+        e.track.onended = clearRemoteScreenShare;
       } else {
         const audio = document.createElement("audio");
         audio.srcObject = e.streams[0];
@@ -1031,6 +1078,10 @@ export function useCalls({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       p2pGroupCallStreamRef.current = stream;
+      if (voiceMuteActive) {
+        stream.getAudioTracks().forEach((track) => { track.enabled = false; });
+        setP2pGroupCallLocalMuted(true);
+      }
       Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       });
@@ -1142,7 +1193,11 @@ export function useCalls({
       const p2pScreenShareRef = rtdbRef(rtdb, `group-calls/${callKey}/screenShareActive`);
       const unsubP2pScreen = onValue(p2pScreenShareRef, (snap) => {
         const val = snap.val();
-        setScreenSharedByName(val && typeof val === "object" ? val.name : null);
+        if (val && typeof val === "object") {
+          setScreenSharedByName(val.name);
+        } else {
+          clearRemoteScreenShare();
+        }
       });
       p2pGroupCallUnsubsRef.current.push(unsubP2pScreen);
 
@@ -1176,6 +1231,7 @@ export function useCalls({
     if (p2pGroupCallStreamRef.current) {
       const audioTrack = p2pGroupCallStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
+        if (voiceMuteActive && !audioTrack.enabled) return;
         audioTrack.enabled = !audioTrack.enabled;
         setP2pGroupCallLocalMuted(!audioTrack.enabled);
       }
@@ -1207,6 +1263,10 @@ export function useCalls({
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       groupCallLocalStreamRef.current = stream;
+      if (voiceMuteActive) {
+        stream.getAudioTracks().forEach((track) => { track.enabled = false; });
+        setGroupCallLocalMuted(true);
+      }
 
       const room = new Room({ adaptiveStream: true, dynacast: true });
 
@@ -1216,8 +1276,7 @@ export function useCalls({
           setRemoteScreenStream(new MediaStream([track.mediaStreamTrack]));
           setScreenSharedByName(participant.name || participant.identity);
           track.onMuted = () => {
-            setRemoteScreenStream(null);
-            setScreenSharedByName(null);
+            clearRemoteScreenShare();
           };
         } else {
           const audio = document.createElement("audio");
@@ -1229,6 +1288,10 @@ export function useCalls({
       });
 
       room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        if (track.kind === "video") {
+          clearRemoteScreenShare();
+          return;
+        }
         const el = groupCallAudioContainerRef.current?.querySelector(
           `[data-participant="${participant.identity}"]`
         );

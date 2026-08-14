@@ -1,7 +1,7 @@
 import { MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
 import RelativeTime from "./RelativeTime.jsx";
 import { getInitials, getProfileName, isAdminEmail } from "../utils/names.js";
-import { getStatusColor, isProfileMuted } from "../utils/profile.js";
+import { getStatusColor, isProfileMuted, isProfileVoiceMuted } from "../utils/profile.js";
 
 export default function UsersSidebar({
   profiles,
@@ -12,6 +12,7 @@ export default function UsersSidebar({
   startCall,
   callStatus,
   toggleUserMute,
+  toggleVoiceMute,
   isCurrentUserAdmin,
   groupCallStatus,
   groupCallParticipants,
@@ -28,11 +29,15 @@ export default function UsersSidebar({
         {Object.values(profiles).map((profile) => {
           const name = getProfileName(profile, profile.email || "");
           const muted = isProfileMuted(profile);
+          const voiceMuted = isProfileVoiceMuted(profile);
           const isProfileAdmin = profile.isAdmin === true || isAdminEmail(profile.email);
           const theirMode = profile.status?.mode;
           const isSelf = profile.id === sessionUserId;
           const userActive = isSelf || onlineUsers.has(profile.id);
           const statusMode = userActive ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
+          const isInGroupCall =
+            (groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
+            (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]);
           return (
             <div
               className={`user-item ${userActive ? "online" : ""}`}
@@ -56,13 +61,22 @@ export default function UsersSidebar({
                   {profile.status?.text ? (
                     <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
                   ) : null}
-                  {(groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
-                  (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]) ? (
+                  {isInGroupCall ? (
                     <span className="group-call-indicator" title="In group call">
                       <Users size={11} />
                     </span>
                   ) : null}
                 </button>
+                {isInGroupCall && !isProfileAdmin && isCurrentUserAdmin ? (
+                  <button
+                    className="user-voice-mic-btn"
+                    type="button"
+                    onClick={() => toggleVoiceMute(profile)}
+                    title={voiceMuted ? `Unmute ${name} in the group call` : `Mute ${name} in the group call`}
+                  >
+                    {voiceMuted ? <MicOff size={11} /> : <Mic size={11} />}
+                  </button>
+                ) : null}
                 <span className="user-last-online">
                   {userActive ? "" : profile.lastOnline ? <RelativeTime timestamp={profile.lastOnline} /> : "unmeasured"}
                 </span>
