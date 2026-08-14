@@ -66,6 +66,7 @@ import {
   parseDuration,
   isProfileMuted,
   isProfileVoiceMuted,
+  isProfileVoiceTemporarilyMuted,
   getMuteLabel,
   getWarningLabel
 } from "./utils/profile.js";
@@ -266,6 +267,7 @@ export default function App() {
   );
   const muteLabel = getMuteLabel(currentProfile);
   const isVoiceMuted = isProfileVoiceMuted(currentProfile);
+  const isVoiceTemporarilyMuted = isProfileVoiceTemporarilyMuted(currentProfile);
   const warningLabel = getWarningLabel(currentProfile);
 
   const canPostInActiveChannel =
@@ -325,6 +327,20 @@ export default function App() {
       }),
     [ask]
   );
+
+  const clearTemporaryVoiceMute = useCallback(() => {
+    if (!sessionUserId) return;
+    setDoc(
+      doc(db, "users", sessionUserId),
+      {
+        voiceMutedTemporary: false,
+        voiceMutedTemporaryUntil: null,
+        voiceMutedTemporaryBy: null,
+        voiceMutedTemporaryUpdatedAt: null
+      },
+      { merge: true }
+    ).catch((firebaseError) => console.error("clearTemporaryVoiceMute failed:", firebaseError));
+  }, [sessionUserId]);
 
   const {
     inAppNotifications,
@@ -462,7 +478,10 @@ export default function App() {
     onCallError: (msg) => setSettingsMessage(msg),
     onScreenShareConflict: requestScreenShare,
     isVoiceMuted,
-    voiceMutedUntil: currentProfile?.voiceMutedUntil
+    voiceMutedUntil: currentProfile?.voiceMutedUntil,
+    isVoiceTemporarilyMuted,
+    voiceMutedTemporaryUntil: currentProfile?.voiceMutedTemporaryUntil,
+    onTemporaryVoiceUnmute: clearTemporaryVoiceMute
   });
 
   const joinGroupCallRef = useRef(joinGroupCall);
@@ -1966,7 +1985,7 @@ export default function App() {
     const parts = cleanMessage.trim().split(/\s+/);
     const command = parts[0]?.toLowerCase();
 
-    if (!["?mute", "?unmute", "?mute-v", "?warn", "?unwarn", "?purge"].includes(command)) {
+    if (!["?mute", "?unmute", "?mute-v", "?mute-vt", "?warn", "?unwarn", "?purge"].includes(command)) {
       return null;
     }
 
@@ -2111,7 +2130,7 @@ export default function App() {
     const targetName = parts[1];
 
     if (!targetName) {
-      setError("Use ?mute username, ?mute username -t 10m, ?mute-v username -t 10m, or ?unmute username.");
+      setError("Use ?mute username, ?mute-v username, ?mute-vt username, or add -t 10m for a duration.");
       return { handled: true };
     }
 
@@ -2123,7 +2142,7 @@ export default function App() {
     }
 
     if (
-      (command === "?mute" || command === "?mute-v") &&
+      (command === "?mute" || command === "?mute-v" || command === "?mute-vt") &&
       targets.some((target) => target.isAdmin || isAdminEmail(target.email))
     ) {
       setError("cannot mute admins");
@@ -2169,6 +2188,7 @@ export default function App() {
     }
 
     const voiceMute = command === "?mute-v";
+    const temporaryVoiceMute = command === "?mute-vt";
     await Promise.all(
       targets.map((target) =>
         setDoc(
@@ -2180,6 +2200,13 @@ export default function App() {
               : null,
             voiceMutedBy: sessionUserId,
             voiceMutedUpdatedAt: serverTimestamp()
+          } : temporaryVoiceMute ? {
+            voiceMutedTemporary: true,
+            voiceMutedTemporaryUntil: duration
+              ? Timestamp.fromDate(new Date(Date.now() + duration))
+              : null,
+            voiceMutedTemporaryBy: sessionUserId,
+            voiceMutedTemporaryUpdatedAt: serverTimestamp()
           } : {
             muted: true,
             mutedUntil: duration
@@ -2200,7 +2227,7 @@ export default function App() {
         adminCommand: true,
         command,
         commandTarget: targetName,
-          notificationText: `${voiceMute ? "🎙️" : "🔇"} @${name} was muted${voiceMute ? " in voice chat" : ""}${durationStr ? ` for ${durationStr}` : ''}`,
+          notificationText: `${voiceMute || temporaryVoiceMute ? "🎙️" : "🔇"} @${name} was muted${voiceMute ? " in voice chat" : temporaryVoiceMute ? " in voice chat and can unmute" : ""}${durationStr ? ` for ${durationStr}` : ''}`,
         targetUserId: targets[0].id
       }
     };

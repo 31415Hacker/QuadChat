@@ -26,7 +26,10 @@ export function useCalls({
   onCallError,
   onScreenShareConflict,
   isVoiceMuted,
-  voiceMutedUntil
+  voiceMutedUntil,
+  isVoiceTemporarilyMuted,
+  voiceMutedTemporaryUntil,
+  onTemporaryVoiceUnmute
 }) {
   const [callStatus, setCallStatus] = useState("idle");
   const [callPartnerId, setCallPartnerId] = useState(null);
@@ -69,6 +72,7 @@ export function useCalls({
   const [p2pGroupCallParticipants, setP2pGroupCallParticipants] = useState({});
   const [p2pGroupCallLocalMuted, setP2pGroupCallLocalMuted] = useState(false);
   const [voiceMuteExpired, setVoiceMuteExpired] = useState(false);
+  const [temporaryVoiceMuteExpired, setTemporaryVoiceMuteExpired] = useState(false);
   const p2pGroupCallStreamRef = useRef(null);
   const p2pGroupCallConnectionsRef = useRef({});
   const p2pGroupCallAudioContainerRef = useRef(null);
@@ -104,7 +108,20 @@ export function useCalls({
     return () => window.clearTimeout(timer);
   }, [isVoiceMuted, voiceMutedUntil]);
 
-  const voiceMuteActive = isVoiceMuted && !voiceMuteExpired;
+  useEffect(() => {
+    const expiresAt = voiceMutedTemporaryUntil?.toDate
+      ? voiceMutedTemporaryUntil.toDate().getTime()
+      : new Date(voiceMutedTemporaryUntil).getTime();
+    setTemporaryVoiceMuteExpired(false);
+    if (!isVoiceTemporarilyMuted || !Number.isFinite(expiresAt)) return;
+    const timer = window.setTimeout(() => setTemporaryVoiceMuteExpired(true), Math.max(0, expiresAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [isVoiceTemporarilyMuted, voiceMutedTemporaryUntil]);
+
+  const lockedVoiceMuteActive = isVoiceMuted && !voiceMuteExpired;
+  const voiceMuteActive = lockedVoiceMuteActive || (
+    isVoiceTemporarilyMuted && !temporaryVoiceMuteExpired
+  );
 
   useEffect(() => {
     const applyVoiceMute = (stream, setMuted) => {
@@ -725,7 +742,10 @@ export function useCalls({
     if (groupCallLocalStreamRef.current) {
       const audioTrack = groupCallLocalStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
-        if (voiceMuteActive && !audioTrack.enabled) return;
+        if (lockedVoiceMuteActive && !audioTrack.enabled) return;
+        if (!audioTrack.enabled && isVoiceTemporarilyMuted) {
+          onTemporaryVoiceUnmute?.();
+        }
         audioTrack.enabled = !audioTrack.enabled;
         setGroupCallLocalMuted(!audioTrack.enabled);
       }
@@ -1231,7 +1251,10 @@ export function useCalls({
     if (p2pGroupCallStreamRef.current) {
       const audioTrack = p2pGroupCallStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
-        if (voiceMuteActive && !audioTrack.enabled) return;
+        if (lockedVoiceMuteActive && !audioTrack.enabled) return;
+        if (!audioTrack.enabled && isVoiceTemporarilyMuted) {
+          onTemporaryVoiceUnmute?.();
+        }
         audioTrack.enabled = !audioTrack.enabled;
         setP2pGroupCallLocalMuted(!audioTrack.enabled);
       }

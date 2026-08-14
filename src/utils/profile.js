@@ -49,6 +49,18 @@ export function isProfileVoiceMuted(profile) {
   return toDate(profile.voiceMutedUntil).getTime() > Date.now();
 }
 
+export function isProfileVoiceTemporarilyMuted(profile) {
+  if (!profile?.voiceMutedTemporary) {
+    return false;
+  }
+
+  if (!profile.voiceMutedTemporaryUntil) {
+    return true;
+  }
+
+  return toDate(profile.voiceMutedTemporaryUntil).getTime() > Date.now();
+}
+
 export function getMuteLabel(profile) {
   if (!isProfileMuted(profile)) {
     return "";
