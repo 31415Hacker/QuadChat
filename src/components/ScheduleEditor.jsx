@@ -119,7 +119,7 @@ export default function ScheduleEditor({ schedule, setSchedule }) {
           </button>
         </div>
         {schedule.overrides.length === 0 ? (
-          <p className="settings-note">No changes for specific days.</p>
+          <p className="schedule-empty">No changes for specific days.</p>
         ) : schedule.overrides.map((override, index) => (
           <div className="schedule-override" key={`${override.date}-${index}`}>
             <div className="schedule-override-header">

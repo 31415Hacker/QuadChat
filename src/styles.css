@@ -1011,6 +1011,12 @@ button:disabled {
   padding: 3px 0;
 }
 
+.schedule-empty {
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
 .schedule-separator {
   color: var(--text-tertiary);
   font-size: 0.75rem;
