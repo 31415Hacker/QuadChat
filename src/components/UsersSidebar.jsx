@@ -1,6 +1,6 @@
 import { MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
 import RelativeTime from "./RelativeTime.jsx";
-import { getInitials, getProfileName, isAdminEmail } from "../utils/names.js";
+import { getInitials, getProfileName, isAdminEmail, isDeveloperEmail } from "../utils/names.js";
 import { getStatusColor, isProfileMuted, isProfileVoiceMuted } from "../utils/profile.js";
 
 export default function UsersSidebar({
@@ -31,6 +31,8 @@ export default function UsersSidebar({
           const muted = isProfileMuted(profile);
           const voiceMuted = isProfileVoiceMuted(profile);
           const isProfileAdmin = profile.isAdmin === true || isAdminEmail(profile.email);
+          const isProfileDeveloper = profile.isDeveloper === true || isDeveloperEmail(profile.email);
+          const roleMarker = isProfileDeveloper ? "DEV" : isProfileAdmin ? "ADMIN" : "USER";
           const theirMode = profile.status?.mode;
           const isSelf = profile.id === sessionUserId;
           const userActive = isSelf || onlineUsers.has(profile.id);
@@ -57,8 +59,11 @@ export default function UsersSidebar({
                   type="button"
                   onClick={() => openUserAnalytics(profile)}
                 >
-                  {name}
-                  {profile.status?.text ? (
+                   {name}
+                   <span className={`user-role-marker user-role-marker--${roleMarker.toLowerCase()}`}>
+                     {roleMarker}
+                   </span>
+                   {profile.status?.text ? (
                     <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
                   ) : null}
                   {isInGroupCall ? (

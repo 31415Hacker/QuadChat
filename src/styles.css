@@ -2871,6 +2871,28 @@ button.message-document-preview {
   line-height: 1.3;
 }
 
+.user-role-marker {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin-left: 5px;
+  padding: 1px 4px;
+  vertical-align: middle;
+}
+
+.user-role-marker--admin {
+  border-color: color-mix(in srgb, var(--accent-blue) 60%, var(--border-color));
+  color: var(--accent-blue);
+}
+
+.user-role-marker--dev {
+  border-color: color-mix(in srgb, var(--accent-brand) 60%, var(--border-color));
+  color: var(--accent-brand);
+}
+
 .user-info .user-name {
   display: flex;
   align-items: center;
