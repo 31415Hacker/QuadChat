@@ -14,7 +14,9 @@ import {
   Upload,
   X
 } from "lucide-react";
+import { useState } from "react";
 import { getInitials, getProfileName } from "../utils/names.js";
+import Dialog from "./Dialog.jsx";
 import ScheduleEditor from "./ScheduleEditor.jsx";
 
 function formatAdminValue(value) {
@@ -102,6 +104,8 @@ export default function SettingsPage({
   banAdminAccount,
   unbanAdminAccount
 }) {
+  const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+
   return (
     <div className="settings-page">
       <button
@@ -267,7 +271,15 @@ export default function SettingsPage({
                   </p>
                 </section>
 
-                <ScheduleEditor schedule={settingsSchedule} setSchedule={setSettingsSchedule} />
+                <section className="settings-section-box schedule-summary">
+                  <div>
+                    <h3>Schedule</h3>
+                    <p>Share when you are usually online and add date-specific changes.</p>
+                  </div>
+                  <button type="button" onClick={() => setIsScheduleEditorOpen(true)}>
+                    Edit schedule
+                  </button>
+                </section>
 
                 {settingsMessage ? (
                   <div className="error-banner inline-error settings-note">
@@ -681,6 +693,26 @@ export default function SettingsPage({
           </form>
         </main>
       </div>
+      {isScheduleEditorOpen ? (
+        <Dialog
+          ariaLabel="Edit schedule"
+          className="schedule-modal"
+          onClose={() => setIsScheduleEditorOpen(false)}
+        >
+          <div className="schedule-modal-header">
+            <div>
+              <h2>Edit schedule</h2>
+              <p>Changes are saved with your account settings.</p>
+            </div>
+            <button className="modal-close" type="button" onClick={() => setIsScheduleEditorOpen(false)} aria-label="Close schedule editor">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="schedule-modal-content">
+            <ScheduleEditor schedule={settingsSchedule} setSchedule={setSettingsSchedule} />
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
