@@ -59,7 +59,7 @@ export default function UsersSidebar({
                   type="button"
                   onClick={() => openUserAnalytics(profile)}
                 >
-                   {name}
+                   <span className="user-name-text" title={name}>{name}</span>
                    <span className={`user-role-marker user-role-marker--${roleMarker.toLowerCase()}`}>
                      {roleMarker}
                    </span>

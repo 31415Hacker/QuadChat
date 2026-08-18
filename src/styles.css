@@ -2882,6 +2882,7 @@ button.message-document-preview {
   letter-spacing: 0.04em;
   margin-left: 5px;
   padding: 1px 4px;
+  flex: 0 0 auto;
   vertical-align: middle;
 }
 
@@ -2929,6 +2930,13 @@ button.message-document-preview {
   white-space: nowrap;
   width: fit-content;
   max-width: 100%;
+}
+
+.user-name-text {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-name:hover {
