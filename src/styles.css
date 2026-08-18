@@ -1200,6 +1200,10 @@ button:disabled {
   padding-top: 14px;
 }
 
+.signup-honeypot { height: 1px; left: -10000px; overflow: hidden; position: absolute; width: 1px; }
+.captcha-note { color: var(--text-tertiary); font-size: 0.8rem; margin: 0; }
+.turnstile-widget { min-height: 65px; }
+
 @media (max-width: 560px) {
   .admin-account-picker,
   .admin-password-action > div {

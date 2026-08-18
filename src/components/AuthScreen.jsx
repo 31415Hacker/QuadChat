@@ -6,6 +6,7 @@ import {
   UserRound
 } from "lucide-react";
 import { auth } from "../../firebase.js";
+import TurnstileWidget from "./TurnstileWidget.jsx";
 
 export default function AuthScreen({
   isAuthReady,
@@ -25,7 +26,8 @@ export default function AuthScreen({
   setError,
   handleAuth,
   signInWithGoogle,
-  handleEmailLinkSignIn
+  handleEmailLinkSignIn,
+  signupHoneypot, setSignupHoneypot, signupTurnstileToken, setSignupTurnstileToken, captchaRefreshKey
 }) {
   if (!isAuthReady) {
     return (
@@ -129,6 +131,8 @@ export default function AuthScreen({
                   autoComplete="username"
                   maxLength={32}
                 />
+                <label className="signup-honeypot" aria-hidden="true" htmlFor="signup-website">Website<input id="signup-website" tabIndex="-1" autoComplete="off" value={signupHoneypot} onChange={(event) => setSignupHoneypot(event.target.value)} /></label>
+                <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} />
               </>
             ) : null}
             <label htmlFor="signin-email">
@@ -163,7 +167,7 @@ export default function AuthScreen({
               disabled={
                 !email.trim() ||
                 !password.trim() ||
-                (authView === "signup" && !draftName.trim())
+                (authView === "signup" && (!draftName.trim() || !signupTurnstileToken))
               }
             >
               {authView === "signup" ? "Create account" : "Sign in"}

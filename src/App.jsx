@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createUserWithEmailAndPassword,
   deleteUser,
   EmailAuthProvider,
   linkWithPopup,
@@ -204,6 +203,9 @@ export default function App() {
   const [adminAccountPassword, setAdminAccountPassword] = useState("");
   const [adminAccountMessage, setAdminAccountMessage] = useState("");
   const [isManagingAccount, setIsManagingAccount] = useState(false);
+  const [signupHoneypot, setSignupHoneypot] = useState("");
+  const [signupTurnstileToken, setSignupTurnstileToken] = useState("");
+  const [captchaRefreshKey, setCaptchaRefreshKey] = useState(0);
   const [pendingEmailLinkEmail, setPendingEmailLinkEmail] = useState("");
   const [emailLinkError, setEmailLinkError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
@@ -1465,15 +1467,14 @@ export default function App() {
 
     try {
       if (isSigningUp) {
-        const credential = await createUserWithEmailAndPassword(
-          auth,
-          cleanEmail,
-          cleanPassword
-        );
-
-        await updateProfile(credential.user, {
-          displayName: cleanName
+        const response = await fetch("/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: cleanEmail, password: cleanPassword, displayName: cleanName, turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
         });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        const credential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
         await saveUserProfile(credential.user, cleanName);
         writeSessionUserId(credential.user.uid);
         setSessionUserId(credential.user.uid);
@@ -1497,6 +1498,7 @@ export default function App() {
       setPassword("");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
+      if (isSigningUp) { setSignupTurnstileToken(""); setCaptchaRefreshKey((key) => key + 1); }
     }
   }
 
@@ -2984,6 +2986,11 @@ export default function App() {
           handleAuth={handleAuth}
           signInWithGoogle={signInWithGoogle}
           handleEmailLinkSignIn={handleEmailLinkSignIn}
+          signupHoneypot={signupHoneypot}
+          setSignupHoneypot={setSignupHoneypot}
+          signupTurnstileToken={signupTurnstileToken}
+          setSignupTurnstileToken={setSignupTurnstileToken}
+          captchaRefreshKey={captchaRefreshKey}
         />
       ) : (
         <section className="chat-panel" aria-label="QuadChat room">
