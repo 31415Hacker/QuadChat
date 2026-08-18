@@ -1042,6 +1042,67 @@ button:disabled {
   white-space: nowrap;
 }
 
+.admin-account-manager {
+  align-items: flex-start;
+}
+
+.admin-account-controls {
+  display: grid;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-account-controls select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font: inherit;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.admin-account-details {
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.admin-account-details dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-account-details dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-account-details dt {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-account-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-account-details label {
+  margin: 0;
+}
+
+.admin-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .settings-photo-section {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);

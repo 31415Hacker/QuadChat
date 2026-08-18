@@ -199,6 +199,11 @@ export default function App() {
   const [magicLinkUrl, setMagicLinkUrl] = useState("");
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [magicLinkError, setMagicLinkError] = useState("");
+  const [adminAccountId, setAdminAccountId] = useState("");
+  const [adminAccountDetails, setAdminAccountDetails] = useState(null);
+  const [adminAccountPassword, setAdminAccountPassword] = useState("");
+  const [adminAccountMessage, setAdminAccountMessage] = useState("");
+  const [isManagingAccount, setIsManagingAccount] = useState(false);
   const [pendingEmailLinkEmail, setPendingEmailLinkEmail] = useState("");
   const [emailLinkError, setEmailLinkError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
@@ -1856,6 +1861,89 @@ export default function App() {
     }
   }
 
+  async function manageAccount(action, accountId = adminAccountId, passwordValue = "") {
+    if (!user || !accountId) return null;
+
+    setIsManagingAccount(true);
+    setAdminAccountMessage("");
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/manage-account", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ action, uid: accountId, password: passwordValue })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      return result;
+    } catch (error) {
+      setAdminAccountMessage(error.message || "Account management failed.");
+      return null;
+    } finally {
+      setIsManagingAccount(false);
+    }
+  }
+
+  async function viewAdminAccount() {
+    const result = await manageAccount("details");
+    if (result) setAdminAccountDetails(result.account);
+  }
+
+  async function changeAdminAccountPassword() {
+    if (adminAccountPassword.length < 6) {
+      setAdminAccountMessage("Password must be at least 6 characters.");
+      return;
+    }
+    const confirmed = await ask("Change this account's password? The user will need the new password to sign in.", {
+      title: "Change account password?",
+      confirmLabel: "Change password"
+    });
+    if (!confirmed) return;
+
+    const result = await manageAccount("password", adminAccountId, adminAccountPassword);
+    if (result) {
+      setAdminAccountPassword("");
+      setAdminAccountMessage(result.message);
+    }
+  }
+
+  async function deleteAdminAccount() {
+    const target = adminAccountDetails || profiles[adminAccountId];
+    const name = getProfileName(target, "this account");
+    const confirmed = await ask(`Permanently delete ${name}'s account? This cannot be undone.`, {
+      title: "Delete account?",
+      confirmLabel: "Delete account"
+    });
+    if (!confirmed) return;
+
+    const result = await manageAccount("delete");
+    if (result) {
+      setAdminAccountDetails(null);
+      setAdminAccountId("");
+      setAdminAccountPassword("");
+      setAdminAccountMessage(result.message);
+    }
+  }
+
+  async function banAdminAccount() {
+    const target = adminAccountDetails || profiles[adminAccountId];
+    const name = getProfileName(target, "this account");
+    const confirmed = await ask(`Ban ${name}? Their account will be disabled and cannot sign in or register again.`, {
+      title: "Ban account?",
+      confirmLabel: "Ban account"
+    });
+    if (!confirmed) return;
+
+    const result = await manageAccount("ban");
+    if (result) {
+      setAdminAccountDetails((details) => details ? { ...details, disabled: true } : details);
+      setAdminAccountMessage(result.message);
+    }
+  }
+
   function copyMagicLink() {
     navigator.clipboard.writeText(magicLinkUrl);
   }
@@ -3216,10 +3304,26 @@ export default function App() {
           generateMagicLink={generateMagicLink}
           isGeneratingLink={isGeneratingLink}
           magicLinkError={magicLinkError}
-          magicLinkUrl={magicLinkUrl}
-          copyMagicLink={copyMagicLink}
-          profiles={profiles}
-        />
+           magicLinkUrl={magicLinkUrl}
+           copyMagicLink={copyMagicLink}
+           profiles={profiles}
+           adminAccountId={adminAccountId}
+           setAdminAccountId={(accountId) => {
+             setAdminAccountId(accountId);
+             setAdminAccountDetails(null);
+             setAdminAccountPassword("");
+             setAdminAccountMessage("");
+           }}
+           adminAccountDetails={adminAccountDetails}
+           adminAccountPassword={adminAccountPassword}
+           setAdminAccountPassword={setAdminAccountPassword}
+           adminAccountMessage={adminAccountMessage}
+           isManagingAccount={isManagingAccount}
+           viewAdminAccount={viewAdminAccount}
+           changeAdminAccountPassword={changeAdminAccountPassword}
+           deleteAdminAccount={deleteAdminAccount}
+           banAdminAccount={banAdminAccount}
+         />
       ) : null}
       <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />
       <ConfirmDialog

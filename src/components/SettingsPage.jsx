@@ -69,7 +69,18 @@ export default function SettingsPage({
   magicLinkError,
   magicLinkUrl,
   copyMagicLink,
-  profiles
+  profiles,
+  adminAccountId,
+  setAdminAccountId,
+  adminAccountDetails,
+  adminAccountPassword,
+  setAdminAccountPassword,
+  adminAccountMessage,
+  isManagingAccount,
+  viewAdminAccount,
+  changeAdminAccountPassword,
+  deleteAdminAccount,
+  banAdminAccount
 }) {
   return (
     <div className="settings-page">
@@ -143,7 +154,7 @@ export default function SettingsPage({
                         : "Admin"}
             </h2>
           </div>
-          <form className="settings-form" onSubmit={saveSettings}>
+          <form className="settings-form" onSubmit={settingsTab === "admin" ? (event) => event.preventDefault() : saveSettings}>
             {settingsTab === "account" ? (
               <>
                 <p className="settings-section-desc">
@@ -573,6 +584,39 @@ export default function SettingsPage({
                       </div>
                     </div>
                   ) : null}
+                </section>
+                <section className="settings-section-box admin-account-manager">
+                  <div><h3>Account management</h3><p>View account details, change passwords, ban, or permanently delete member accounts.</p></div>
+                  <div className="admin-account-controls">
+                    <select value={adminAccountId} onChange={(event) => setAdminAccountId(event.target.value)}>
+                      <option value="">Select an account...</option>
+                      {Object.values(profiles).map((profile) => <option key={profile.id} value={profile.id}>{getProfileName(profile, profile.email || "Unknown")}{profile.isAdmin || profile.isDeveloper ? " (protected)" : ""}</option>)}
+                    </select>
+                    <button disabled={!adminAccountId || isManagingAccount} onClick={viewAdminAccount} type="button">{isManagingAccount ? "Loading..." : "View details"}</button>
+                    {adminAccountDetails ? <div className="admin-account-details">
+                      <dl>
+                        <div><dt>Account ID</dt><dd>{adminAccountDetails.uid}</dd></div>
+                        <div><dt>Email</dt><dd>{adminAccountDetails.email || "Not available"}</dd></div>
+                        <div><dt>Email verified</dt><dd>{adminAccountDetails.emailVerified ? "Yes" : "No"}</dd></div>
+                        <div><dt>Status</dt><dd>{adminAccountDetails.disabled ? "Banned" : "Active"}</dd></div>
+                        <div><dt>Providers</dt><dd>{adminAccountDetails.providers.join(", ") || "None"}</dd></div>
+                        <div><dt>Created</dt><dd>{adminAccountDetails.createdAt || "Not available"}</dd></div>
+                        <div><dt>Last sign-in</dt><dd>{adminAccountDetails.lastSignInAt || "Never"}</dd></div>
+                        <div><dt>Role</dt><dd>{adminAccountDetails.role}</dd></div>
+                        <div><dt>Bio</dt><dd>{adminAccountDetails.bio || "None"}</dd></div>
+                      </dl>
+                      {adminAccountDetails.protected ? <p className="settings-note">Protected admin and developer accounts cannot be changed here.</p> : <>
+                        <label htmlFor="admin-account-password">New password</label>
+                        <input id="admin-account-password" type="password" value={adminAccountPassword} onChange={(event) => setAdminAccountPassword(event.target.value)} minLength={6} maxLength={64} autoComplete="new-password" placeholder="At least 6 characters" />
+                        <div className="admin-account-actions">
+                          <button disabled={isManagingAccount || adminAccountPassword.length < 6} onClick={changeAdminAccountPassword} type="button">Change password</button>
+                          <button className="danger-button" disabled={isManagingAccount || adminAccountDetails.disabled} onClick={banAdminAccount} type="button">Ban account</button>
+                          <button className="danger-button" disabled={isManagingAccount} onClick={deleteAdminAccount} type="button"><Trash2 size={17} /><span>Delete account</span></button>
+                        </div>
+                      </>}
+                    </div> : null}
+                    {adminAccountMessage ? <div className="settings-note">{adminAccountMessage}</div> : null}
+                  </div>
                 </section>
               </>
             ) : null}
