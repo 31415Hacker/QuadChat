@@ -23,6 +23,19 @@ function formatAdminValue(value) {
   return String(value);
 }
 
+function formatAccountAge(createdAtMs) {
+  const createdAt = Number(createdAtMs);
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return "Not recorded";
+
+  const sevenths = Math.floor((Date.now() - createdAt) / (1000 / 7));
+  const totalSeconds = sevenths / 7;
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = (totalSeconds % 60).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
 export default function SettingsPage({
   onClose,
   settingsTab,
@@ -622,7 +635,7 @@ export default function SettingsPage({
                           <div><dt>Auth ID</dt><dd>{adminAccountDetails.uid}</dd></div>
                           <div><dt>Account created</dt><dd>{adminAccountDetails.createdAt || "Not recorded"}</dd></div>
                           <div><dt>Last token refresh</dt><dd>{adminAccountDetails.lastRefreshAt || "Not recorded"}</dd></div>
-                          <div><dt>Sign-up duration</dt><dd>Firebase Auth does not record this.</dd></div>
+                          <div><dt>Account age</dt><dd>{formatAccountAge(adminAccountDetails.createdAtMs)}</dd></div>
                           <div><dt>Sessions recorded</dt><dd>{adminAccountDetails.sessions?.length || 0}</dd></div>
                         </dl>
                         <details className="admin-account-sessions">

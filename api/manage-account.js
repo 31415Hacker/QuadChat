@@ -55,7 +55,26 @@ function serializeValue(value) {
   return value;
 }
 
-function accountDetails(account, profile) {
+async function getRawAuthMetadata(uid) {
+  const accessToken = await admin.app().options.credential.getAccessToken();
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${serviceAccount.project_id}/accounts:lookup`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ localId: [uid] })
+    }
+  );
+  if (!response.ok) return {};
+
+  const result = await response.json();
+  return result.users?.[0] || {};
+}
+
+function accountDetails(account, profile, rawMetadata) {
   return {
     uid: account.uid,
     email: account.email || "",
@@ -71,6 +90,7 @@ function accountDetails(account, profile) {
       displayName: provider.displayName || ""
     })),
     createdAt: account.metadata.creationTime || "",
+    createdAtMs: rawMetadata.createdAt || "",
     lastSignInAt: account.metadata.lastSignInTime || "",
     lastRefreshAt: account.metadata.lastRefreshTime || "",
     role: profile?.role || "member",
@@ -98,7 +118,8 @@ export default async function handler(req, res) {
       admin.firestore().doc(`users/${uid}`).get()
     ]);
     const profile = profileDoc.exists ? profileDoc.data() : null;
-    const details = accountDetails(account, profile);
+    const rawMetadata = await getRawAuthMetadata(uid).catch(() => ({}));
+    const details = accountDetails(account, profile, rawMetadata);
 
     if (action === "details") {
       const sessions = await admin.firestore().doc(`users/${uid}`).collection("sessions").get();
