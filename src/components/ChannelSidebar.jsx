@@ -10,8 +10,16 @@ export default function ChannelSidebar({
   sessionUserId,
   setShowNewDm
 }) {
+  const activeChannelLabel = CHANNELS.find((channel) => channel.id === activeChannel)?.label ||
+    getDmPartnerName(dmChannels.find((dm) => dm.id === activeChannel), profiles, sessionUserId) ||
+    "Channel";
+
   return (
     <aside className="channel-sidebar" aria-label="Channels">
+      <div className="channel-sidebar-current" title={activeChannelLabel}>
+        <span>Current channel</span>
+        <strong>{activeChannelLabel}</strong>
+      </div>
       <div
         className="channel-tabs"
         role="tablist"
