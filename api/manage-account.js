@@ -156,6 +156,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: "Account banned. It can no longer sign in or register again." });
     }
 
+    if (action === "unban") {
+      await admin.auth().updateUser(uid, { disabled: false });
+      await admin.firestore().doc(`users/${uid}`).set({
+        banned: false,
+        unbannedAt: admin.firestore.FieldValue.serverTimestamp(),
+        unbannedBy: caller.uid
+      }, { merge: true });
+      return res.status(200).json({ message: "Account unbanned. It can sign in again." });
+    }
+
     if (action === "delete") {
       await Promise.all([
         admin.auth().deleteUser(uid),

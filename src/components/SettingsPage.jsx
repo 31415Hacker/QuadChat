@@ -99,7 +99,8 @@ export default function SettingsPage({
   viewAdminAccount,
   changeAdminAccountPassword,
   deleteAdminAccount,
-  banAdminAccount
+  banAdminAccount,
+  unbanAdminAccount
 }) {
   return (
     <div className="settings-page">
@@ -663,7 +664,11 @@ export default function SettingsPage({
                           </div>
                         </div>
                         <div className="admin-account-actions">
-                          <button className="danger-button" disabled={isManagingAccount || adminAccountDetails.disabled} onClick={banAdminAccount} type="button">Ban account</button>
+                          {adminAccountDetails.disabled ? (
+                            <button disabled={isManagingAccount} onClick={unbanAdminAccount} type="button">Unban account</button>
+                          ) : (
+                            <button className="danger-button" disabled={isManagingAccount} onClick={banAdminAccount} type="button">Ban account</button>
+                          )}
                           <button className="danger-button" disabled={isManagingAccount} onClick={deleteAdminAccount} type="button"><Trash2 size={17} /><span>Delete account</span></button>
                         </div>
                       </>}

@@ -26,7 +26,7 @@ export default function UsersSidebar({
         <span>Users</span>
       </div>
       <div className="users-sidebar-list">
-        {Object.values(profiles).map((profile) => {
+        {Object.values(profiles).filter((profile) => !profile.banned).map((profile) => {
           const name = getProfileName(profile, profile.email || "");
           const muted = isProfileMuted(profile);
           const voiceMuted = isProfileVoiceMuted(profile);

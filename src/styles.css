@@ -897,15 +897,25 @@ button:disabled {
 .schedule-weekly,
 .schedule-overrides {
   display: grid;
-  gap: 7px;
+  gap: 10px;
 }
 
 .schedule-day,
 .schedule-override {
-  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   display: grid;
-  gap: 7px;
-  grid-template-columns: minmax(120px, 1fr) 112px auto 112px;
+  gap: 10px;
+  padding: 10px;
+}
+
+.schedule-day-header,
+.schedule-override-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
 }
 
 .schedule-day label {
@@ -916,9 +926,39 @@ button:disabled {
 }
 
 .schedule-day input[type="time"],
-.schedule-override input {
+.schedule-override input,
+.schedule-slot input {
   min-height: 34px;
   padding: 4px 7px;
+}
+
+.schedule-slot,
+.schedule-override-slots {
+  display: grid;
+  gap: 8px;
+}
+
+.schedule-slot {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+}
+
+.schedule-override-header > input[type="date"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.schedule-override-toggle {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+
+.schedule-offline {
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+  padding: 3px 0;
 }
 
 .schedule-separator {
@@ -929,7 +969,7 @@ button:disabled {
 
 .schedule-overrides {
   border-top: 1px solid var(--border-color);
-  padding-top: 12px;
+  padding-top: 16px;
 }
 
 .schedule-overrides-heading button,
@@ -952,6 +992,31 @@ button:disabled {
 .schedule-remove:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.12);
   transform: none;
+}
+
+@media (max-width: 560px) {
+  .schedule-editor-heading,
+  .schedule-overrides-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .schedule-day-header,
+  .schedule-override-header {
+    flex-wrap: wrap;
+  }
+
+  .schedule-day-header button {
+    margin-left: auto;
+  }
+
+  .schedule-slot {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  }
+
+  .schedule-override-header > input[type="date"] {
+    flex-basis: 100%;
+  }
 }
 
 .tag {

@@ -1946,6 +1946,22 @@ export default function App() {
     }
   }
 
+  async function unbanAdminAccount() {
+    const target = adminAccountDetails || profiles[adminAccountId];
+    const name = getProfileName(target, "this account");
+    const confirmed = await ask(`Unban ${name}? They will be able to sign in again.`, {
+      title: "Unban account?",
+      confirmLabel: "Unban account"
+    });
+    if (!confirmed) return;
+
+    const result = await manageAccount("unban");
+    if (result) {
+      setAdminAccountDetails((details) => details ? { ...details, disabled: false } : details);
+      setAdminAccountMessage(result.message);
+    }
+  }
+
   function copyMagicLink() {
     navigator.clipboard.writeText(magicLinkUrl);
   }
@@ -3330,6 +3346,7 @@ export default function App() {
            changeAdminAccountPassword={changeAdminAccountPassword}
            deleteAdminAccount={deleteAdminAccount}
            banAdminAccount={banAdminAccount}
+           unbanAdminAccount={unbanAdminAccount}
          />
       ) : null}
       <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />
