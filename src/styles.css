@@ -1043,14 +1043,20 @@ button:disabled {
 }
 
 .admin-account-manager {
-  align-items: flex-start;
+  display: grid;
+  gap: 16px;
 }
 
 .admin-account-controls {
   display: grid;
-  flex: 1;
   gap: 10px;
   min-width: 0;
+}
+
+.admin-account-picker {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .admin-account-controls select {
@@ -1064,21 +1070,29 @@ button:disabled {
 }
 
 .admin-account-details {
-  border-top: 1px solid var(--border-color);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   display: grid;
-  gap: 12px;
-  padding-top: 12px;
+  gap: 16px;
+  padding: 14px;
 }
 
 .admin-account-details dl {
   display: grid;
   gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
 }
 
 .admin-account-details dl div {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   display: grid;
   gap: 4px;
+  min-width: 0;
+  padding: 9px;
 }
 
 .admin-account-details dt {
@@ -1097,10 +1111,52 @@ button:disabled {
   margin: 0;
 }
 
+.admin-account-status {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.admin-account-status--banned {
+  color: var(--accent-red);
+}
+
+.admin-password-action {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-password-action > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .admin-account-actions {
+  border-top: 1px solid var(--border-color);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  padding-top: 14px;
+}
+
+@media (max-width: 560px) {
+  .admin-account-picker,
+  .admin-password-action > div {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-account-picker button,
+  .admin-password-action button {
+    width: 100%;
+  }
+
+  .admin-account-details dl {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-account-actions > button {
+    flex: 1;
+  }
 }
 
 .settings-photo-section {
