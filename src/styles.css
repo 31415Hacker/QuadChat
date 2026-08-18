@@ -240,6 +240,8 @@ input {
 .chat-panel {
   align-self: stretch;
   display: flex;
+  max-width: 1380px;
+  width: min(100%, 1380px);
 }
 
 .chat-main {
@@ -2642,7 +2644,7 @@ button.message-document-preview {
   border-left: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  flex: 0 0 240px;
+  flex: 0 0 300px;
   min-width: 0;
   overflow: hidden;
   position: relative;
