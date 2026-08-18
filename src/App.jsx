@@ -172,6 +172,8 @@ export default function App() {
     const stored = localStorage.getItem("quadchat-show-version");
     return stored === "true";
   });
+  const [showSidebarClock, setShowSidebarClock] = useState(() => localStorage.getItem("quadchat-show-sidebar-clock") !== "false");
+  const [showSidebarSeconds, setShowSidebarSeconds] = useState(() => localStorage.getItem("quadchat-show-sidebar-seconds") === "true");
   const [uiScale, setUiScale] = useState(() => {
     const stored = localStorage.getItem("quadchat-ui-scale");
     const value = Number(stored);
@@ -711,6 +713,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("quadchat-show-version", showVersionInHeader ? "true" : "false");
   }, [showVersionInHeader]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-show-sidebar-clock", showSidebarClock ? "true" : "false");
+  }, [showSidebarClock]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-show-sidebar-seconds", showSidebarSeconds ? "true" : "false");
+  }, [showSidebarSeconds]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -3231,6 +3241,8 @@ export default function App() {
                 groupCallParticipants={groupCallParticipants}
                 p2pGroupCallStatus={p2pGroupCallStatus}
                 p2pGroupCallParticipants={p2pGroupCallParticipants}
+                showSidebarClock={showSidebarClock}
+                showSidebarSeconds={showSidebarSeconds}
               />
             </div>
 
@@ -3318,8 +3330,12 @@ export default function App() {
           setReduceMotion={setReduceMotion}
           toggleNotifications={toggleNotifications}
           notificationsEnabled={notificationsEnabled}
-          showVersionInHeader={showVersionInHeader}
-          setShowVersionInHeader={setShowVersionInHeader}
+           showVersionInHeader={showVersionInHeader}
+           setShowVersionInHeader={setShowVersionInHeader}
+           showSidebarClock={showSidebarClock}
+           setShowSidebarClock={setShowSidebarClock}
+           showSidebarSeconds={showSidebarSeconds}
+           setShowSidebarSeconds={setShowSidebarSeconds}
           appSettings={appSettings}
           toggleSignup={toggleSignup}
           magicLinkEmail={magicLinkEmail}

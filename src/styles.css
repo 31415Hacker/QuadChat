@@ -2836,6 +2836,25 @@ button.message-document-preview {
   padding: 2px 0;
 }
 
+.sidebar-clock {
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.sidebar-clock strong {
+  color: var(--text-primary);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-clock span {
+  color: var(--text-tertiary);
+  font-size: 0.74rem;
+}
+
 .user-item {
   align-items: center;
   display: flex;

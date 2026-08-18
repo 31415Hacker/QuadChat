@@ -81,6 +81,10 @@ export default function SettingsPage({
   notificationsEnabled,
   showVersionInHeader,
   setShowVersionInHeader,
+  showSidebarClock,
+  setShowSidebarClock,
+  showSidebarSeconds,
+  setShowSidebarSeconds,
   appSettings,
   toggleSignup,
   magicLinkEmail,
@@ -522,6 +526,16 @@ export default function SettingsPage({
                     <span>{notificationsEnabled ? "Disable" : "Enable"}</span>
                   </button>
                 </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Sidebar date and time</h3>
+                    <p>Show your local weekday, date, and time beneath the user list.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input checked={showSidebarClock} onChange={() => setShowSidebarClock((value) => !value)} type="checkbox" />
+                    <span>{showSidebarClock ? "On" : "Off"}</span>
+                  </label>
+                </section>
               </>
             ) : null}
 
@@ -545,6 +559,16 @@ export default function SettingsPage({
                       type="checkbox"
                     />
                     <span>{showVersionInHeader ? "On" : "Off"}</span>
+                  </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Show seconds in sidebar clock</h3>
+                    <p>Add seconds to the local time shown in the users sidebar.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input checked={showSidebarSeconds} onChange={() => setShowSidebarSeconds((value) => !value)} type="checkbox" />
+                    <span>{showSidebarSeconds ? "On" : "Off"}</span>
                   </label>
                 </section>
               </>

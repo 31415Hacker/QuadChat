@@ -1,4 +1,5 @@
 import { MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import RelativeTime from "./RelativeTime.jsx";
 import { getInitials, getProfileName, isAdminEmail, isDeveloperEmail } from "../utils/names.js";
 import { getStatusColor, isProfileMuted, isProfileVoiceMuted } from "../utils/profile.js";
@@ -17,8 +18,29 @@ export default function UsersSidebar({
   groupCallStatus,
   groupCallParticipants,
   p2pGroupCallStatus,
-  p2pGroupCallParticipants
+  p2pGroupCallParticipants,
+  showSidebarClock,
+  showSidebarSeconds
 }) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!showSidebarClock) return undefined;
+    const interval = window.setInterval(() => setNow(new Date()), showSidebarSeconds ? 1000 : 30000);
+    return () => window.clearInterval(interval);
+  }, [showSidebarClock, showSidebarSeconds]);
+
+  const clockTime = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    ...(showSidebarSeconds ? { second: "2-digit" } : {})
+  }).format(now);
+  const clockDate = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric"
+  }).format(now);
+
   return (
     <aside className="users-sidebar">
       <div className="users-sidebar-header">
@@ -144,6 +166,12 @@ export default function UsersSidebar({
           );
         })}
       </div>
+      {showSidebarClock ? (
+        <div className="sidebar-clock" aria-label={`Local time: ${clockDate}, ${clockTime}`}>
+          <strong>{clockTime}</strong>
+          <span>{clockDate}</span>
+        </div>
+      ) : null}
       <div className="commit-fineprint">commit {__COMMIT_HASH__}</div>
     </aside>
   );
