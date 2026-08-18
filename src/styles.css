@@ -889,6 +889,7 @@ button:disabled {
   box-shadow: var(--shadow-modal);
   display: grid;
   gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
   max-height: min(88dvh, 850px);
   max-width: 720px;
   padding: 18px;
@@ -919,6 +920,8 @@ button:disabled {
 .schedule-modal-content {
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .schedule-modal .schedule-editor {
