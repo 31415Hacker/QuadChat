@@ -132,7 +132,6 @@ export default function AuthScreen({
                   maxLength={32}
                 />
                 <label className="signup-honeypot" aria-hidden="true" htmlFor="signup-website">Website<input id="signup-website" tabIndex="-1" autoComplete="off" value={signupHoneypot} onChange={(event) => setSignupHoneypot(event.target.value)} /></label>
-                <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} />
               </>
             ) : null}
             <label htmlFor="signin-email">
@@ -162,6 +161,7 @@ export default function AuthScreen({
               maxLength={64}
             />
             {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
+            {authView === "signup" ? <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} /> : null}
             <button
               type="submit"
               disabled={

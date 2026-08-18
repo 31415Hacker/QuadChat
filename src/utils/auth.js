@@ -46,11 +46,6 @@ export async function saveUserProfile(
     return;
   }
 
-  const displayName = normalizeDisplayName(
-    displayNameOverride || firebaseUser.displayName,
-    firebaseUser.email
-  );
-
   const profileRef = doc(db, "users", firebaseUser.uid);
   const profileSnapshot = await getDoc(profileRef);
   const userIsAdmin =
@@ -59,10 +54,17 @@ export async function saveUserProfile(
     isDeveloperEmail(firebaseUser.email) && firebaseUser.emailVerified;
   const profileData = {
     id: firebaseUser.uid,
-    displayName,
     email: firebaseUser.email || "",
     updatedAt: serverTimestamp()
   };
+
+  // Auth-state sync must not overwrite a name chosen in profile settings.
+  if (!profileSnapshot.exists() || displayNameOverride !== undefined) {
+    profileData.displayName = normalizeDisplayName(
+      displayNameOverride || firebaseUser.displayName,
+      firebaseUser.email
+    );
+  }
 
   if (options.forcePhoto || options.photoURL !== undefined) {
     profileData.photoURL = options.photoURL || "";
