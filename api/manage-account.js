@@ -56,10 +56,6 @@ function serializeValue(value) {
 }
 
 function accountDetails(account, profile) {
-  const profileCreatedAt = profile?.createdAt?.toDate?.() || null;
-  const accountCreatedAt = account.metadata.creationTime
-    ? new Date(account.metadata.creationTime)
-    : null;
   return {
     uid: account.uid,
     email: account.email || "",
@@ -79,11 +75,6 @@ function accountDetails(account, profile) {
     lastRefreshAt: account.metadata.lastRefreshTime || "",
     role: profile?.role || "member",
     bio: profile?.bio || "",
-    profileCreatedAt: profileCreatedAt?.toISOString() || "",
-    profileUpdatedAt: profile?.updatedAt?.toDate?.().toISOString?.() || "",
-    signupCompletionMs: profileCreatedAt && accountCreatedAt
-      ? Math.max(0, profileCreatedAt.getTime() - accountCreatedAt.getTime())
-      : null,
     authClaims: serializeValue(account.customClaims || {}),
     profile: serializeValue(profile || {}),
     protected: isProtectedAccount(account, profile)

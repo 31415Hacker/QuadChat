@@ -23,12 +23,6 @@ function formatAdminValue(value) {
   return String(value);
 }
 
-function formatDuration(milliseconds) {
-  if (milliseconds === null || milliseconds === undefined) return "Not recorded";
-  if (milliseconds < 1000) return `${milliseconds} ms`;
-  return `${(milliseconds / 1000).toFixed(1)} seconds`;
-}
-
 export default function SettingsPage({
   onClose,
   settingsTab,
@@ -626,10 +620,9 @@ export default function SettingsPage({
                         <summary>Advanced details</summary>
                         <dl>
                           <div><dt>Auth ID</dt><dd>{adminAccountDetails.uid}</dd></div>
-                          <div><dt>Profile created</dt><dd>{adminAccountDetails.profileCreatedAt || "Not recorded"}</dd></div>
-                          <div><dt>Profile updated</dt><dd>{adminAccountDetails.profileUpdatedAt || "Not recorded"}</dd></div>
+                          <div><dt>Account created</dt><dd>{adminAccountDetails.createdAt || "Not recorded"}</dd></div>
                           <div><dt>Last token refresh</dt><dd>{adminAccountDetails.lastRefreshAt || "Not recorded"}</dd></div>
-                          <div><dt>Sign-up completion</dt><dd>{formatDuration(adminAccountDetails.signupCompletionMs)}</dd></div>
+                          <div><dt>Sign-up duration</dt><dd>Firebase Auth does not record this.</dd></div>
                           <div><dt>Sessions recorded</dt><dd>{adminAccountDetails.sessions?.length || 0}</dd></div>
                         </dl>
                         <details className="admin-account-sessions">
