@@ -17,6 +17,18 @@ import {
 import { getInitials, getProfileName } from "../utils/names.js";
 import ScheduleEditor from "./ScheduleEditor.jsx";
 
+function formatAdminValue(value) {
+  if (value === null || value === undefined || value === "") return "Not available";
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
+}
+
+function formatDuration(milliseconds) {
+  if (milliseconds === null || milliseconds === undefined) return "Not recorded";
+  if (milliseconds < 1000) return `${milliseconds} ms`;
+  return `${(milliseconds / 1000).toFixed(1)} seconds`;
+}
+
 export default function SettingsPage({
   onClose,
   settingsTab,
@@ -610,6 +622,32 @@ export default function SettingsPage({
                         <div><dt>Role</dt><dd>{adminAccountDetails.role}</dd></div>
                         <div><dt>Bio</dt><dd>{adminAccountDetails.bio || "None"}</dd></div>
                       </dl>
+                      <details className="admin-account-advanced">
+                        <summary>Advanced details</summary>
+                        <dl>
+                          <div><dt>Auth ID</dt><dd>{adminAccountDetails.uid}</dd></div>
+                          <div><dt>Profile created</dt><dd>{adminAccountDetails.profileCreatedAt || "Not recorded"}</dd></div>
+                          <div><dt>Profile updated</dt><dd>{adminAccountDetails.profileUpdatedAt || "Not recorded"}</dd></div>
+                          <div><dt>Last token refresh</dt><dd>{adminAccountDetails.lastRefreshAt || "Not recorded"}</dd></div>
+                          <div><dt>Sign-up completion</dt><dd>{formatDuration(adminAccountDetails.signupCompletionMs)}</dd></div>
+                          <div><dt>Sessions recorded</dt><dd>{adminAccountDetails.sessions?.length || 0}</dd></div>
+                        </dl>
+                        <details className="admin-account-sessions">
+                          <summary>Sessions ({adminAccountDetails.sessions?.length || 0})</summary>
+                          {adminAccountDetails.sessions?.length ? <div className="admin-session-list">
+                            {adminAccountDetails.sessions.map((session) => <article key={session.id}>
+                              <strong>{session.start || "Start not recorded"}</strong>
+                              <span>Ended: {session.end || "Active or not recorded"}</span>
+                              <span>Date: {session.date || "Not recorded"}</span>
+                              <code>{session.id}</code>
+                            </article>)}
+                          </div> : <p>No sessions have been recorded.</p>}
+                        </details>
+                        <details className="admin-account-raw-data">
+                          <summary>Raw account and profile data</summary>
+                          <pre>{formatAdminValue({ authClaims: adminAccountDetails.authClaims, profile: adminAccountDetails.profile, providerDetails: adminAccountDetails.providerDetails })}</pre>
+                        </details>
+                      </details>
                       {adminAccountDetails.protected ? <p className="settings-note">Protected admin and developer accounts cannot be changed here.</p> : <>
                         <div className="admin-password-action">
                           <label htmlFor="admin-account-password">Set a new password</label>

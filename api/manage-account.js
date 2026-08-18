@@ -46,7 +46,20 @@ function isProtectedAccount(account, profile) {
     profile?.isDeveloper === true;
 }
 
+function serializeValue(value) {
+  if (value?.toDate) return value.toDate().toISOString();
+  if (Array.isArray(value)) return value.map(serializeValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, serializeValue(entry)]));
+  }
+  return value;
+}
+
 function accountDetails(account, profile) {
+  const profileCreatedAt = profile?.createdAt?.toDate?.() || null;
+  const accountCreatedAt = account.metadata.creationTime
+    ? new Date(account.metadata.creationTime)
+    : null;
   return {
     uid: account.uid,
     email: account.email || "",
@@ -55,12 +68,24 @@ function accountDetails(account, profile) {
     emailVerified: account.emailVerified,
     disabled: account.disabled,
     providers: account.providerData.map((provider) => provider.providerId),
+    providerDetails: account.providerData.map((provider) => ({
+      providerId: provider.providerId,
+      uid: provider.uid || "",
+      email: provider.email || "",
+      displayName: provider.displayName || ""
+    })),
     createdAt: account.metadata.creationTime || "",
     lastSignInAt: account.metadata.lastSignInTime || "",
     lastRefreshAt: account.metadata.lastRefreshTime || "",
     role: profile?.role || "member",
     bio: profile?.bio || "",
+    profileCreatedAt: profileCreatedAt?.toISOString() || "",
     profileUpdatedAt: profile?.updatedAt?.toDate?.().toISOString?.() || "",
+    signupCompletionMs: profileCreatedAt && accountCreatedAt
+      ? Math.max(0, profileCreatedAt.getTime() - accountCreatedAt.getTime())
+      : null,
+    authClaims: serializeValue(account.customClaims || {}),
+    profile: serializeValue(profile || {}),
     protected: isProtectedAccount(account, profile)
   };
 }
@@ -85,7 +110,15 @@ export default async function handler(req, res) {
     const details = accountDetails(account, profile);
 
     if (action === "details") {
-      return res.status(200).json({ account: details });
+      const sessions = await admin.firestore().doc(`users/${uid}`).collection("sessions").get();
+      return res.status(200).json({
+        account: {
+          ...details,
+          sessions: sessions.docs
+            .map((session) => ({ id: session.id, ...serializeValue(session.data()) }))
+            .sort((a, b) => String(b.start || "").localeCompare(String(a.start || "")))
+        }
+      });
     }
 
     if (uid === caller.uid || details.protected) {

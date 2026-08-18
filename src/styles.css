@@ -1120,6 +1120,67 @@ button:disabled {
   color: var(--accent-red);
 }
 
+.admin-account-advanced,
+.admin-account-sessions,
+.admin-account-raw-data {
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.admin-account-advanced summary,
+.admin-account-sessions summary,
+.admin-account-raw-data summary {
+  color: var(--text-accent);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.admin-account-advanced > dl {
+  margin-top: 12px;
+}
+
+.admin-account-sessions,
+.admin-account-raw-data {
+  margin-top: 12px;
+}
+
+.admin-session-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.admin-session-list article {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+}
+
+.admin-session-list span,
+.admin-session-list code {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-account-raw-data pre {
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  margin: 10px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
 .admin-password-action {
   display: grid;
   gap: 7px;

@@ -64,6 +64,10 @@ export async function saveUserProfile(
     updatedAt: serverTimestamp()
   };
 
+  if (!profileSnapshot.exists()) {
+    profileData.createdAt = serverTimestamp();
+  }
+
   if (options.forcePhoto || options.photoURL !== undefined) {
     profileData.photoURL = options.photoURL || "";
   } else if (!profileSnapshot.exists()) {
