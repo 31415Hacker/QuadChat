@@ -172,7 +172,11 @@ service cloud.firestore {
           signupEnabled() &&
           userId == request.auth.uid &&
           (isAdminEmail() ||
-            !request.resource.data.keys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "voiceMutedTemporary", "voiceMutedTemporaryUntil", "voiceMutedTemporaryBy", "voiceMutedTemporaryUpdatedAt"]))
+            (
+              !request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "voiceMutedTemporary", "voiceMutedTemporaryUntil", "voiceMutedTemporaryBy", "voiceMutedTemporaryUpdatedAt"])
+              && (!("isAdmin" in request.resource.data) || request.resource.data.isAdmin == false)
+              && (!("isDeveloper" in request.resource.data) || request.resource.data.isDeveloper == false)
+            ))
         )
       );
 

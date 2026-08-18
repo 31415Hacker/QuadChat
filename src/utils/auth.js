@@ -72,14 +72,14 @@ export async function saveUserProfile(
     profileData.photoURL = firebaseUser.photoURL || "";
   }
 
-  if (!profileSnapshot.exists() || userIsAdmin || userIsDeveloper) {
+  if (userIsAdmin || userIsDeveloper) {
     profileData.isAdmin = userIsAdmin;
     profileData.isDeveloper = userIsDeveloper;
     profileData.role = userIsDeveloper
       ? "developer"
-      : userIsAdmin
-        ? "admin"
-        : "member";
+      : "admin";
+  } else if (!profileSnapshot.exists()) {
+    profileData.role = "member";
   }
 
   await setDoc(profileRef, profileData, { merge: true });
