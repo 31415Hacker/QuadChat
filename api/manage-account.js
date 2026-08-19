@@ -95,6 +95,7 @@ function accountDetails(account, profile, rawMetadata) {
     lastRefreshAt: account.metadata.lastRefreshTime || "",
     role: profile?.role || "member",
     bio: profile?.bio || "",
+    status: serializeValue(profile?.status || {}),
     authClaims: serializeValue(account.customClaims || {}),
     profile: serializeValue(profile || {}),
     protected: isProtectedAccount(account, profile)

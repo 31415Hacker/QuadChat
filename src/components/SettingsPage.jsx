@@ -191,7 +191,7 @@ export default function SettingsPage({
                         : "Admin"}
             </h2>
           </div>
-          <form className="settings-form" onSubmit={settingsTab === "admin" ? (event) => event.preventDefault() : saveSettings}>
+          <form className={`settings-form${settingsTab === "admin" ? " settings-form--admin" : ""}`} onSubmit={settingsTab === "admin" ? (event) => event.preventDefault() : saveSettings}>
             {settingsTab === "account" ? (
               <>
                 <p className="settings-section-desc">
@@ -673,6 +673,7 @@ export default function SettingsPage({
                         <div><dt>Created</dt><dd>{adminAccountDetails.createdAt || "Not available"}</dd></div>
                         <div><dt>Last sign-in</dt><dd>{adminAccountDetails.lastSignInAt || "Never"}</dd></div>
                         <div><dt>Role</dt><dd>{adminAccountDetails.role}</dd></div>
+                        <div><dt>User status</dt><dd>{adminAccountDetails.status?.text || adminAccountDetails.status?.mode || "Active"}</dd></div>
                         <div><dt>Bio</dt><dd>{adminAccountDetails.bio || "None"}</dd></div>
                       </dl>
                       <details className="admin-account-advanced">

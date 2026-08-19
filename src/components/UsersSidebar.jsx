@@ -85,9 +85,6 @@ export default function UsersSidebar({
                    <span className={`user-role-marker user-role-marker--${roleMarker.toLowerCase()}`}>
                      {roleMarker}
                    </span>
-                   {profile.status?.text ? (
-                    <span className="user-status-text" title={profile.status.text}>{profile.status.text}</span>
-                  ) : null}
                   {isInGroupCall ? (
                     <span className="group-call-indicator" title="In group call">
                       <Users size={11} />

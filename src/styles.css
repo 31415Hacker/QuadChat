@@ -826,6 +826,11 @@ button:disabled {
   max-width: 540px;
 }
 
+.settings-form--admin {
+  max-width: none;
+  width: 100%;
+}
+
 .settings-form label {
   align-items: center;
   color: var(--text-primary);

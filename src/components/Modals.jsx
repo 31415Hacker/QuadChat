@@ -204,9 +204,9 @@ export function AnalyticsModal({
             <X size={18} />
           </button>
         </div>
-        {analyticsTarget.status?.mode === "busy" || analyticsTarget.status?.mode === "away" ? (
+        {analyticsTarget.status?.text || analyticsTarget.status?.mode === "busy" || analyticsTarget.status?.mode === "away" ? (
           <div className="analytics-status-note">
-            {analyticsTarget.status.mode === "busy" ? "⚠️" : "🟡"} Currently <strong>{getStatusLabel(analyticsTarget.status.mode)}</strong>
+            {analyticsTarget.status?.mode === "busy" ? "⚠️" : analyticsTarget.status?.mode === "away" ? "🟡" : "🟢"} Currently <strong>{getStatusLabel(analyticsTarget.status?.mode || "active")}</strong>
             {analyticsTarget.status.text ? ` — ${analyticsTarget.status.text}` : ""}
           </div>
         ) : null}
