@@ -38,6 +38,15 @@ function formatAccountAge(createdAtMs) {
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 }
 
+function formatAdminDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || "Not recorded";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium"
+  }).format(date);
+}
+
 export default function SettingsPage({
   onClose,
   settingsTab,
@@ -679,10 +688,10 @@ export default function SettingsPage({
                           <summary>Sessions ({adminAccountDetails.sessions?.length || 0})</summary>
                           {adminAccountDetails.sessions?.length ? <div className="admin-session-list">
                             {adminAccountDetails.sessions.map((session) => <article key={session.id}>
-                              <strong>{session.start || "Start not recorded"}</strong>
-                              <span>Ended: {session.end || "Active or not recorded"}</span>
+                              <strong>Started: {formatAdminDate(session.start)}</strong>
+                              <span>Ended: {session.end ? formatAdminDate(session.end) : "Active or not recorded"}</span>
                               <span>Date: {session.date || "Not recorded"}</span>
-                              <code>{session.id}</code>
+                              <code>Session ID: {session.id}</code>
                             </article>)}
                           </div> : <p>No sessions have been recorded.</p>}
                         </details>
