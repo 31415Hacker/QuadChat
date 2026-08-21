@@ -98,6 +98,7 @@ import ChannelSidebar from "./components/ChannelSidebar.jsx";
 import ChatHeader from "./components/ChatHeader.jsx";
 import MessageList from "./components/MessageList.jsx";
 import FilePreviewModal from "./components/FilePreviewModal.jsx";
+import AvatarPreviewModal from "./components/AvatarPreviewModal.jsx";
 import UsersSidebar from "./components/UsersSidebar.jsx";
 import Composer from "./components/Composer.jsx";
 import SettingsPage from "./components/SettingsPage.jsx";
@@ -217,6 +218,7 @@ export default function App() {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [filePreview, setFilePreview] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
   const [typingUsers, setTypingUsers] = useState({});
   const typingTimeoutRef = useRef(null);
@@ -3243,6 +3245,7 @@ export default function App() {
                 p2pGroupCallParticipants={p2pGroupCallParticipants}
                 showSidebarClock={showSidebarClock}
                 showSidebarSeconds={showSidebarSeconds}
+                previewAvatar={setAvatarPreview}
               />
             </div>
 
@@ -3366,6 +3369,7 @@ export default function App() {
          />
       ) : null}
       <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />
+      <AvatarPreviewModal profile={avatarPreview} onClose={() => setAvatarPreview(null)} />
       <ConfirmDialog
         state={confirmState}
         onConfirm={() => closeConfirm(true)}

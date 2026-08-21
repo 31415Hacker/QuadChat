@@ -20,7 +20,8 @@ export default function UsersSidebar({
   p2pGroupCallStatus,
   p2pGroupCallParticipants,
   showSidebarClock,
-  showSidebarSeconds
+  showSidebarSeconds,
+  previewAvatar
 }) {
   const [now, setNow] = useState(() => new Date());
 
@@ -67,13 +68,20 @@ export default function UsersSidebar({
               className={`user-item ${userActive ? "online" : ""}`}
               key={profile.id}
             >
-              <span className="user-avatar" title={name}>
-                {profile.photoURL ? (
+              {profile.photoURL ? (
+                <button
+                  className="user-avatar user-avatar--clickable"
+                  type="button"
+                  onClick={() => previewAvatar({ photoURL: profile.photoURL, name })}
+                  title={`View ${name}'s profile picture`}
+                >
                   <img src={profile.photoURL} alt="" />
-                ) : (
+                </button>
+              ) : (
+                <span className="user-avatar" title={name}>
                   <span>{getInitials(name)}</span>
-                )}
-              </span>
+                </span>
+              )}
               <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
               <div className="user-info">
                 <button
