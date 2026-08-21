@@ -2911,6 +2911,7 @@ button.message-document-preview {
 }
 
 button.user-avatar {
+  min-height: 0;
   padding: 0;
 }
 
@@ -2919,7 +2920,9 @@ button.user-avatar {
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.user-avatar--clickable:hover {
+button.user-avatar--clickable:hover:not(:disabled),
+button.user-avatar--clickable:focus-visible {
+  background: var(--bg-hover);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 45%, transparent);
   transform: scale(1.08);
 }
