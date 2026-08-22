@@ -2782,13 +2782,27 @@ export default function App() {
         return;
       }
 
-      if (cleanMessage) {
+      const uploadedAttachments = [];
+      for (const pendingFile of pendingFiles) {
+        const url = await uploadToCloudinary(pendingFile.file);
+        uploadedAttachments.push({
+          url,
+          name: pendingFile.file.name,
+          type: pendingFile.file.type || "application/octet-stream"
+        });
+      }
+
+      if (cleanMessage || uploadedAttachments.length > 0) {
         const messageText = commandResult?.metadata?.notificationText || cleanMessage;
+        const attachmentCount = uploadedAttachments.length;
         if (isDmChannelId(activeChannel)) {
-          await updateDmMetadata(messageText);
+          await updateDmMetadata(
+            messageText ||
+              `📎 ${uploadedAttachments[0].name}${attachmentCount > 1 ? ` +${attachmentCount - 1} more` : ""}`
+          );
         }
         await addMessageWithOptimisticState({
-          text: messageText,
+          ...(messageText ? { text: messageText } : {}),
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
             ? {
@@ -2800,22 +2814,8 @@ export default function App() {
                 }
               }
             : {}),
+          ...(attachmentCount > 0 ? { attachments: uploadedAttachments } : {}),
           userId: sessionUserId
-        });
-      }
-
-      for (const pendingFile of pendingFiles) {
-        const url = await uploadToCloudinary(pendingFile.file);
-        if (isDmChannelId(activeChannel)) {
-          await updateDmMetadata(`📎 ${pendingFile.file.name}`);
-        }
-        await addDoc(messagesRef(activeChannel), {
-          text: url,
-          isFile: true,
-          fileName: pendingFile.file.name,
-          fileType: pendingFile.file.type || "application/octet-stream",
-          userId: sessionUserId,
-          createdAt: serverTimestamp()
         });
       }
 

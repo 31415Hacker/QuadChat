@@ -26,7 +26,11 @@ export function getInitials(name) {
 }
 
 export function normalizeName(value) {
-  return (value || "").trim().replace(/^@/, "").toLowerCase();
+  return (value || "")
+    .trim()
+    .replace(/^@/, "")
+    .replace(/[.,!?;:)\]}"'…]+$/, "")
+    .toLowerCase();
 }
 
 export function getProfileName(profile, fallback = "Anonymous") {
