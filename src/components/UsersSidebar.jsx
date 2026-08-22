@@ -27,8 +27,21 @@ export default function UsersSidebar({
 
   useEffect(() => {
     if (!showSidebarClock) return undefined;
-    const interval = window.setInterval(() => setNow(new Date()), showSidebarSeconds ? 1000 : 30000);
-    return () => window.clearInterval(interval);
+    if (showSidebarSeconds) {
+      const interval = window.setInterval(() => setNow(new Date()), 1000);
+      return () => window.clearInterval(interval);
+    }
+    setNow(new Date());
+    let timeout;
+    const scheduleNextMinuteTick = () => {
+      const delay = 60000 - (Date.now() % 60000) + 50;
+      timeout = window.setTimeout(() => {
+        setNow(new Date());
+        scheduleNextMinuteTick();
+      }, delay);
+    };
+    scheduleNextMinuteTick();
+    return () => window.clearTimeout(timeout);
   }, [showSidebarClock, showSidebarSeconds]);
 
   const clockTime = new Intl.DateTimeFormat(undefined, {
