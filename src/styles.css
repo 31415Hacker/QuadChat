@@ -1861,6 +1861,10 @@ button:disabled {
   margin-top: 9px;
 }
 
+.message-attachments + p {
+  margin-top: 7px;
+}
+
 .message-image-link {
   border-radius: 8px;
   display: block;

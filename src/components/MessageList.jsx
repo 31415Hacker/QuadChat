@@ -186,6 +186,54 @@ const MessageItem = memo(function MessageItem({
           <span>{item.replyTo.text || "Message unavailable"}</span>
         </div>
       ) : null}
+      {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
+        <div className="message-attachments">
+          {item.attachments.map((attachment) =>
+            attachment && getFileKind(attachment) === "image" ? (
+              <button
+                className="message-image-link message-preview-button"
+                key={attachment.path || attachment.url}
+                onClick={() => onPreviewFile(attachment)}
+                type="button"
+              >
+                <img src={getImagePreviewUrl(attachment.url)} alt={attachment.name} />
+              </button>
+            ) : attachment && typeof attachment.type === "string" && attachment.type.startsWith("video/") ? (
+              <video
+                controls
+                className="message-video"
+                key={attachment.path || attachment.url}
+              >
+                <source
+                  src={safeUrl(attachment.url)}
+                  type={attachment.type}
+                />
+              </video>
+            ) : attachment && (getFileKind(attachment) === "text" || getFileKind(attachment) === "document") ? (
+              <button
+                className={`message-file-link${getFileKind(attachment) === "document" ? " message-document-preview" : ""}`}
+                key={attachment?.path || attachment?.url}
+                onClick={() => onPreviewFile({ ...attachment, url: attachment.viewUrl || attachment.url })}
+                type="button"
+              >
+                <FileText size={18} />
+                <span>{attachment?.name}</span>
+              </button>
+            ) : (
+              <a
+                className="message-file-link"
+                href={safeUrl(attachment?.viewUrl || attachment?.url)}
+                key={attachment?.path || attachment?.url}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <FileText size={18} />
+                <span>{attachment?.name}</span>
+              </a>
+            )
+          )}
+        </div>
+      ) : null}
       {item.isFile ? (
         typeof item.fileType === "string" && item.fileType.startsWith("video/") ? (
           <video
@@ -246,54 +294,6 @@ const MessageItem = memo(function MessageItem({
         <p>
           {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId, knownNames)}
         </p>
-      ) : null}
-      {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
-        <div className="message-attachments">
-          {item.attachments.map((attachment) =>
-            attachment && getFileKind(attachment) === "image" ? (
-              <button
-                className="message-image-link message-preview-button"
-                key={attachment.path || attachment.url}
-                onClick={() => onPreviewFile(attachment)}
-                type="button"
-              >
-                <img src={getImagePreviewUrl(attachment.url)} alt={attachment.name} />
-              </button>
-            ) : attachment && typeof attachment.type === "string" && attachment.type.startsWith("video/") ? (
-              <video
-                controls
-                className="message-video"
-                key={attachment.path || attachment.url}
-              >
-                <source
-                  src={safeUrl(attachment.url)}
-                  type={attachment.type}
-                />
-              </video>
-            ) : attachment && (getFileKind(attachment) === "text" || getFileKind(attachment) === "document") ? (
-              <button
-                className={`message-file-link${getFileKind(attachment) === "document" ? " message-document-preview" : ""}`}
-                key={attachment?.path || attachment?.url}
-                onClick={() => onPreviewFile({ ...attachment, url: attachment.viewUrl || attachment.url })}
-                type="button"
-              >
-                <FileText size={18} />
-                <span>{attachment?.name}</span>
-              </button>
-            ) : (
-              <a
-                className="message-file-link"
-                href={safeUrl(attachment?.viewUrl || attachment?.url)}
-                key={attachment?.path || attachment?.url}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <FileText size={18} />
-                <span>{attachment?.name}</span>
-              </a>
-            )
-          )}
-        </div>
       ) : null}
       {reactionEntries.length > 0 ? (
         <div className="message-reactions">
