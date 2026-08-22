@@ -1,5 +1,6 @@
+import { Fragment } from "react";
 import { VIDEO_EXT_REGEX } from "../constants.js";
-import { getProfileName, normalizeName } from "./names.js";
+import { getProfileName, normalizeName, splitTrailingPunctuation } from "./names.js";
 
 export function safeUrl(str) {
   if (typeof str !== "string" || !str.trim()) return "";
@@ -52,12 +53,17 @@ export function renderMessageText(
       const isMention =
         mention === "everyone" || mentionNames.has(mention);
 
-      return isMention ? (
-        <span className="mention" key={`${part}-${index}`}>
-          {part}
-        </span>
-      ) : (
-        part
+      if (!isMention) {
+        return part;
+      }
+
+      const [mentionText, trailing] = splitTrailingPunctuation(part);
+
+      return (
+        <Fragment key={`${part}-${index}`}>
+          <span className="mention">{mentionText}</span>
+          {trailing}
+        </Fragment>
       );
     }
 

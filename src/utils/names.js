@@ -25,12 +25,20 @@ export function getInitials(name) {
     .join("") || "?";
 }
 
+const TRAILING_PUNCTUATION_REGEX = /[.,!?;:)\]}"'…]+$/;
+
 export function normalizeName(value) {
   return (value || "")
     .trim()
     .replace(/^@/, "")
-    .replace(/[.,!?;:)\]}"'…]+$/, "")
+    .replace(TRAILING_PUNCTUATION_REGEX, "")
     .toLowerCase();
+}
+
+export function splitTrailingPunctuation(value) {
+  const raw = String(value || "");
+  const match = raw.match(TRAILING_PUNCTUATION_REGEX);
+  return match ? [raw.slice(0, match.index), match[0]] : [raw, ""];
 }
 
 export function getProfileName(profile, fallback = "Anonymous") {
