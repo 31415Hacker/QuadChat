@@ -89,18 +89,18 @@ export default function Composer({
   const mentionCandidates = useMemo(() => {
     if (!mention) return [];
     const seen = new Set();
-    const names = [];
+    const candidates = [];
     for (const profile of Object.values(profiles)) {
       const name = getProfileName(profile, "").trim();
       if (!name) continue;
       const lower = name.toLowerCase();
       if (seen.has(lower)) continue;
       seen.add(lower);
-      names.push(name);
+      candidates.push({ name, photoURL: profile?.photoURL || "" });
     }
     const query = mention.query.toLowerCase();
-    return names
-      .filter((name) => name.toLowerCase().startsWith(query))
+    return candidates
+      .filter((candidate) => candidate.name.toLowerCase().startsWith(query))
       .slice(0, 8);
   }, [mention, profiles]);
 
@@ -177,7 +177,7 @@ export default function Composer({
       }
       if (event.key === "Tab") {
         event.preventDefault();
-        insertMention(mentionCandidates[activeMentionIndex]);
+        insertMention(mentionCandidates[activeMentionIndex].name);
         return;
       }
       if (event.key === "Escape") {
@@ -187,7 +187,7 @@ export default function Composer({
       }
       if (event.key === "Enter" && !event.shiftKey && !composing) {
         event.preventDefault();
-        insertMention(mentionCandidates[activeMentionIndex]);
+        insertMention(mentionCandidates[activeMentionIndex].name);
         return;
       }
     }
@@ -446,23 +446,27 @@ export default function Composer({
             />
             {mentionCandidates.length > 0 ? (
               <div className="mention-suggestions" role="listbox">
-                {mentionCandidates.map((name, index) => (
+                {mentionCandidates.map((candidate, index) => (
                   <button
-                    key={name}
+                    key={candidate.name}
                     type="button"
                     className={`mention-suggestion${index === activeMentionIndex ? " mention-suggestion--active" : ""}`}
                     role="option"
                     aria-selected={index === activeMentionIndex}
                     onMouseDown={(event) => {
                       event.preventDefault();
-                      insertMention(name);
+                      insertMention(candidate.name);
                     }}
                     onMouseEnter={() => setMentionIndex(index)}
                   >
                     <span className="mention-suggestion-avatar">
-                      {getInitials(name)}
+                      {candidate.photoURL ? (
+                        <img src={candidate.photoURL} alt="" />
+                      ) : (
+                        getInitials(candidate.name)
+                      )}
                     </span>
-                    <span className="mention-suggestion-name">{name}</span>
+                    <span className="mention-suggestion-name">{candidate.name}</span>
                   </button>
                 ))}
               </div>
