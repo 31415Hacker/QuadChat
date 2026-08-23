@@ -663,6 +663,12 @@ export default function SettingsPage({
                       </select>
                       <button disabled={!adminAccountId || isManagingAccount} onClick={viewAdminAccount} type="button">{isManagingAccount ? "Loading..." : "View details"}</button>
                     </div>
+                    {adminAccountId && !adminAccountDetails && !(profiles[adminAccountId]?.isAdmin || profiles[adminAccountId]?.isDeveloper) ? (
+                      <div className="admin-account-actions">
+                        <p className="settings-note">No account info loaded — you can still permanently delete this member.</p>
+                        <button className="danger-button" disabled={isManagingAccount} onClick={deleteAdminAccount} type="button"><Trash2 size={17} /><span>Delete account</span></button>
+                      </div>
+                    ) : null}
                     {adminAccountDetails ? <div className="admin-account-details">
                       <dl>
                         <div><dt>Account ID</dt><dd>{adminAccountDetails.uid}</dd></div>

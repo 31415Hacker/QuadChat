@@ -40,8 +40,8 @@ async function requireAdmin(req) {
 }
 
 function isProtectedAccount(account, profile) {
-  return account.customClaims?.admin === true ||
-    account.customClaims?.developer === true ||
+  return account?.customClaims?.admin === true ||
+    account?.customClaims?.developer === true ||
     profile?.isAdmin === true ||
     profile?.isDeveloper === true;
 }
@@ -76,27 +76,27 @@ async function getRawAuthMetadata(uid) {
 
 function accountDetails(account, profile, rawMetadata) {
   return {
-    uid: account.uid,
-    email: account.email || "",
-    displayName: account.displayName || profile?.displayName || "",
-    photoURL: account.photoURL || profile?.photoURL || "",
-    emailVerified: account.emailVerified,
-    disabled: account.disabled,
-    providers: account.providerData.map((provider) => provider.providerId),
-    providerDetails: account.providerData.map((provider) => ({
+    uid: account?.uid || "",
+    email: account?.email || profile?.email || "",
+    displayName: account?.displayName || profile?.displayName || "",
+    photoURL: account?.photoURL || profile?.photoURL || "",
+    emailVerified: account?.emailVerified ?? false,
+    disabled: account?.disabled ?? false,
+    providers: (account?.providerData || []).map((provider) => provider.providerId),
+    providerDetails: (account?.providerData || []).map((provider) => ({
       providerId: provider.providerId,
       uid: provider.uid || "",
       email: provider.email || "",
       displayName: provider.displayName || ""
     })),
-    createdAt: account.metadata.creationTime || "",
-    createdAtMs: rawMetadata.createdAt || "",
-    lastSignInAt: account.metadata.lastSignInTime || "",
-    lastRefreshAt: account.metadata.lastRefreshTime || "",
+    createdAt: account?.metadata?.creationTime || "",
+    createdAtMs: rawMetadata?.createdAt || "",
+    lastSignInAt: account?.metadata?.lastSignInTime || "",
+    lastRefreshAt: account?.metadata?.lastRefreshTime || "",
     role: profile?.role || "member",
     bio: profile?.bio || "",
     status: serializeValue(profile?.status || {}),
-    authClaims: serializeValue(account.customClaims || {}),
+    authClaims: serializeValue(account?.customClaims || {}),
     profile: serializeValue(profile || {}),
     protected: isProtectedAccount(account, profile)
   };
@@ -115,7 +115,10 @@ export default async function handler(req, res) {
     }
 
     const [account, profileDoc] = await Promise.all([
-      admin.auth().getUser(uid),
+      admin.auth().getUser(uid).catch((error) => {
+        if (error.code === "auth/user-not-found") return null;
+        throw error;
+      }),
       admin.firestore().doc(`users/${uid}`).get()
     ]);
     const profile = profileDoc.exists ? profileDoc.data() : null;
@@ -127,11 +130,16 @@ export default async function handler(req, res) {
       return res.status(200).json({
         account: {
           ...details,
+          hasAuthUser: Boolean(account),
           sessions: sessions.docs
             .map((session) => ({ id: session.id, ...serializeValue(session.data()) }))
             .sort((a, b) => String(b.start || "").localeCompare(String(a.start || "")))
         }
       });
+    }
+
+    if (!account && action !== "delete") {
+      return res.status(404).json({ error: "No sign-in account exists for this user." });
     }
 
     if (uid === caller.uid || details.protected) {
@@ -169,10 +177,14 @@ export default async function handler(req, res) {
 
     if (action === "delete") {
       await Promise.all([
-        admin.auth().deleteUser(uid),
+        account ? admin.auth().deleteUser(uid) : Promise.resolve(),
         admin.firestore().doc(`users/${uid}`).delete()
       ]);
-      return res.status(200).json({ message: "Account deleted." });
+      return res.status(200).json({
+        message: account
+          ? "Account deleted."
+          : "Profile deleted. No sign-in account existed for this user."
+      });
     }
 
     return res.status(400).json({ error: "Unknown account action." });
