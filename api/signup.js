@@ -12,6 +12,11 @@ export default async function handler(req, res) {
   if (!process.env.TURNSTILE_SECRET_KEY) return res.status(500).json({ error: "CAPTCHA is not configured." });
 
   try {
+    const settingsSnapshot = await admin.firestore().doc("settings/app").get();
+    if (settingsSnapshot.exists && settingsSnapshot.data().signupEnabled === false) {
+      return res.status(403).json({ error: "Signup is currently disabled." });
+    }
+
     const captcha = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },

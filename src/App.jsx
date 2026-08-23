@@ -251,6 +251,8 @@ export default function App() {
   const knownMessageIdsByChannelRef = useRef(new Map());
   const activeNameRef = useRef("");
   const profilesRef = useRef({});
+  const sawOwnProfileRef = useRef(false);
+  const ownProfileKickDeadlineRef = useRef(0);
   const activeChannelRef = useRef(null);
   const searchPanelRef = useRef(null);
   const composerInputRef = useRef(null);
@@ -803,6 +805,35 @@ export default function App() {
 
     return unsubscribe;
   }, [user]);
+
+  // Kick users whose profile document no longer exists (deleted accounts,
+  // never-registered sessions). The 10s grace covers fresh signups whose
+  // profile write is still in flight.
+  useEffect(() => {
+    if (!user || !isProfilesReady) return undefined;
+
+    if (profiles[user.uid]) {
+      sawOwnProfileRef.current = true;
+      ownProfileKickDeadlineRef.current = 0;
+      return undefined;
+    }
+
+    if (!ownProfileKickDeadlineRef.current) {
+      ownProfileKickDeadlineRef.current =
+        Date.now() + (sawOwnProfileRef.current ? 0 : 10000);
+    }
+    const timer = window.setTimeout(() => {
+      if (profilesRef.current[user.uid]) return;
+      sawOwnProfileRef.current = false;
+      ownProfileKickDeadlineRef.current = 0;
+      signOutOfFirebase(auth).catch(() => {});
+      clearSessionUserId();
+      setSessionUserId("");
+      setError("Your account has been deleted.");
+    }, Math.max(0, ownProfileKickDeadlineRef.current - Date.now()));
+
+    return () => window.clearTimeout(timer);
+  }, [user, isProfilesReady, profiles]);
 
   useEffect(() => {
     if (!sessionUserId) {

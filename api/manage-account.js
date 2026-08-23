@@ -180,6 +180,12 @@ export default async function handler(req, res) {
         account ? admin.auth().deleteUser(uid) : Promise.resolve(),
         admin.firestore().doc(`users/${uid}`).delete()
       ]);
+      // Tombstone blocks the deleted session from recreating its profile
+      // while its ID token is still valid (checked by Firestore rules).
+      await admin.firestore().doc(`deleted-users/${uid}`).set({
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deletedBy: caller.uid
+      });
       return res.status(200).json({
         message: account
           ? "Account deleted."

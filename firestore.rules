@@ -67,6 +67,13 @@ service cloud.firestore {
     // false, new user documents can only be created by admins. This is
     // enforced by the server, so it blocks signup even from direct SDK /
     // API calls outside the app.
+    // Deletion tombstones (written by the server only). A deleted session's
+    // ID token can stay valid for up to an hour; without this check its
+    // saveUserProfile() call would recreate the profile and rejoin the chat.
+    function isDeletedUser(userId) {
+      return exists(/databases/$(database)/documents/deleted-users/$(userId));
+    }
+
     function signupEnabled() {
       return !exists(/databases/$(database)/documents/settings/app)
         || get(/databases/$(database)/documents/settings/app).data.signupEnabled != false;
@@ -172,6 +179,7 @@ service cloud.firestore {
       allow read: if signedIn();
 
       allow create: if signedIn()
+        && !isDeletedUser(userId)
         && !(request.resource.data.isAdmin == true &&
                request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "voiceMutedTemporary", "voiceMutedTemporaryUntil", "voiceMutedTemporaryBy", "voiceMutedTemporaryUpdatedAt"]))
         && (!("bio" in request.resource.data) ||
@@ -229,6 +237,11 @@ service cloud.firestore {
     match /settings/app {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Deletion tombstones — server (admin SDK) only
+    match /deleted-users/{userId} {
+      allow read, write: if false;
     }
   }
 }
