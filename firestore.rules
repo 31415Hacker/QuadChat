@@ -51,6 +51,14 @@ service cloud.firestore {
       );
     }
 
+    // A real, active member always has a profile document. Deleted accounts
+    // lose theirs immediately, while their ID token can stay valid for up to
+    // an hour — so existence (plus not banned) is the source of truth here,
+    // not request.auth.
+    function isActiveUser() {
+      return currentUserExists() && currentUserDoc().data.banned != true;
+    }
+
     function isProtectedAdminTarget() {
       return resource.data.isAdmin == true || request.resource.data.isAdmin == true;
     }
@@ -87,7 +95,7 @@ service cloud.firestore {
     match /messages/{channel}/messages/{messageId} {
       allow read: if signedIn() && (!isDmChannel(channel) || isDmParticipant(channel));
 
-      allow create: if signedIn()
+      allow create: if isActiveUser()
         && isNotMuted()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.keys().hasOnly([
@@ -110,6 +118,7 @@ service cloud.firestore {
         && (!isDmChannel(channel) || isDmParticipant(channel));
 
       allow update: if signedIn()
+        && currentUserExists()
         && isNotMuted()
         && (
           (
@@ -145,7 +154,7 @@ service cloud.firestore {
     match /dms/{dmId} {
       allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.participants);
 
-      allow create: if signedIn()
+      allow create: if isActiveUser()
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
         && request.auth.uid in request.resource.data.participants
@@ -153,6 +162,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(["participants", "names", "lastMessage", "lastSenderId", "updatedAt"]);
 
       allow update: if signedIn()
+        && currentUserExists()
         && request.auth.uid in resource.data.participants
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["names", "lastMessage", "lastSenderId", "updatedAt"]);
     }
