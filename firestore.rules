@@ -56,7 +56,9 @@ service cloud.firestore {
     // an hour — so existence (plus not banned) is the source of truth here,
     // not request.auth.
     function isActiveUser() {
-      return currentUserExists() && currentUserDoc().data.banned != true;
+      return currentUserExists() &&
+        (!("banned" in currentUserDoc().data) ||
+         currentUserDoc().data.banned != true);
     }
 
     function isProtectedAdminTarget() {
