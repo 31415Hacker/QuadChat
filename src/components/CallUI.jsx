@@ -27,11 +27,13 @@ export function ActiveCallBar({
   toggleCallMute,
   toggleScreenShare,
   hangUp,
-  remoteAudioRef
+  remoteAudioRef,
+  screenAudioRef
 }) {
   return (
     <div className="active-call-bar">
       <audio ref={remoteAudioRef} autoPlay />
+      <audio ref={screenAudioRef} autoPlay />
       <div className="active-call-info">
         <Phone size={15} />
         <span>{callStatus === "calling" ? "Calling" : "On call with"} <strong>{callPartnerName}</strong></span>

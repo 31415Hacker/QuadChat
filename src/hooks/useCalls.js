@@ -47,6 +47,7 @@ export function useCalls({
   const startCallLockRef = useRef(false);
   const answerCallLockRef = useRef(false);
   const remoteAudioRef = useRef(null);
+  const screenAudioRef = useRef(null);
   const screenVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -93,6 +94,12 @@ export function useCalls({
       remoteAudioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream, callStatus]);
+
+  useEffect(() => {
+    if (screenAudioRef.current) {
+      screenAudioRef.current.srcObject = remoteScreenStream || null;
+    }
+  }, [remoteScreenStream, callStatus]);
 
   useEffect(() => {
     isSharingScreenRef.current = isSharingScreen;
@@ -311,14 +318,20 @@ export function useCalls({
     };
 
     pc.ontrack = (e) => {
+      const stream = e.streams[0];
       if (e.track.kind === "video") {
         console.log("[CALL] ontrack — screen video received");
-        setRemoteScreenStream(e.streams[0]);
+        setRemoteScreenStream(stream);
         e.track.onmute = clearRemoteScreenShare;
         e.track.onended = clearRemoteScreenShare;
+      } else if (stream?.getVideoTracks().length) {
+        // Display audio shares a MediaStream with the screen video. Do not
+        // replace the microphone stream used by the normal call audio.
+        console.log("[CALL] ontrack — screen audio received");
+        setRemoteScreenStream(stream);
       } else {
         console.log("[CALL] ontrack — remote audio received");
-        setRemoteStream(e.streams[0]);
+        setRemoteStream(stream);
       }
     };
 
@@ -773,28 +786,28 @@ export function useCalls({
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      // `audio: true` makes browsers offer the "share this tab's audio"
+      // checkbox when the caller selects a browser tab.
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = stream;
       const track = stream.getVideoTracks()[0];
       if (!track) return;
 
       track.onended = () => stopScreenShare();
 
-      const addToAll = (track, stream) => {
-        if (callStatus === "connected" && peerRef.current) {
-          peerRef.current.addTrack(track, stream);
+      stream.getTracks().forEach((shareTrack) => {
+        if (callStatus !== "idle" && peerRef.current) {
+          peerRef.current.addTrack(shareTrack, stream);
         }
         Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
-          try { pc.addTrack(track, stream); } catch (_) {}
+          try { pc.addTrack(shareTrack, stream); } catch (_) {}
         });
         if (groupCallRoomRef.current) {
-          groupCallRoomRef.current.localParticipant.publishTrack(track, {
-            source: "screen_share",
+          groupCallRoomRef.current.localParticipant.publishTrack(shareTrack, {
+            source: shareTrack.kind === "audio" ? "screen_share_audio" : "screen_share",
           }).catch((e) => console.error("[SCREEN] publish to LiveKit failed:", e));
         }
-      };
-
-      addToAll(track, stream);
+      });
 
       if (callNodeRef.current) {
         set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), { name: activeName }).catch(() => {});
@@ -920,6 +933,9 @@ export function useCalls({
     if (p2pGroupCallStreamRef.current) {
       p2pGroupCallStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, p2pGroupCallStreamRef.current));
     }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, screenStreamRef.current));
+    }
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -942,6 +958,14 @@ export function useCalls({
         audio.autoplay = true;
         audio.setAttribute("data-p2p-participant", remoteUid);
         p2pGroupCallAudioContainerRef.current?.appendChild(audio);
+        if (e.streams[0]?.getVideoTracks().length) {
+          console.log("[P2P] ontrack — screen audio from", remoteUid);
+          audio.setAttribute("data-p2p-screen-share", "true");
+          e.track.onended = () => {
+            audio.srcObject = null;
+            audio.remove();
+          };
+        }
       }
     };
 
@@ -975,10 +999,9 @@ export function useCalls({
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        const el = p2pGroupCallAudioContainerRef.current?.querySelector(
+        p2pGroupCallAudioContainerRef.current?.querySelectorAll(
           `[data-p2p-participant="${remoteUid}"]`
-        );
-        if (el) { el.srcObject = null; el.remove(); }
+        ).forEach((el) => { el.srcObject = null; el.remove(); });
         delete p2pGroupCallConnectionsRef.current[remoteUid];
       }
     };
@@ -1202,10 +1225,9 @@ export function useCalls({
             p2pGroupCallConnectionsRef.current[uid].close();
             delete p2pGroupCallConnectionsRef.current[uid];
           }
-          const el = p2pGroupCallAudioContainerRef.current?.querySelector(
+          p2pGroupCallAudioContainerRef.current?.querySelectorAll(
             `[data-p2p-participant="${uid}"]`
-          );
-          if (el) { el.srcObject = null; el.remove(); }
+          ).forEach((el) => { el.srcObject = null; el.remove(); });
         }
       );
       p2pGroupCallUnsubsRef.current.push(unsubRemoved);
@@ -1306,6 +1328,7 @@ export function useCalls({
           audio.srcObject = new MediaStream([track.mediaStreamTrack]);
           audio.autoplay = true;
           audio.setAttribute("data-participant", participant.identity);
+          if (publication.trackSid) audio.setAttribute("data-track-sid", publication.trackSid);
           groupCallAudioContainerRef.current?.appendChild(audio);
         }
       });
@@ -1315,13 +1338,13 @@ export function useCalls({
           clearRemoteScreenShare();
           return;
         }
-        const el = groupCallAudioContainerRef.current?.querySelector(
-          `[data-participant="${participant.identity}"]`
-        );
-        if (el) {
+        const selector = publication.trackSid
+          ? `[data-track-sid="${publication.trackSid}"]`
+          : `[data-participant="${participant.identity}"]`;
+        groupCallAudioContainerRef.current?.querySelectorAll(selector).forEach((el) => {
           el.srcObject = null;
           el.remove();
-        }
+        });
       });
 
       room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -1351,13 +1374,12 @@ export function useCalls({
           delete next[participant.identity];
           return next;
         });
-        const el = groupCallAudioContainerRef.current?.querySelector(
+        groupCallAudioContainerRef.current?.querySelectorAll(
           `[data-participant="${participant.identity}"]`
-        );
-        if (el) {
+        ).forEach((el) => {
           el.srcObject = null;
           el.remove();
-        }
+        });
         if (notificationsEnabled && notificationPermission === "granted") {
           const name = participant.name || participant.identity;
           new Notification("QuadChat", {
@@ -1471,6 +1493,7 @@ export function useCalls({
     screenSharedByName,
     screenShareRequest,
     remoteAudioRef,
+    screenAudioRef,
     screenVideoRef,
     groupCallStatus,
     groupCallParticipants,

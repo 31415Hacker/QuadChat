@@ -458,6 +458,7 @@ export default function App() {
     screenSharedByName,
     screenShareRequest,
     remoteAudioRef,
+    screenAudioRef,
     screenVideoRef,
     groupCallStatus,
     groupCallParticipants,
@@ -3177,6 +3178,7 @@ export default function App() {
                 toggleScreenShare={toggleScreenShare}
                 hangUp={hangUp}
                 remoteAudioRef={remoteAudioRef}
+                screenAudioRef={screenAudioRef}
               />
             ) : null}
 
