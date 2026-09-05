@@ -62,7 +62,12 @@ service cloud.firestore {
     }
 
     function isProtectedAdminTarget() {
-      return resource.data.isAdmin == true || request.resource.data.isAdmin == true;
+      // Accessing a missing map field yields "undefined", which turns
+      // `undefined == true` into undefined and fails the whole rule when its
+      // truthiness is required (e.g. mute writes). Guard reads with `in` so
+      // profiles that predate the isAdmin field are not un-mutable.
+      return ('isAdmin' in resource.data && resource.data.isAdmin == true)
+        || ('isAdmin' in request.resource.data && request.resource.data.isAdmin == true);
     }
 
     // Admin-controlled kill switch in /settings/app. When signupEnabled is
@@ -182,7 +187,7 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && !isDeletedUser(userId)
-        && !(request.resource.data.isAdmin == true &&
+        && !(('isAdmin' in request.resource.data && request.resource.data.isAdmin == true) &&
                request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "voiceMutedTemporary", "voiceMutedTemporaryUntil", "voiceMutedTemporaryBy", "voiceMutedTemporaryUpdatedAt"]))
         && (!("bio" in request.resource.data) ||
             (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
