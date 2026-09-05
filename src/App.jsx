@@ -1509,6 +1509,11 @@ export default function App() {
 
     setError("");
 
+    if (isSigningUp && !appSettings.signupEnabled) {
+      setError("Signup is currently disabled.");
+      return;
+    }
+
     try {
       if (isSigningUp) {
         const response = await fetch("/api/signup", {
@@ -1551,6 +1556,18 @@ export default function App() {
 
     try {
       const credential = await signInWithPopup(auth, googleProvider);
+      const profileRef = doc(db, "users", credential.user.uid);
+      const profileSnap = await getDoc(profileRef);
+
+      if (!profileSnap.exists() && !appSettings.signupEnabled) {
+        await signOutOfFirebase(auth);
+        setError("Signup is currently disabled.");
+        setDraftName("");
+        setEmail("");
+        setPassword("");
+        return;
+      }
+
       await saveUserProfile(credential.user);
       writeSessionUserId(credential.user.uid);
       setSessionUserId(credential.user.uid);

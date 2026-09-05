@@ -113,7 +113,7 @@ service cloud.firestore {
           "attachments", "isFile", "fileName", "fileType", "type",
           "title", "googleMeetLink", "note", "tableData", "name"
         ])
-        && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin())
+        && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin() || isDeveloper())
         && (!("text" in request.resource.data) || request.resource.data.text is string)
         && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2500)
         && (!("attachments" in request.resource.data) || request.resource.data.attachments is list)
@@ -188,7 +188,7 @@ service cloud.firestore {
             (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
         && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
         && (
-        isAdmin() || (
+        (isAdmin() || isDeveloper()) || (
           signupEnabled() &&
           userId == request.auth.uid &&
           (isAdminEmail() ||
@@ -207,7 +207,7 @@ service cloud.firestore {
             (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
         && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
         && (
-        isAdmin() || (
+        (isAdmin() || isDeveloper()) || (
           userId == request.auth.uid &&
           (isAdminEmail() ||
             !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isAdmin", "isDeveloper", "muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "warning"]) &&
