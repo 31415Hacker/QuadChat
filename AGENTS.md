@@ -70,6 +70,12 @@ Rules:
 - Rules (`firestore.rules`): the mute-related `users` `create`/`update` branches and the `adminCommand` message-create gate all use `isAdmin() || isDeveloper()`. `isProtectedAdminTarget()` still blocks muting admins, and self-edits cannot escalate `isAdmin`/`isDeveloper`.
 - If you ever restrict mute powers again, all three `firestore.rules` spots must change together: the `users` create branch, the `users` update branch, and the messages `adminCommand` gate.
 
+## Mute Down With `Missing or insufficient permissions` for Old Profiles
+- Symptom: the admin could mute some users but not others, all of them standard users. The ones that failed were exactly the profiles that predate the `isAdmin` field and therefore have no `isAdmin` key stored.
+- Root cause: `isProtectedAdminTarget()` (`firestore.rules`) read `resource.data.isAdmin == true` unguarded. In the rules engine, accessing a missing map field yields `undefined`, and `undefined == true` is `undefined`, so `!(isProtectedAdminTarget() && diff.hasAny(muteKeys))` failed (denied) whenever the mute keys were in the diff — while non-mute writes short-circuited to allowed. Reproduced against the live ruleset (Rules `:test` API) and against live Firestore as the admin UID: same doc shape with/without `isAdmin` flipped 200/403.
+- Fix: guard every read with `in` — `('isAdmin' in resource.data && resource.data.isAdmin == true)`. Also guarded the equivalent unguarded read in the `users` `create` clause. Now any profile (with or without the field) can be muted, and targets whose doc has `isAdmin == true` remain protected.
+- Watch out: never read `resource.data.<field>` / `request.resource.data.<field>` without an `in` guard when the field may be absent; the whole rule fails (deny) whenever the value's truthiness is required. This codebase already guards everywhere else (`isNotMuted`, `isActiveUser`) — keep that convention.
+
 # Composer
 
 - Multiline `<textarea>` (auto-grows to ~4 rows), Enter sends, Shift+Enter newline, `maxLength={500}`.
