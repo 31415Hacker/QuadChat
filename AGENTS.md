@@ -64,6 +64,12 @@ Rules:
 - Fix: remote jumps set `isReplyJumpLoadingRef` and clear `isNearBottomRef` before reloading. The sentinel and `loadMoreMessages()` ignore pagination during the jump; once the target is rendered, it is centered immediately, highlighted, and normal pagination resumes. Direct jumps to an already-rendered message also clear the near-bottom flag.
 - The remote window includes both target context and the latest `PAGE_SIZE` messages, with separate realtime listeners for each range, so jumping back does not hide recent messages or backfill the skipped middle. `hasTriggeredTopSentinelRef` makes pagination edge-triggered: the sentinel must leave and re-enter view before another page loads.
 
+## Developers Can Mute/Unmute
+- Mute controls (`?mute`/`?unmute`/`?mute-v`/`?mute-vt` text commands and the sidebar mute buttons) are open to developers as well as admins.
+- Client note: developers already count as admins — `isCurrentUserAdmin` includes `isCurrentUserDeveloper` (`App.jsx`), so buttons/functions needed no client-side change; only the server rules were tightened.
+- Rules (`firestore.rules`): the mute-related `users` `create`/`update` branches and the `adminCommand` message-create gate all use `isAdmin() || isDeveloper()`. `isProtectedAdminTarget()` still blocks muting admins, and self-edits cannot escalate `isAdmin`/`isDeveloper`.
+- If you ever restrict mute powers again, all three `firestore.rules` spots must change together: the `users` create branch, the `users` update branch, and the messages `adminCommand` gate.
+
 # Composer
 
 - Multiline `<textarea>` (auto-grows to ~4 rows), Enter sends, Shift+Enter newline, `maxLength={500}`.
