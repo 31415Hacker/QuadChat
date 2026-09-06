@@ -5,6 +5,7 @@ import {
   isDeveloperEmail,
   normalizeDisplayName
 } from "./names.js";
+import { createDefaultSchedule } from "./schedule.js";
 import {
   notificationsEnabledKey,
   sessionUserIdKey
@@ -58,8 +59,10 @@ export async function saveUserProfile(
     updatedAt: serverTimestamp()
   };
 
+  const isNewProfile = !profileSnapshot.exists();
+
   // Auth-state sync must not overwrite a name chosen in profile settings.
-  if (!profileSnapshot.exists() || displayNameOverride !== undefined) {
+  if (isNewProfile || displayNameOverride !== undefined) {
     profileData.displayName = normalizeDisplayName(
       displayNameOverride || firebaseUser.displayName,
       firebaseUser.email
@@ -68,7 +71,7 @@ export async function saveUserProfile(
 
   if (options.forcePhoto || options.photoURL !== undefined) {
     profileData.photoURL = options.photoURL || "";
-  } else if (!profileSnapshot.exists()) {
+  } else if (isNewProfile) {
     profileData.photoURL = firebaseUser.photoURL || "";
   }
 
@@ -78,8 +81,15 @@ export async function saveUserProfile(
     profileData.role = userIsDeveloper
       ? "developer"
       : "admin";
-  } else if (!profileSnapshot.exists()) {
+  } else if (isNewProfile) {
+    // Brand-new profiles carry the complete field set, with explicit
+    // isAdmin/isDeveloper false, so every user doc is self-describing.
     profileData.role = "member";
+    profileData.isAdmin = false;
+    profileData.isDeveloper = false;
+    profileData.bio = "";
+    profileData.schedule = createDefaultSchedule();
+    profileData.status = { mode: "active", text: "", scheduledBusy: [] };
   }
 
   await setDoc(profileRef, profileData, { merge: true });
