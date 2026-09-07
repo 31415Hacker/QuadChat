@@ -101,7 +101,7 @@ export default function AuthScreen({
             >
               Sign in
             </button>
-            {appSettings.signupEnabled ? (
+            {appSettings.settingsLoaded && appSettings.signupEnabled ? (
               <button
                 className={authView === "signup" ? "active" : ""}
                 type="button"

@@ -188,7 +188,7 @@ export default function App() {
   const [settingsPhotoFile, setSettingsPhotoFile] = useState(null);
   const [settingsPhotoPreview, setSettingsPhotoPreview] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [appSettings, setAppSettings] = useState({ signupEnabled: true });
+  const [appSettings, setAppSettings] = useState({ signupEnabled: true, settingsLoaded: false });
   const [isDarkTheme, setIsDarkTheme] = useState(() => {
     const stored = localStorage.getItem("quadchat-theme");
     return stored !== null ? stored === "dark" : true;
@@ -757,7 +757,8 @@ export default function App() {
         setAppSettings({
           signupEnabled: snapshot.exists()
             ? snapshot.data().signupEnabled !== false
-            : true
+            : true,
+          settingsLoaded: true
         });
       },
       (firebaseError) => {
@@ -1523,7 +1524,7 @@ export default function App() {
 
     setError("");
 
-    if (isSigningUp && !appSettings.signupEnabled) {
+    if (isSigningUp && (!appSettings.settingsLoaded || !appSettings.signupEnabled)) {
       setError("Signup is currently disabled.");
       return;
     }
@@ -3057,7 +3058,7 @@ export default function App() {
 
   return (
     <main className={`app-shell${isSettingsOpen && user ? " app-shell--settings" : ""}`}>
-      {isSettingsOpen && user ? null : !isAuthReady || !user ? (
+      {!isAuthReady || !user ? (
         <AuthScreen
           isAuthReady={isAuthReady}
           authView={authView}
@@ -3084,7 +3085,7 @@ export default function App() {
           captchaRefreshKey={captchaRefreshKey}
         />
       ) : (
-        <section className="chat-panel" aria-label="QuadChat room">
+        <section className={`chat-panel${isSettingsOpen && user ? " chat-panel--hidden" : ""}`} aria-label="QuadChat room">
           <ChannelSidebar
             activeChannel={activeChannel}
             setActiveChannel={setActiveChannel}

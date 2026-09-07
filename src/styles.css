@@ -1567,6 +1567,10 @@ button:disabled {
   padding: 0 !important;
 }
 
+.chat-panel--hidden {
+  display: none;
+}
+
 .app-shell--settings .commit-fineprint {
   display: none;
 }

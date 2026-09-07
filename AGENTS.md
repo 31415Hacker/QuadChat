@@ -37,9 +37,16 @@ Rules:
 - Note: a stale ring for an offline callee is moved to the owner-only `missed-calls` node and shown in the notification center on reconnect (see Missed-Call Notifications below).
 
 ## Confirm Dialog Invisible During Settings
-- Root cause: `<ConfirmDialog>` was rendered inside the `.chat-panel` section, and `App.jsx` unmounts the whole `.chat-panel` while Settings is open — so a pending confirm couldn't render until Settings closed, then popped up "out of nowhere". `.modal-backdrop` (z-index 40) was also below `.settings-close-btn` (50), `.toast-container` (60), and `.attach-menu` (100).
+- Root cause: `<ConfirmDialog>` was rendered inside the `.chat-panel` section, and `App.jsx` used to unmount the whole `.chat-panel` while Settings is open — so a pending confirm couldn't render until Settings closed, then popped up "out of nowhere". `.modal-backdrop` (z-index 40) was also below `.settings-close-btn` (50), `.toast-container` (60), and `.attach-menu` (100).
+- Note: the `.chat-panel` is no longer unmounted while Settings is open — it stays mounted but hidden via `.chat-panel--hidden` (`display: none`) so in-call audio elements and listeners keep running (see "Settings Open Ends The Call" below). Keep it that way.
 - Fix: moved `<ConfirmDialog>` to app-shell level (right before `<GamingPostModal>`), always rendered regardless of Settings state, and raised `.modal-backdrop` to z-index 200 so all dialogs sit above every app layer.
 - Watch out: any future modal added *inside* `.chat-panel` will silently fail to show over Settings — render global overlays at app-shell level.
+
+## Settings Open Ends The Call
+- Symptom: opening Settings during a 1:1 or group call made it look like the call died — no call bar, no remote audio, and after closing Settings the call stayed silent.
+- Root cause: `App.jsx` reverted to rendering `null` for the whole app (Auth/chat panel) whenever `isSettingsOpen && user`, which unmounted `ActiveCallBar`/`GroupCallBar`/`IncomingCallModal` and — critically — the `<audio ref={remoteAudioRef} />` and LiveKit group-call audio container elements the remote stream was attached to. The call itself kept running in `useCalls` (not unmounted), but you lost all remote audio output and the call controls. On closing Settings the bar remounted, but the srcObject re-attach effect (`useCalls.js`, deps `[remoteStream, callStatus]`) doesn't re-run when only the element instance changes, so audio never came back — effectively a dead call.
+- Fix: keep `.chat-panel` mounted whenever `user` is set, and hide it with `.chat-panel--hidden` (`display: none`) while Settings is open. SettingsPage renders as a sibling and fills the shell. Because the panel (and the in-call `<audio>` elements inside it) never unmount, audio and controls survive the Settings visit; `display: none` does not pause media playback.
+- The `app-shell`/`isSettingsOpen` branch in `App.jsx` was `{isSettingsOpen && user ? null : !isAuthReady || !user ? <AuthScreen/> : <chat-panel/>}` and is now `{!isAuthReady || !user ? <AuthScreen/> : <chat-panel/>}` (panel gets `chat-panel--hidden` when settings open). Don't reintroduce a `null` branch that unmounts the panel while a call can be active.
 
 ## Message Reactions
 - Stored as a `reactions` map on each message doc: `reactions.<uid>` = emoji string (plain map, no nested structure).
