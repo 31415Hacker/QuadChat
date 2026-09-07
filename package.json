@@ -1,6 +1,6 @@
 {
   "name": "quadchat",
-  "version": "2.1.28",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "scripts": {

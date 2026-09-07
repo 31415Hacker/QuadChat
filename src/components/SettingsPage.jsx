@@ -96,6 +96,8 @@ export default function SettingsPage({
   setShowSidebarSeconds,
   dmSoundType,
   setDmSoundType,
+  callSoundType,
+  setCallSoundType,
   appSettings,
   toggleSignup,
   magicLinkEmail,
@@ -614,6 +616,63 @@ export default function SettingsPage({
                             reader.onload = () => {
                               localStorage.setItem("quadchat-dm-sound-custom", reader.result);
                               setDmSoundType("custom");
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                          type="file"
+                        />
+                      </label>
+                    </label>
+                  </div>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Call ringtone</h3>
+                    <p>Choose the ringtone that plays for incoming calls and outbound dialing.</p>
+                  </div>
+                  <div className="dm-sound-options">
+                    <label className="dm-sound-option">
+                      <input
+                        checked={callSoundType === "default"}
+                        name="call-sound"
+                        onChange={() => setCallSoundType("default")}
+                        type="radio"
+                      />
+                      <span>Default</span>
+                      <button
+                        className="ghost-button small"
+                        onClick={() => {
+                          const a = new Audio("/sounds/normal-average-ringtone.mp3");
+                          a.volume = 0.7;
+                          a.play().catch(() => {});
+                          setTimeout(() => { a.pause(); a.currentTime = 0; }, 4000);
+                        }}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                    </label>
+                    <label className="dm-sound-option">
+                      <input
+                        checked={callSoundType === "custom"}
+                        name="call-sound"
+                        onChange={() => setCallSoundType("custom")}
+                        type="radio"
+                      />
+                      <span>Custom</span>
+                      <label className="ghost-button small">
+                        <Upload size={14} />
+                        <span>Upload</span>
+                        <input
+                          accept="audio/*"
+                          hidden
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              localStorage.setItem("quadchat-call-sound-custom", reader.result);
+                              setCallSoundType("custom");
                             };
                             reader.readAsDataURL(file);
                           }}

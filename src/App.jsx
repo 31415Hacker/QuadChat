@@ -196,6 +196,9 @@ export default function App() {
   const [dmSoundType, setDmSoundType] = useState(() => {
     return localStorage.getItem("quadchat-dm-sound") || "android";
   });
+  const [callSoundType, setCallSoundType] = useState(() => {
+    return localStorage.getItem("quadchat-call-sound") || "default";
+  });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
   const [scheduledBusy, setScheduledBusy] = useState([]);
@@ -742,6 +745,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("quadchat-dm-sound", dmSoundType);
   }, [dmSoundType]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-call-sound", callSoundType);
+  }, [callSoundType]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -3398,6 +3405,8 @@ export default function App() {
            setShowSidebarSeconds={setShowSidebarSeconds}
            dmSoundType={dmSoundType}
            setDmSoundType={setDmSoundType}
+           callSoundType={callSoundType}
+           setCallSoundType={setCallSoundType}
           appSettings={appSettings}
           toggleSignup={toggleSignup}
           magicLinkEmail={magicLinkEmail}
