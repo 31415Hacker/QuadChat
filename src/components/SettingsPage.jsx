@@ -94,6 +94,8 @@ export default function SettingsPage({
   setShowSidebarClock,
   showSidebarSeconds,
   setShowSidebarSeconds,
+  dmSoundType,
+  setDmSoundType,
   appSettings,
   toggleSignup,
   magicLinkEmail,
@@ -544,6 +546,82 @@ export default function SettingsPage({
                     <input checked={showSidebarClock} onChange={() => setShowSidebarClock((value) => !value)} type="checkbox" />
                     <span>{showSidebarClock ? "On" : "Off"}</span>
                   </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>DM notification sound</h3>
+                    <p>Choose the sound that plays when you receive a direct message.</p>
+                  </div>
+                  <div className="dm-sound-options">
+                    <label className="dm-sound-option">
+                      <input
+                        checked={dmSoundType === "android"}
+                        name="dm-sound"
+                        onChange={() => setDmSoundType("android")}
+                        type="radio"
+                      />
+                      <span>Android</span>
+                      <button
+                        className="ghost-button small"
+                        onClick={() => {
+                          const a = new Audio("/sounds/android-sound-effect-meme_tcbuori.mp3");
+                          a.volume = 0.55;
+                          a.play().catch(() => {});
+                        }}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                    </label>
+                    <label className="dm-sound-option">
+                      <input
+                        checked={dmSoundType === "discord"}
+                        name="dm-sound"
+                        onChange={() => setDmSoundType("discord")}
+                        type="radio"
+                      />
+                      <span>Discord</span>
+                      <button
+                        className="ghost-button small"
+                        onClick={() => {
+                          const a = new Audio("/sounds/discord-notification.mp3");
+                          a.volume = 0.55;
+                          a.play().catch(() => {});
+                        }}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                    </label>
+                    <label className="dm-sound-option">
+                      <input
+                        checked={dmSoundType === "custom"}
+                        name="dm-sound"
+                        onChange={() => setDmSoundType("custom")}
+                        type="radio"
+                      />
+                      <span>Custom</span>
+                      <label className="ghost-button small">
+                        <Upload size={14} />
+                        <span>Upload</span>
+                        <input
+                          accept="audio/*"
+                          hidden
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              localStorage.setItem("quadchat-dm-sound-custom", reader.result);
+                              setDmSoundType("custom");
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                          type="file"
+                        />
+                      </label>
+                    </label>
+                  </div>
                 </section>
               </>
             ) : null}

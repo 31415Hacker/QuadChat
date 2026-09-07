@@ -1470,6 +1470,33 @@ button:disabled {
   width: 18px;
 }
 
+.dm-sound-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dm-sound-option {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.dm-sound-option input[type="radio"] {
+  height: 16px;
+  width: 16px;
+}
+
+.dm-sound-option span {
+  font-size: 0.85rem;
+}
+
+.ghost-button.small {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
 .scale-row {
   align-items: center;
   display: flex;

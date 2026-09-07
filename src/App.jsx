@@ -193,6 +193,9 @@ export default function App() {
     const stored = localStorage.getItem("quadchat-theme");
     return stored !== null ? stored === "dark" : true;
   });
+  const [dmSoundType, setDmSoundType] = useState(() => {
+    return localStorage.getItem("quadchat-dm-sound") || "android";
+  });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
   const [scheduledBusy, setScheduledBusy] = useState([]);
@@ -735,6 +738,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("quadchat-ui-scale", String(uiScale));
   }, [uiScale]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-dm-sound", dmSoundType);
+  }, [dmSoundType]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -3389,6 +3396,8 @@ export default function App() {
            setShowSidebarClock={setShowSidebarClock}
            showSidebarSeconds={showSidebarSeconds}
            setShowSidebarSeconds={setShowSidebarSeconds}
+           dmSoundType={dmSoundType}
+           setDmSoundType={setDmSoundType}
           appSettings={appSettings}
           toggleSignup={toggleSignup}
           magicLinkEmail={magicLinkEmail}

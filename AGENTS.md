@@ -76,6 +76,12 @@ Rules:
 - Fix: guard every read with `in` — `('isAdmin' in resource.data && resource.data.isAdmin == true)`. Also guarded the equivalent unguarded read in the `users` `create` clause. Now any profile (with or without the field) can be muted, and targets whose doc has `isAdmin == true` remain protected.
 - Watch out: never read `resource.data.<field>` / `request.resource.data.<field>` without an `in` guard when the field may be absent; the whole rule fails (deny) whenever the value's truthiness is required. This codebase already guards everywhere else (`isNotMuted`, `isActiveUser`) — keep that convention.
 
+## DM Sound Selection
+- The DM receive sound is chosen in Settings (Accessibility tab) and persisted to `localStorage` under `quadchat-dm-sound` (`"android"`, `"discord"`, or `"custom"`).
+- `src/utils/dmSound.js` (`playDmReceiveSound`) reads the current value from `localStorage` on each play; it rebuilds the `Audio` element lazily when the source changes. The `"custom"` source is stored as a data URL in `quadchat-dm-sound-custom` (uploaded in the same settings UI).
+- State lives in `App.jsx` (`dmSoundType`/`setDmSoundType`, persisted via a `useEffect` writing `quadchat-dm-sound`) and is threaded down to `SettingsPage.jsx`.
+- If you add more built-in sounds, extend the `SOUNDS` map in `dmSound.js` and add a matching radio row in `SettingsPage.jsx`.
+
 # Composer
 
 - Multiline `<textarea>` (auto-grows to ~4 rows), Enter sends, Shift+Enter newline, `maxLength={500}`.
