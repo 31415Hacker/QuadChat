@@ -1,5 +1,7 @@
 const SOUNDS = {
-  default: "/sounds/normal-average-ringtone.mp3"
+  default: "/sounds/normal-average-ringtone.mp3",
+  samsung: "/sounds/samsung-ringtone.mp3",
+  iphone: "/sounds/iphone_ringtone_trap_remixbigconverter.mp3"
 };
 
 function getCallSoundSrc() {

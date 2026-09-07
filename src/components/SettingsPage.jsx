@@ -654,6 +654,48 @@ export default function SettingsPage({
                     </label>
                     <label className="dm-sound-option">
                       <input
+                        checked={callSoundType === "samsung"}
+                        name="call-sound"
+                        onChange={() => setCallSoundType("samsung")}
+                        type="radio"
+                      />
+                      <span>Samsung</span>
+                      <button
+                        className="ghost-button small"
+                        onClick={() => {
+                          const a = new Audio("/sounds/samsung-ringtone.mp3");
+                          a.volume = 0.7;
+                          a.play().catch(() => {});
+                          setTimeout(() => { a.pause(); a.currentTime = 0; }, 4000);
+                        }}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                    </label>
+                    <label className="dm-sound-option">
+                      <input
+                        checked={callSoundType === "iphone"}
+                        name="call-sound"
+                        onChange={() => setCallSoundType("iphone")}
+                        type="radio"
+                      />
+                      <span>iPhone</span>
+                      <button
+                        className="ghost-button small"
+                        onClick={() => {
+                          const a = new Audio("/sounds/iphone_ringtone_trap_remixbigconverter.mp3");
+                          a.volume = 0.7;
+                          a.play().catch(() => {});
+                          setTimeout(() => { a.pause(); a.currentTime = 0; }, 4000);
+                        }}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                    </label>
+                    <label className="dm-sound-option">
+                      <input
                         checked={callSoundType === "custom"}
                         name="call-sound"
                         onChange={() => setCallSoundType("custom")}
