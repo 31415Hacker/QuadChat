@@ -199,6 +199,16 @@ export default function App() {
   const [callSoundType, setCallSoundType] = useState(() => {
     return localStorage.getItem("quadchat-call-sound") || "default";
   });
+  const [dmSoundsEnabled, setDmSoundsEnabled] = useState(() => localStorage.getItem("quadchat-dm-sound-enabled") !== "false");
+  const [groupSoundsEnabled, setGroupSoundsEnabled] = useState(() => localStorage.getItem("quadchat-group-sound-enabled") === "true");
+  const [messageSoundVolume, setMessageSoundVolume] = useState(() => {
+    const stored = Number(localStorage.getItem("quadchat-message-sound-volume"));
+    return stored >= 0 && stored <= 1 ? stored : 0.55;
+  });
+  const [ringtoneVolume, setRingtoneVolume] = useState(() => {
+    const stored = Number(localStorage.getItem("quadchat-ringtone-volume"));
+    return stored >= 0 && stored <= 1 ? stored : 0.7;
+  });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
   const [scheduledBusy, setScheduledBusy] = useState([]);
@@ -260,6 +270,8 @@ export default function App() {
   const sawOwnProfileRef = useRef(false);
   const ownProfileKickDeadlineRef = useRef(0);
   const activeChannelRef = useRef(null);
+  const dmSoundsEnabledRef = useRef(true);
+  const groupSoundsEnabledRef = useRef(false);
   const searchPanelRef = useRef(null);
   const composerInputRef = useRef(null);
   const pendingJumpRef = useRef(null);
@@ -751,6 +763,22 @@ export default function App() {
   }, [callSoundType]);
 
   useEffect(() => {
+    localStorage.setItem("quadchat-dm-sound-enabled", dmSoundsEnabled ? "true" : "false");
+  }, [dmSoundsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-group-sound-enabled", groupSoundsEnabled ? "true" : "false");
+  }, [groupSoundsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-message-sound-volume", String(messageSoundVolume));
+  }, [messageSoundVolume]);
+
+  useEffect(() => {
+    localStorage.setItem("quadchat-ringtone-volume", String(ringtoneVolume));
+  }, [ringtoneVolume]);
+
+  useEffect(() => {
     const unsubscribe = onSnapshot(
       appSettingsRef,
       (snapshot) => {
@@ -909,7 +937,9 @@ export default function App() {
     profilesRef.current = profiles;
     activeChannelRef.current = activeChannel;
     activeNameRef.current = activeName;
-  }, [profiles, activeChannel, activeName]);
+    dmSoundsEnabledRef.current = dmSoundsEnabled;
+    groupSoundsEnabledRef.current = groupSoundsEnabled;
+  }, [profiles, activeChannel, activeName, dmSoundsEnabled, groupSoundsEnabled]);
 
   useEffect(() => {
     if (!statusModalOpen || !sessionUserId) return;
@@ -1089,11 +1119,14 @@ export default function App() {
                 const messageVisible =
                   !document.hidden && document.hasFocus() && isNearBottomRef.current;
                 if (
-                  isDmChannelId(activeChannel) &&
                   msg.userId !== sessionUserId &&
                   !messageVisible
                 ) {
-                  playDmReceiveSound();
+                  if (isDmChannelId(activeChannel)) {
+                    if (dmSoundsEnabledRef.current) playDmReceiveSound();
+                  } else if (groupSoundsEnabledRef.current) {
+                    playDmReceiveSound();
+                  }
                 }
                 newestDocSnapRef.current = change.doc;
               }
@@ -1483,6 +1516,8 @@ export default function App() {
             );
             const isMention = isMentionOf(data.text, activeNameRef.current);
             if (isDmChannelId(channelId)) {
+              if (dmSoundsEnabledRef.current) playDmReceiveSound();
+            } else if (groupSoundsEnabledRef.current) {
               playDmReceiveSound();
             }
             if (channelId === activeChannelRef.current && !isMention) return;
@@ -3408,6 +3443,14 @@ export default function App() {
            setDmSoundType={setDmSoundType}
            callSoundType={callSoundType}
            setCallSoundType={setCallSoundType}
+           dmSoundsEnabled={dmSoundsEnabled}
+           setDmSoundsEnabled={setDmSoundsEnabled}
+           groupSoundsEnabled={groupSoundsEnabled}
+           setGroupSoundsEnabled={setGroupSoundsEnabled}
+           messageSoundVolume={messageSoundVolume}
+           setMessageSoundVolume={setMessageSoundVolume}
+           ringtoneVolume={ringtoneVolume}
+           setRingtoneVolume={setRingtoneVolume}
           appSettings={appSettings}
           toggleSignup={toggleSignup}
           magicLinkEmail={magicLinkEmail}

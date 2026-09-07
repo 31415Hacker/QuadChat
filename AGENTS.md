@@ -89,6 +89,13 @@ Rules:
 - State lives in `App.jsx` (`dmSoundType`/`setDmSoundType`, persisted via a `useEffect` writing `quadchat-dm-sound`) and is threaded down to `SettingsPage.jsx`.
 - If you add more built-in sounds, extend the `SOUNDS` map in `dmSound.js` and add a matching radio row in `SettingsPage.jsx`.
 
+## Message & Ringtone Sound Volume / Channel Toggles
+- The same `playDmReceiveSound()` sound is used for both DM and group-chat message alerts; separately toggled by `dmSoundsEnabled` (default on) and `groupSoundsEnabled` (default off), persisted in `quadchat-dm-sound-enabled` / `quadchat-group-sound-enabled` (`"true"`/`"false"`). Keep those defaults — DM sounds on, group sounds off, is the intended baseline.
+- `dmSound.js` reads message-sound volume from `quadchat-message-sound-volume` (0–1, default `0.55`) at each play; the ringtone volume lives in `callRingtone.js` under `quadchat-ringtone-volume` (0–1, default `0.7`), applied on ringtone rebuild and on `startCallRingtone`.
+- The call sites gate on `dmSoundsEnabledRef.current`/`groupSoundsEnabledRef.current` (`App.jsx`): the active-channel listener plays a sound only when `!messageVisible`, and the background-channels listener (`watcherChannels`, which excludes the active channel) plays for every new non-self message. Refs are kept in sync in the same `useEffect` that syncs `profilesRef`/`activeChannelRef` — keep that pattern so the listeners don't re-subscribe on toggle.
+- The Settings UI lives in the Accessibility tab: "Message sounds" toggles + a message volume slider, and a "Ringtone volume" slider inside the "Call ringtone" section. Preview buttons play at the configured volume.
+- If you change these keys, keep the readers (`dmSound.js`, `callRingtone.js`) and writers (`App.jsx` effects) in sync. The group-sound alert intentionally reuses the DM sound selection — there is no separate group-sound picker.
+
 ## Call Ringtone Selection
 - The call ringtone is chosen in Settings (Accessibility tab) and persisted to `localStorage` under `quadchat-call-sound` (`"default"` or `"custom"`).
 - `src/utils/callRingtone.js` (`startCallRingtone`) reads the current value from `localStorage` on each start; it rebuilds the `Audio` element lazily when the source changes. The `"custom"` source is stored as a data URL in `quadchat-call-sound-custom` (uploaded in the same settings UI).

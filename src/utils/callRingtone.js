@@ -12,11 +12,16 @@ function getCallSoundSrc() {
   return SOUNDS[type] || SOUNDS.default;
 }
 
+function getRingtoneVolume() {
+  const stored = Number(localStorage.getItem("quadchat-ringtone-volume"));
+  return stored >= 0 && stored <= 1 ? stored : 0.7;
+}
+
 let ringtoneAudio = new Audio(getCallSoundSrc());
 function configureRingtone() {
   ringtoneAudio.preload = "auto";
   ringtoneAudio.loop = true;
-  ringtoneAudio.volume = 0.7;
+  ringtoneAudio.volume = getRingtoneVolume();
 }
 configureRingtone();
 
@@ -40,6 +45,7 @@ export function startCallRingtone() {
     configureRingtone();
   }
   ringtonePlaying = true;
+  ringtoneAudio.volume = getRingtoneVolume();
   ringtoneAudio.currentTime = 0;
   ringtoneAudio.play().catch(() => {});
 }

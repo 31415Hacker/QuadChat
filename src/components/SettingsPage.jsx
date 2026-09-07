@@ -98,6 +98,14 @@ export default function SettingsPage({
   setDmSoundType,
   callSoundType,
   setCallSoundType,
+  dmSoundsEnabled,
+  setDmSoundsEnabled,
+  groupSoundsEnabled,
+  setGroupSoundsEnabled,
+  messageSoundVolume,
+  setMessageSoundVolume,
+  ringtoneVolume,
+  setRingtoneVolume,
   appSettings,
   toggleSignup,
   magicLinkEmail,
@@ -551,8 +559,26 @@ export default function SettingsPage({
                 </section>
                 <section className="settings-section-box">
                   <div>
-                    <h3>DM notification sound</h3>
-                    <p>Choose the sound that plays when you receive a direct message.</p>
+                    <h3>Message sounds</h3>
+                    <p>Play a sound for new messages. Direct messages and group chats can be toggled separately.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input checked={dmSoundsEnabled} onChange={() => setDmSoundsEnabled((value) => !value)} type="checkbox" />
+                    <span>Direct message sounds: {dmSoundsEnabled ? "On" : "Off"}</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input checked={groupSoundsEnabled} onChange={() => setGroupSoundsEnabled((value) => !value)} type="checkbox" />
+                    <span>Group chat sounds: {groupSoundsEnabled ? "On" : "Off"}</span>
+                  </label>
+                  <label className="scale-row">
+                    <input aria-label="Message sound volume" max="100" min="0" onChange={(event) => setMessageSoundVolume(Number(event.target.value) / 100)} type="range" value={Math.round(messageSoundVolume * 100)} />
+                    <output>{Math.round(messageSoundVolume * 100)}%</output>
+                  </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Notification sound</h3>
+                    <p>Choose the sound that plays for new messages and group chats.</p>
                   </div>
                   <div className="dm-sound-options">
                     <label className="dm-sound-option">
@@ -567,7 +593,7 @@ export default function SettingsPage({
                         className="ghost-button small"
                         onClick={() => {
                           const a = new Audio("/sounds/android-sound-effect-meme_tcbuori.mp3");
-                          a.volume = 0.55;
+                          a.volume = messageSoundVolume;
                           a.play().catch(() => {});
                         }}
                         type="button"
@@ -587,7 +613,7 @@ export default function SettingsPage({
                         className="ghost-button small"
                         onClick={() => {
                           const a = new Audio("/sounds/discord-notification.mp3");
-                          a.volume = 0.55;
+                          a.volume = messageSoundVolume;
                           a.play().catch(() => {});
                         }}
                         type="button"
@@ -643,7 +669,7 @@ export default function SettingsPage({
                         className="ghost-button small"
                         onClick={() => {
                           const a = new Audio("/sounds/normal-average-ringtone.mp3");
-                          a.volume = 0.7;
+                          a.volume = ringtoneVolume;
                           a.play().catch(() => {});
                           setTimeout(() => { a.pause(); a.currentTime = 0; }, 4000);
                         }}
@@ -664,7 +690,7 @@ export default function SettingsPage({
                         className="ghost-button small"
                         onClick={() => {
                           const a = new Audio("/sounds/samsung-ringtone.mp3");
-                          a.volume = 0.7;
+                          a.volume = ringtoneVolume;
                           a.play().catch(() => {});
                           setTimeout(() => { a.pause(); a.currentTime = 0; }, 4000);
                         }}
@@ -685,7 +711,7 @@ export default function SettingsPage({
                         className="ghost-button small"
                         onClick={() => {
                           const a = new Audio("/sounds/iphone_ringtone_trap_remixbigconverter.mp3");
-                          a.volume = 0.7;
+                          a.volume = ringtoneVolume;
                           a.play().catch(() => {});
                           setTimeout(() => { a.pause(); a.currentTime = 0; }, 4000);
                         }}
@@ -723,6 +749,10 @@ export default function SettingsPage({
                       </label>
                     </label>
                   </div>
+                  <label className="scale-row">
+                    <input aria-label="Ringtone volume" max="100" min="0" onChange={(event) => setRingtoneVolume(Number(event.target.value) / 100)} type="range" value={Math.round(ringtoneVolume * 100)} />
+                    <output>{Math.round(ringtoneVolume * 100)}%</output>
+                  </label>
                 </section>
               </>
             ) : null}
