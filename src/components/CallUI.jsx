@@ -81,7 +81,10 @@ export function GroupCallBar({
   localMuted,
   toggleMute,
   toggleScreenShare,
-  onLeave
+  onLeave,
+  mutes,
+  canMute,
+  onMuteParticipant
 }) {
   return (
     <div className="active-call-bar group-call-bar">
@@ -117,6 +120,26 @@ export function GroupCallBar({
           <PhoneOff size={16} />
         </button>
       </div>
+      {canMute && Object.keys(participants).length > 0 ? (
+        <div className="group-call-participants">
+          {Object.entries(participants).map(([uid, participant]) => {
+            const isMuted = mutes?.[uid]?.muted === true;
+            return (
+              <div className="group-call-participant" key={uid}>
+                <span className="group-call-participant-name">{participant.name}</span>
+                <button
+                  className="call-action-btn group-participant-mute-btn"
+                  type="button"
+                  onClick={() => onMuteParticipant(uid, participant.name, !isMuted)}
+                  title={isMuted ? `Unmute ${participant.name}` : `Mute ${participant.name}`}
+                >
+                  {isMuted ? <MicOff size={13} /> : <Mic size={13} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

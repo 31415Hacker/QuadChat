@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.6
+Current: 2.2.7
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -82,6 +82,21 @@ Rules:
 - Root cause: `isProtectedAdminTarget()` (`firestore.rules`) read `resource.data.isAdmin == true` unguarded. In the rules engine, accessing a missing map field yields `undefined`, and `undefined == true` is `undefined`, so `!(isProtectedAdminTarget() && diff.hasAny(muteKeys))` failed (denied) whenever the mute keys were in the diff — while non-mute writes short-circuited to allowed. Reproduced against the live ruleset (Rules `:test` API) and against live Firestore as the admin UID: same doc shape with/without `isAdmin` flipped 200/403.
 - Fix: guard every read with `in` — `('isAdmin' in resource.data && resource.data.isAdmin == true)`. Also guarded the equivalent unguarded read in the `users` `create` clause. Now any profile (with or without the field) can be muted, and targets whose doc has `isAdmin == true` remain protected.
 - Watch out: never read `resource.data.<field>` / `request.resource.data.<field>` without an `in` guard when the field may be absent; the whole rule fails (deny) whenever the value's truthiness is required. This codebase already guards everywhere else (`isNotMuted`, `isActiveUser`) — keep that convention.
+
+## Muted Users Could Still Talk (Voice Mute Expiry Bug)
+- Symptom: an admin or developer voice-muted someone (`?mute-v` / sidebar mic button) but the target could still talk in voice chat.
+- Root cause: `useCalls.js` computed the mute expiry from `voiceMutedUntil`, but `toggleVoiceMute` writes `voiceMutedUntil: null` for a permanent mute. `new Date(null).getTime()` = `0`, so `setTimeout(..., 0)` fired immediately, set `voiceMuteExpired = true`, and the mute never applied.
+- Fix: the expiry effect early-returns when `voiceMutedUntil` is falsy (permanent mute = never expires). Same guard added to the temporary-mute effect.
+- Keep the guard when touching expiry logic — a null/absent `until` means "permanent", not epoch 0.
+
+## Group Call Owner/Admin Mutes
+- The owner of a group call OR an admin (admin/developer) can mute/unmute any participant live from the call bar, via a new serverless endpoint `api/group-mute.js`.
+- Flow: the muter's client POSTs to `/api/group-mute` (`{ callKey, targetUid, targetName, muted }`, Bearer idToken). The server verifies the caller is the call owner (`call-directory/<callKey>.ownerId`) or an admin (`users/<caller>.isAdmin === true || isDeveloper === true`), then writes `group-calls/<callKey>/mutes/<targetUid>` = `{ muted, mutedBy, mutedByName, targetName, updatedAt }` with the admin SDK.
+- RTDB rules (`database.rules.json`): `mutes` under `group-calls/$id` is `.read: auth != null` (every client reads all mutes to enforce their own) and `.write: false` — clients can NEVER write mutes directly. All mute writes happen server-side with the SDK.
+- Enforcement is client-side: `useCalls.js` subscribes to `group-calls/<callKey>/mutes` on join; when the current user's entry has `muted: true`, their published audio track is disabled (`enabled = false`), `setGroupCallLocalMuted(true)` is set, and `toggleGroupCallMute` is blocked while force-muted. Unmuting re-enables (unless the global voice mute also applies). The listener is unsubscribed + forced-mute state reset in `cleanupGroupCall()`.
+- The mute is durable for the room: it lives in the call node keyed by target uid, so a reloading victim re-applies it on rejoin until the owner/admin unmutes. Stale mutes persist per call (owner must unmute manually).
+- UI: `GroupCallBar` (`src/components/CallUI.jsx`) renders per-participant chips with a mic button when `canMute` (owner or admin). `App.jsx` computes `canMuteGroupParticipants` from `isCurrentUserAdmin || call.ownerId === sessionUserId` and passes `mutes`, `canMute`, `onMuteParticipant` (wraps `setGroupCallParticipantMute` with a toast on error). P2P group calls (unreachable legacy) don't get the buttons.
+- If you shrink access later, change `api/group-mute.js` (the only write path) + the `canMute` computation in `App.jsx`.
 
 ## DM Sound Selection
 - The DM receive sound is chosen in Settings (Accessibility tab) and persisted to `localStorage` under `quadchat-dm-sound` (`"android"`, `"discord"`, or `"custom"`).

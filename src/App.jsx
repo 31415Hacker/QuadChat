@@ -484,6 +484,7 @@ export default function App() {
     groupCallParticipants,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
+    groupCallMutes,
     p2pGroupCallStatus,
     p2pGroupCallHostId,
     p2pGroupCallParticipants,
@@ -499,6 +500,7 @@ export default function App() {
     toggleGroupCallMute,
     joinGroupCall,
     leaveGroupCall,
+    setGroupCallParticipantMute,
     activeGroupCallKey,
     activeCalls,
     createGroupCall,
@@ -557,6 +559,31 @@ export default function App() {
     },
     []
   );
+
+  const activeGroupCallCall = activeCalls.find((c) => c.callKey === activeGroupCallKey);
+  const isCurrentCallOwner = !!activeGroupCallCall && activeGroupCallCall.ownerId === sessionUserId;
+  const canMuteGroupParticipants = isCurrentUserAdmin || isCurrentCallOwner;
+
+  const setGroupCallParticipantMuteRef = useRef(setGroupCallParticipantMute);
+  setGroupCallParticipantMuteRef.current = setGroupCallParticipantMute;
+  const activeGroupCallKeyRef = useRef(activeGroupCallKey);
+  activeGroupCallKeyRef.current = activeGroupCallKey;
+  const handleGroupCallParticipantMute = useCallback(async (targetUid, targetName, muted) => {
+    const callKey = activeGroupCallKeyRef.current;
+    if (!callKey) return;
+    try {
+      await setGroupCallParticipantMuteRef.current?.(callKey, targetUid, targetName, muted);
+    } catch (e) {
+      pushInAppNotification({
+        type: "call",
+        channelId: null,
+        channelLabel: null,
+        senderName: "Group call",
+        body: e?.message || (muted ? "Could not mute that participant." : "Could not unmute that participant."),
+        id: `call-mute-error-${Date.now()}`
+      });
+    }
+  }, []);
 
   async function openUserAnalytics(profile) {
     if (!profile) return;
@@ -3307,6 +3334,9 @@ export default function App() {
                 toggleMute={toggleGroupCallMute}
                 toggleScreenShare={toggleScreenShare}
                 onLeave={leaveGroupCall}
+                mutes={groupCallMutes}
+                canMute={canMuteGroupParticipants}
+                onMuteParticipant={handleGroupCallParticipantMute}
               />
             ) : p2pGroupCallStatus === "connected" ? (
               <GroupCallBar

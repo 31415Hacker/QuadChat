@@ -125,21 +125,27 @@ export function useCalls({
   }, [isSharingScreen]);
 
   useEffect(() => {
-    const expiresAt = voiceMutedUntil?.toDate
+    setVoiceMuteExpired(false);
+    if (!isVoiceMuted) return;
+    // A null/absent `voiceMutedUntil` means a permanent mute with no expiry.
+    // Do NOT treat it as epoch 0 (new Date(null) -> 0) or the mute instantly expires.
+    if (!voiceMutedUntil) return;
+    const expiresAt = voiceMutedUntil.toDate
       ? voiceMutedUntil.toDate().getTime()
       : new Date(voiceMutedUntil).getTime();
-    setVoiceMuteExpired(false);
-    if (!isVoiceMuted || !Number.isFinite(expiresAt)) return;
+    if (!Number.isFinite(expiresAt)) return;
     const timer = window.setTimeout(() => setVoiceMuteExpired(true), Math.max(0, expiresAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [isVoiceMuted, voiceMutedUntil]);
 
   useEffect(() => {
-    const expiresAt = voiceMutedTemporaryUntil?.toDate
+    setTemporaryVoiceMuteExpired(false);
+    if (!isVoiceTemporarilyMuted) return;
+    if (!voiceMutedTemporaryUntil) return;
+    const expiresAt = voiceMutedTemporaryUntil.toDate
       ? voiceMutedTemporaryUntil.toDate().getTime()
       : new Date(voiceMutedTemporaryUntil).getTime();
-    setTemporaryVoiceMuteExpired(false);
-    if (!isVoiceTemporarilyMuted || !Number.isFinite(expiresAt)) return;
+    if (!Number.isFinite(expiresAt)) return;
     const timer = window.setTimeout(() => setTemporaryVoiceMuteExpired(true), Math.max(0, expiresAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [isVoiceTemporarilyMuted, voiceMutedTemporaryUntil]);
@@ -148,18 +154,26 @@ export function useCalls({
   const voiceMuteActive = lockedVoiceMuteActive || (
     isVoiceTemporarilyMuted && !temporaryVoiceMuteExpired
   );
+  const voiceMuteActiveRef = useRef(voiceMuteActive);
+  voiceMuteActiveRef.current = voiceMuteActive;
+
+  const [groupCallForcedMuted, setGroupCallForcedMuted] = useState(false);
+  const groupCallForcedMutedRef = useRef(false);
+  const [groupCallMutes, setGroupCallMutes] = useState({});
+  const groupCallMutesUnsubRef = useRef(null);
 
   useEffect(() => {
     const applyVoiceMute = (stream, setMuted) => {
       const audioTrack = stream?.getAudioTracks()[0];
       if (!audioTrack) return;
-      audioTrack.enabled = !voiceMuteActive;
-      setMuted(voiceMuteActive);
+      const shouldMute = voiceMuteActive || groupCallForcedMutedRef.current;
+      audioTrack.enabled = !shouldMute;
+      setMuted(shouldMute);
     };
 
     applyVoiceMute(groupCallLocalStreamRef.current, setGroupCallLocalMuted);
     applyVoiceMute(p2pGroupCallStreamRef.current, setP2pGroupCallLocalMuted);
-  }, [voiceMuteActive]);
+  }, [voiceMuteActive, groupCallForcedMuted]);
 
   useEffect(() => {
     if (screenVideoRef.current && remoteScreenStream) {
@@ -771,6 +785,7 @@ export function useCalls({
   }
 
   function toggleGroupCallMute() {
+    if (groupCallForcedMutedRef.current) return;
     if (groupCallLocalStreamRef.current) {
       const audioTrack = groupCallLocalStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
@@ -890,6 +905,13 @@ export function useCalls({
         el.remove();
       });
     }
+    if (groupCallMutesUnsubRef.current) {
+      groupCallMutesUnsubRef.current();
+      groupCallMutesUnsubRef.current = null;
+    }
+    groupCallForcedMutedRef.current = false;
+    setGroupCallForcedMuted(false);
+    setGroupCallMutes({});
     setGroupCallParticipants({});
     setGroupCallLocalMuted(false);
     setActiveGroupCallKey(null);
@@ -1520,6 +1542,29 @@ export function useCalls({
       onDisconnect(presenceRef).remove().catch(() => {});
       groupCallPresenceRef.current = presenceRef;
 
+      const mutesRef = rtdbRef(rtdb, `group-calls/${callKey}/mutes`);
+      groupCallMutesUnsubRef.current?.();
+      await new Promise((resolve) => {
+        groupCallMutesUnsubRef.current = onValue(
+          mutesRef,
+          (snap) => {
+            const mutes = snap.val() || {};
+            setGroupCallMutes(mutes);
+            const forced = mutes[sessionUserId]?.muted === true;
+            groupCallForcedMutedRef.current = forced;
+            setGroupCallForcedMuted(forced);
+            const audioTrack = groupCallLocalStreamRef.current?.getAudioTracks()[0];
+            if (audioTrack) {
+              const shouldMute = forced || voiceMuteActiveRef.current;
+              audioTrack.enabled = !shouldMute;
+              setGroupCallLocalMuted(shouldMute);
+            }
+            resolve();
+          },
+          () => resolve()
+        );
+      });
+
       for (const track of stream.getAudioTracks()) {
         const pub = await room.localParticipant.publishTrack(track, { dtx: true });
         try {
@@ -1559,6 +1604,32 @@ export function useCalls({
       return;
     }
     cleanupGroupCall();
+  }
+
+  async function setGroupCallParticipantMute(callKeyVal, targetUid, targetName, muted) {
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/group-mute", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          callKey: callKeyVal,
+          targetUid,
+          targetName,
+          muted,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Mute failed");
+      }
+    } catch (e) {
+      console.error("[GROUP-MUTE] failed:", e);
+      throw e;
+    }
   }
 
   function toggleCallMute() {
@@ -1602,6 +1673,7 @@ export function useCalls({
     groupCallParticipants,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
+    groupCallMutes,
     activeGroupCallKey,
     activeCalls,
     createGroupCall,
@@ -1623,6 +1695,7 @@ export function useCalls({
     toggleGroupCallMute,
     joinGroupCall,
     leaveGroupCall,
+    setGroupCallParticipantMute,
     joinP2PGroupCall,
     leaveP2PGroupCall,
     toggleP2PGroupCallMute

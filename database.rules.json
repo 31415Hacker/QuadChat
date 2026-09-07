@@ -216,6 +216,24 @@
             ".validate": "newData.hasChildren(['name', 'joinedAt']) && newData.child('name').isString() && newData.child('joinedAt').isNumber()"
           }
         },
+        "mutes": {
+          // Per-call mutes are written ONLY by the serverless /api/group-mute
+          // endpoint (admin SDK, which bypasses rules) after confirming the
+          // caller is the call owner or an admin. Clients may read all mutes
+          // (each client enforces its own mute locally) but can never write.
+          ".read": "auth != null",
+          ".write": false,
+          "$uid": {
+            ".validate": "(
+              newData.hasChildren(['muted', 'mutedBy', 'mutedByName', 'targetName', 'updatedAt'])
+              && newData.child('muted').isBoolean()
+              && newData.child('mutedBy').isString()
+              && newData.child('mutedByName').isString()
+              && newData.child('targetName').isString()
+              && newData.child('updatedAt').isNumber()
+            )"
+          }
+        },
         "connections": {
           // Only the per-pair node below grants access
           ".read": false,
