@@ -14,7 +14,7 @@ function getCallSoundSrc() {
 
 function getRingtoneVolume() {
   const stored = Number(localStorage.getItem("quadchat-ringtone-volume"));
-  return stored >= 0 && stored <= 1 ? stored : 0.7;
+  return stored >= 0 && stored <= 1 ? stored : 0.2;
 }
 
 let ringtoneAudio = new Audio(getCallSoundSrc());

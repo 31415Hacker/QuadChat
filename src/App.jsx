@@ -203,11 +203,11 @@ export default function App() {
   const [groupSoundsEnabled, setGroupSoundsEnabled] = useState(() => localStorage.getItem("quadchat-group-sound-enabled") === "true");
   const [messageSoundVolume, setMessageSoundVolume] = useState(() => {
     const stored = Number(localStorage.getItem("quadchat-message-sound-volume"));
-    return stored >= 0 && stored <= 1 ? stored : 0.55;
+    return stored >= 0 && stored <= 1 ? stored : 0.2;
   });
   const [ringtoneVolume, setRingtoneVolume] = useState(() => {
     const stored = Number(localStorage.getItem("quadchat-ringtone-volume"));
-    return stored >= 0 && stored <= 1 ? stored : 0.7;
+    return stored >= 0 && stored <= 1 ? stored : 0.2;
   });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
