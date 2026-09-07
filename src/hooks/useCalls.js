@@ -16,6 +16,21 @@ import { rtdb } from "../../firebase.js";
 import { notificationIcon, OPUS_BITRATE, rtcConfig } from "../constants.js";
 import { applyOpusBitrate, computeCapability } from "../utils/media.js";
 
+function bytesToHex(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashCallPassword(password) {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const saltHex = bytesToHex(salt);
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${saltHex}:${password}`)
+  );
+  return { salt: saltHex, hash: bytesToHex(new Uint8Array(digest)) };
+}
+
 export function useCalls({
   sessionUserId,
   activeName,
@@ -67,6 +82,10 @@ export function useCalls({
   const groupCallLocalStreamRef = useRef(null);
   const groupCallAudioContainerRef = useRef(null);
   const groupCallCleaningRef = useRef(false);
+  const [activeGroupCallKey, setActiveGroupCallKey] = useState(null);
+  const groupCallPresenceRef = useRef(null);
+
+  const [activeCalls, setActiveCalls] = useState([]);
 
   const [p2pGroupCallStatus, setP2pGroupCallStatus] = useState("idle");
   const [p2pGroupCallHostId, setP2pGroupCallHostId] = useState(null);
@@ -853,6 +872,10 @@ export function useCalls({
     groupCallCleaningRef.current = true;
     clearTimeout(groupCallSoloTimeoutRef.current);
     groupCallSoloTimeoutRef.current = null;
+    if (groupCallPresenceRef.current) {
+      remove(groupCallPresenceRef.current).catch(() => {});
+      groupCallPresenceRef.current = null;
+    }
     if (groupCallRoomRef.current) {
       groupCallRoomRef.current.disconnect();
       groupCallRoomRef.current = null;
@@ -869,6 +892,7 @@ export function useCalls({
     }
     setGroupCallParticipants({});
     setGroupCallLocalMuted(false);
+    setActiveGroupCallKey(null);
     setRemoteScreenStream(null);
     setScreenSharedByName(null);
     stopScreenShare();
@@ -1285,8 +1309,72 @@ export function useCalls({
     }
   }
 
-  async function joinGroupCall() {
-    if (groupCallStatus !== "idle" || groupCallCleaningRef.current) return;
+  useEffect(() => {
+    if (!user || !sessionUserId) return;
+    const dirRef = rtdbRef(rtdb, "call-directory");
+    const unsub = onValue(dirRef, (snap) => {
+      const val = snap.val();
+      if (!val) {
+        setActiveCalls([]);
+        return;
+      }
+      const list = Object.entries(val)
+        .map(([key, data]) => ({
+          callKey: key,
+          title: typeof data?.title === "string" ? data.title : "Group call",
+          ownerId: data?.ownerId || "",
+          ownerName: typeof data?.ownerName === "string" ? data.ownerName : "Unknown",
+          createdAt: typeof data?.createdAt === "number" ? data.createdAt : 0,
+          isProtected: Boolean(data?.passwordHash),
+        }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setActiveCalls(list);
+    });
+    return () => unsub();
+  }, [user, sessionUserId]);
+
+  async function createGroupCall({ title = "", password = "" } = {}) {
+    const callKey = push(rtdbRef(rtdb, "call-directory")).key;
+    const now = Date.now();
+    const entry = {
+      callKey,
+      title: (title.trim() || "Group call").slice(0, 50),
+      ownerId: sessionUserId,
+      ownerName: activeName,
+      createdAt: now,
+    };
+    if (password.trim()) {
+      const { salt, hash } = await hashCallPassword(password);
+      entry.passwordSalt = salt;
+      entry.passwordHash = hash;
+    }
+    await set(rtdbRef(rtdb, `call-directory/${callKey}`), entry);
+    return callKey;
+  }
+
+  async function deleteGroupCall(callKey) {
+    await remove(rtdbRef(rtdb, `call-directory/${callKey}`)).catch(() => {});
+  }
+
+  async function joinSessionGroupCall(sessionTitle = "") {
+    const now = Date.now();
+    const existing = activeCalls.find(
+      (call) =>
+        !call.isProtected &&
+        call.ownerId === sessionUserId &&
+        call.title.toLowerCase() === (sessionTitle.trim().toLowerCase() || "group call") &&
+        now - call.createdAt < 10 * 60 * 1000
+    );
+    const callKey = existing?.callKey || (await createGroupCall({ title: sessionTitle }));
+    await joinGroupCall(callKey);
+    return callKey;
+  }
+
+  async function joinGroupCall(callKey, password) {
+    if (groupCallCleaningRef.current) return;
+    if (groupCallStatus !== "idle") {
+      cleanupGroupCall();
+    }
     setGroupCallStatus("connecting");
 
     try {
@@ -1298,7 +1386,14 @@ export function useCalls({
       const idToken = await user.getIdToken();
       const res = await fetch("/api/livekit-token", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          room: callKey,
+          ...(password ? { password } : {}),
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -1415,6 +1510,15 @@ export function useCalls({
 
       await room.connect(url, token);
       groupCallRoomRef.current = room;
+      setActiveGroupCallKey(callKey);
+
+      const presenceRef = rtdbRef(
+        rtdb,
+        `group-calls/${callKey}/participants/${sessionUserId}`
+      );
+      await set(presenceRef, { name: activeName, joinedAt: Date.now() }).catch(() => {});
+      onDisconnect(presenceRef).remove().catch(() => {});
+      groupCallPresenceRef.current = presenceRef;
 
       for (const track of stream.getAudioTracks()) {
         const pub = await room.localParticipant.publishTrack(track, { dtx: true });
@@ -1445,8 +1549,7 @@ export function useCalls({
     } catch (e) {
       console.error("[GROUP-CALL] join error:", e);
       cleanupGroupCall();
-      console.warn("LiveKit unavailable. Falling back to peer-to-peer group call.");
-      joinP2PGroupCall();
+      throw e;
     }
   }
 
@@ -1499,6 +1602,11 @@ export function useCalls({
     groupCallParticipants,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
+    activeGroupCallKey,
+    activeCalls,
+    createGroupCall,
+    deleteGroupCall,
+    joinSessionGroupCall,
     p2pGroupCallStatus,
     p2pGroupCallHostId,
     p2pGroupCallParticipants,

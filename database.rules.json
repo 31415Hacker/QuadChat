@@ -151,6 +151,41 @@
     },
 
     // -----------------------------------------------------------------
+    // DIR group call directory
+    // A public listing of creatable/joinable group calls. The directory
+    // entry only records metadata + password hash; live participants live
+    // under group-calls/<key>/participants. Token issuance is the password
+    // gate (server verifies before issuing a LiveKit token for the room).
+    // -----------------------------------------------------------------
+    "call-directory": {
+      ".read": "auth != null",
+      // Anyone may create a call (validated below); the entry may only be
+      // removed/rewritten by its owner. `request.resource` is null on delete,
+      // which keeps the owner's delete allowed.
+      ".write": "auth != null && (
+        request.resource == null ||
+        request.resource.child('ownerId').val() == auth.uid
+      )",
+      "$callKey": {
+        ".validate": "(
+          newData.child('callKey').val() === $callKey
+          && newData.child('callKey').isString()
+          && newData.child('title').isString()
+          && newData.child('title').val().length <= 50
+          && newData.child('ownerId').isString()
+          && newData.child('ownerName').isString()
+          && newData.child('createdAt').isNumber()
+          && (!newData.hasChild('passwordHash') || (
+            newData.child('passwordHash').isString()
+            && newData.child('passwordHash').val().length === 64
+            && newData.hasChild('passwordSalt')
+            && newData.child('passwordSalt').isString()
+          ))
+        )"
+      }
+    },
+
+    // -----------------------------------------------------------------
     // P2P / GROUP CALL SIGNALING
     // -----------------------------------------------------------------
     "group-calls": {

@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.0
+Current: 2.2.6
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -108,3 +108,13 @@ Rules:
 - Emoji picker via `@emoji-mart/react` + `@emoji-mart/data`, lazy-loaded (`EmojiPicker.jsx`) so it's a separate ~510 KB chunk fetched only when opened.
 - `@`-mention suggestions: typing `@` with a caret inside a word triggers a dropdown of profile names (deduped, prefix match, max 8). Arrow keys navigate, Enter/Tab accept, Escape closes.
 - Grid note: `.composer-row` has 5 columns by default (`50px 50px 50px minmax(0,1fr) 50px` = attach, emoji, mic, input, send); `--no-mic` drops a column, `--recording` swaps the buttons for the recording bar. Keep the mobile breakpoints (40px/36px) in sync when changing these.
+
+# Separate Group Calls (calls directory)
+
+- The header "Group call" button is replaced by a **Switch to calls / Switch to channels** toggle (`callsView` state in `App.jsx`). When in calls view, the left sidebar becomes `CallsSidebar` (`src/components/CallsSidebar.jsx`) instead of `ChannelSidebar`.
+- Group calls are now **creatable/joinable rooms**, tracked in an RTDB directory node `call-directory/<callKey>` = `{ callKey, title (≤50 chars), ownerId, ownerName, createdAt, passwordSalt?, passwordHash? }`. No `passwordHash` means public; a 64-hex SHA-256 of `salt:password` means private. Rules (`database.rules.json`): directory is read-only for signed-in users, writable to create (ownerId must equal `auth.uid`) or delete (`request.resource == null`), shape validated via the `$callKey` `.validate` (note: RTDB string length is the `.length` *property*, not `.length()`).
+- LiveKit rooms are named by `callKey`, scoped per-call. `api/livekit-token.js` takes `{ room, password }`, reads `call-directory/<room>` with the admin SDK (RTDB URL is derived from the service account `project_id`), verifies the salted password hash for private calls, and issues a token with the `room` grant. Enforcement is server-side at token issue; there is no client-side-only password gate.
+- Client flow (`src/hooks/useCalls.js`): `createGroupCall({ title, password })` hashes the password client-side (WebCrypto, `hashCallPassword`) and writes the directory entry; `joinGroupCall(callKey, password)` fetches the room token, connects the LiveKit room, writes a presence node at `group-calls/<callKey>/participants/<uid>` (`{ name, joinedAt }` + `onDisconnect().remove()`) so the directory can show live member counts, and stores `activeGroupCallKey`. `deleteGroupCall(callKey)` removes the owner's directory entry; `joinSessionGroupCall(sessionTitle)` reuses a fresh public call owned by you with the same title or creates+joins one (GameSessionCard path).
+- `cleanupGroupCall()` clears the presence node and `activeGroupCallKey`. The old LiveKit→P2P fallback is gone — `joinGroupCall` rethrows so callers (CallsSidebar inline error, toast wrapper in `App.jsx`) surface join/password failures.
+- `CallsSidebar` shows a create form (name + public/private + password for private), a live list of active calls (each row subscribes its own `group-calls/<callKey>/participants` count), inline password prompt for private calls, an owner-only delete button, and highlights the call you're currently in. `App.jsx` passes the raw `joinGroupCall` (rejections) as `onJoinCall` and `createAndJoinCallStable` as `onCreateCall`.
+- The old shared "global" LiveKit room and the P2P group-call triggers are gone; `joinP2PGroupCall`/`leaveP2PGroupCall`/`toggleP2PGroupCallMute` remain in `useCalls.js` but are no longer reachable from the UI.

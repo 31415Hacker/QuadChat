@@ -94,6 +94,7 @@ import { useCalls } from "./hooks/useCalls.js";
 import useConfirmDialog from "./hooks/useConfirmDialog.js";
 
 import AuthScreen from "./components/AuthScreen.jsx";
+import CallsSidebar from "./components/CallsSidebar.jsx";
 import ChannelSidebar from "./components/ChannelSidebar.jsx";
 import ChatHeader from "./components/ChatHeader.jsx";
 import MessageList from "./components/MessageList.jsx";
@@ -210,6 +211,7 @@ export default function App() {
     return stored >= 0 && stored <= 1 ? stored : 0.2;
   });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [callsView, setCallsView] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
   const [scheduledBusy, setScheduledBusy] = useState([]);
   const [error, setError] = useState("");
@@ -497,6 +499,11 @@ export default function App() {
     toggleGroupCallMute,
     joinGroupCall,
     leaveGroupCall,
+    activeGroupCallKey,
+    activeCalls,
+    createGroupCall,
+    deleteGroupCall,
+    joinSessionGroupCall,
     joinP2PGroupCall,
     leaveP2PGroupCall,
     toggleP2PGroupCallMute
@@ -519,7 +526,35 @@ export default function App() {
   const joinGroupCallRef = useRef(joinGroupCall);
   joinGroupCallRef.current = joinGroupCall;
   const joinGroupCallStable = useCallback(
-    (...args) => joinGroupCallRef.current?.(...args),
+    (callKey, password) => joinGroupCallRef.current?.(callKey, password),
+    []
+  );
+
+  const joinSessionGroupCallRef = useRef(joinSessionGroupCall);
+  joinSessionGroupCallRef.current = joinSessionGroupCall;
+  const joinSessionGroupCallStable = useCallback(
+    (sessionTitle) =>
+      joinSessionGroupCallRef.current?.(sessionTitle).catch((e) => {
+        pushInAppNotification({
+          type: "call",
+          channelId: null,
+          channelLabel: null,
+          senderName: "Group call",
+          body: e?.message || "Could not join the group call.",
+          id: `call-join-error-${Date.now()}`
+        });
+      }),
+    []
+  );
+
+  const createGroupCallRef = useRef(createGroupCall);
+  createGroupCallRef.current = createGroupCall;
+  const createAndJoinCallStable = useCallback(
+    async ({ title, password }) => {
+      const callKey = await createGroupCallRef.current?.({ title, password });
+      await joinGroupCallRef.current?.(callKey, password);
+      return callKey;
+    },
     []
   );
 
@@ -3121,14 +3156,32 @@ export default function App() {
         />
       ) : (
         <section className={`chat-panel${isSettingsOpen && user ? " chat-panel--hidden" : ""}`} aria-label="QuadChat room">
-          <ChannelSidebar
-            activeChannel={activeChannel}
-            setActiveChannel={setActiveChannel}
-            dmChannels={dmChannels}
-            profiles={profiles}
-            sessionUserId={sessionUserId}
-            setShowNewDm={setShowNewDm}
-          />
+          {callsView ? (
+            <CallsSidebar
+              calls={activeCalls}
+              activeCallsLabel={
+                activeGroupCallKey
+                  ? activeCalls.find((c) => c.callKey === activeGroupCallKey)?.title || "In a call"
+                  : "No active call"
+              }
+              groupCallStatus={groupCallStatus}
+              currentCallKey={activeGroupCallKey}
+              sessionUserId={sessionUserId}
+              onCreateCall={createAndJoinCallStable}
+              onJoinCall={joinGroupCallStable}
+              onDeleteCall={deleteGroupCall}
+              onLeaveCall={leaveGroupCall}
+            />
+          ) : (
+            <ChannelSidebar
+              activeChannel={activeChannel}
+              setActiveChannel={setActiveChannel}
+              dmChannels={dmChannels}
+              profiles={profiles}
+              sessionUserId={sessionUserId}
+              setShowNewDm={setShowNewDm}
+            />
+          )}
           <div className="chat-main">
             <ChatHeader
               activeName={activeName}
@@ -3136,16 +3189,8 @@ export default function App() {
               isCurrentUserDeveloper={isCurrentUserDeveloper}
               isCurrentUserAdmin={isCurrentUserAdmin}
               currentProfile={currentProfile}
-              isDmChannel={isDmChannelId(activeChannel)}
-              groupCallStatus={groupCallStatus}
-              p2pGroupCallStatus={p2pGroupCallStatus}
-              groupCallParticipants={groupCallParticipants}
-              p2pGroupCallParticipants={p2pGroupCallParticipants}
-              onToggleGroupCall={
-                groupCallStatus === "idle" && p2pGroupCallStatus === "idle"
-                  ? joinGroupCall
-                  : leaveGroupCall
-              }
+              callsView={callsView}
+              onToggleCallsView={() => setCallsView((view) => !view)}
               searchPanelRef={searchPanelRef}
               searchOpen={searchOpen}
               setSearchOpen={setSearchOpen}
@@ -3307,7 +3352,7 @@ export default function App() {
                     handleDeleteMessage={handleDeleteMessage}
                     handleRsvp={handleRsvp}
                     handleToggleReaction={handleToggleReaction}
-                    joinGroupCall={joinGroupCallStable}
+                    joinGroupCall={joinSessionGroupCallStable}
                     onJumpToMessage={jumpToReply}
                     onPreviewFile={setFilePreview}
                     dmPartnerName={dmPartnerName}

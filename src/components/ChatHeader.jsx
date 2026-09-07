@@ -7,7 +7,6 @@ import {
   MessageCircle,
   Moon,
   Phone,
-  PhoneOff,
   Search,
   Settings,
   Sun,
@@ -26,12 +25,8 @@ export default function ChatHeader({
   isCurrentUserDeveloper,
   isCurrentUserAdmin,
   currentProfile,
-  isDmChannel,
-  groupCallStatus,
-  p2pGroupCallStatus,
-  groupCallParticipants,
-  p2pGroupCallParticipants,
-  onToggleGroupCall,
+  callsView,
+  onToggleCallsView,
   searchPanelRef,
   searchOpen,
   setSearchOpen,
@@ -82,25 +77,15 @@ export default function ChatHeader({
         </div>
       </div>
       <div className="chat-header-actions">
-        {!isDmChannel ? (
         <button
-          className={`icon-text-button ${groupCallStatus === "connected" || p2pGroupCallStatus === "connected" ? "group-call-active" : ""}`}
+          className="icon-text-button"
           type="button"
-          onClick={onToggleGroupCall}
-          title={groupCallStatus === "connected" ? "Leave group call" : p2pGroupCallStatus === "connected" ? "Leave group call" : groupCallStatus === "connecting" || p2pGroupCallStatus === "connecting" ? "Connecting..." : "Join group call"}
+          onClick={onToggleCallsView}
+          title={callsView ? "Back to channels" : "View active group calls"}
         >
-          {groupCallStatus === "connected" || p2pGroupCallStatus === "connected" ? <PhoneOff size={18} /> : <Users size={18} />}
-          <span>
-            {groupCallStatus === "connected"
-              ? `In call (${Object.keys(groupCallParticipants).length + 1})`
-              : p2pGroupCallStatus === "connected"
-                ? `In call (${Object.keys(p2pGroupCallParticipants).length + 1})`
-                : groupCallStatus === "connecting" || p2pGroupCallStatus === "connecting"
-                  ? "Connecting..."
-                  : "Group call"}
-          </span>
+          {callsView ? <MessageCircle size={18} /> : <Users size={18} />}
+          <span>{callsView ? "Switch to channels" : "Switch to calls"}</span>
         </button>
-        ) : null}
         <div className="search-wrap" ref={searchPanelRef}>
         <button
           className="icon-text-button"
