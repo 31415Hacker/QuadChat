@@ -264,7 +264,7 @@ input {
   color: var(--text-on-accent);
   flex-shrink: 0;
   justify-content: space-between;
-  padding: 22px 24px;
+  padding: 24px 26px;
   position: relative;
 }
 
@@ -316,7 +316,8 @@ input {
 
 .chat-header p {
   color: rgba(255, 255, 255, 0.72);
-  margin-top: 3px;
+  line-height: 1.4;
+  margin-top: 4px;
 }
 
 .admin-badge {
@@ -1791,11 +1792,11 @@ button:disabled {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 20px;
+  padding: 20px 24px;
 }
 
 .empty-state {
@@ -1818,9 +1819,9 @@ button:disabled {
   align-self: flex-start;
   background: var(--bg-hover);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 10px;
   max-width: min(72%, 580px);
-  padding: 11px 13px;
+  padding: 13px 16px;
   position: relative;
 }
 
@@ -1857,8 +1858,8 @@ button:disabled {
   border-radius: 10px;
   color: var(--text-tertiary);
   font-size: 0.78rem;
-  margin: 4px 0;
-  padding: 3px 12px;
+  margin: 8px 0;
+  padding: 5px 14px;
   position: sticky;
   top: 4px;
   z-index: 1;
@@ -1871,7 +1872,7 @@ button:disabled {
   flex-wrap: wrap;
   font-size: 0.78rem;
   gap: 8px;
-  margin-bottom: 5px;
+  margin-bottom: 7px;
   padding-right: 28px;
 }
 
@@ -1880,7 +1881,7 @@ button:disabled {
 }
 
 .message p {
-  line-height: 1.45;
+  line-height: 1.55;
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -2477,7 +2478,7 @@ button.message-document-preview {
 
 .composer-row textarea {
   display: block;
-  line-height: 1.35;
+  line-height: 1.45;
   max-height: 116px;
   min-height: 48px;
   overflow-y: auto;
@@ -2742,10 +2743,10 @@ button.message-document-preview {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px 8px;
+  padding: 12px 10px;
 }
 
 .channel-tab {
@@ -2758,13 +2759,13 @@ button.message-document-preview {
   display: flex;
   flex-direction: row;
   font: inherit;
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-weight: 700;
   gap: 4px;
   justify-content: flex-start;
   letter-spacing: 0.04em;
   min-width: 0;
-  padding: 9px 10px;
+  padding: 11px 12px;
   text-transform: uppercase;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
@@ -2935,8 +2936,8 @@ button.message-document-preview {
 .user-item {
   align-items: center;
   display: flex;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 8px;
+  padding: 7px 14px;
 }
 
 .user-avatar {
@@ -3031,7 +3032,7 @@ button.user-avatar--clickable:focus-visible {
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 .user-role-marker {
