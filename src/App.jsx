@@ -568,6 +568,22 @@ export default function App() {
   setGroupCallParticipantMuteRef.current = setGroupCallParticipantMute;
   const activeGroupCallKeyRef = useRef(activeGroupCallKey);
   activeGroupCallKeyRef.current = activeGroupCallKey;
+  const deleteGroupCallRef = useRef(deleteGroupCall);
+  deleteGroupCallRef.current = deleteGroupCall;
+  const handleDeleteCall = useCallback(async (callKey) => {
+    try {
+      await deleteGroupCallRef.current?.(callKey);
+    } catch (e) {
+      pushInAppNotification({
+        type: "call",
+        channelId: null,
+        channelLabel: null,
+        senderName: "Group call",
+        body: e?.message || "Could not delete that call.",
+        id: `call-delete-error-${Date.now()}`
+      });
+    }
+  }, []);
   const handleGroupCallParticipantMute = useCallback(async (targetUid, targetName, muted) => {
     const callKey = activeGroupCallKeyRef.current;
     if (!callKey) return;
@@ -3196,7 +3212,7 @@ export default function App() {
               sessionUserId={sessionUserId}
               onCreateCall={createAndJoinCallStable}
               onJoinCall={joinGroupCallStable}
-              onDeleteCall={deleteGroupCall}
+              onDeleteCall={handleDeleteCall}
               onLeaveCall={leaveGroupCall}
             />
           ) : (

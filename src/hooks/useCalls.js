@@ -1375,7 +1375,11 @@ export function useCalls({
   }
 
   async function deleteGroupCall(callKey) {
-    await remove(rtdbRef(rtdb, `call-directory/${callKey}`)).catch(() => {});
+    if (groupCallStatus === "connected" && activeGroupCallKey === callKey) {
+      cleanupGroupCall();
+    }
+    await remove(rtdbRef(rtdb, `call-directory/${callKey}`));
+    await remove(rtdbRef(rtdb, `group-calls/${callKey}`)).catch(() => {});
   }
 
   async function joinSessionGroupCall(sessionTitle = "") {
