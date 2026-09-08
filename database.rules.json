@@ -159,12 +159,14 @@
     // -----------------------------------------------------------------
     "call-directory": {
       ".read": "auth != null",
-      // Anyone may create a call (validated below); the entry may only be
-      // removed/rewritten by its owner. `request.resource` is null on delete,
-      // which keeps the owner's delete allowed.
+      // Anyone may create a call (validated below); an entry may only be
+      // removed/rewritten by its owner. `!data.exists()` permits the initial
+      // create (ownerId must equal auth.uid below); `!newData.exists()` on a
+      // delete is gated by the owner match on the existing data.
       ".write": "auth != null && (
-        request.resource == null ||
-        request.resource.child('ownerId').val() == auth.uid
+        !data.exists()
+        || data.child('ownerId').val() == auth.uid
+        || newData.child('ownerId').val() == auth.uid
       )",
       "$callKey": {
         ".validate": "(
