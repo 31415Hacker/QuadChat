@@ -1378,8 +1378,24 @@ export function useCalls({
     if (groupCallStatus === "connected" && activeGroupCallKey === callKey) {
       cleanupGroupCall();
     }
-    await remove(rtdbRef(rtdb, `call-directory/${callKey}`));
-    await remove(rtdbRef(rtdb, `group-calls/${callKey}`)).catch(() => {});
+    try {
+      await remove(rtdbRef(rtdb, `call-directory/${callKey}`));
+      await remove(rtdbRef(rtdb, `group-calls/${callKey}`)).catch(() => {});
+    } catch (e) {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/delete-call", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ callKey }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Delete failed");
+      }
+    }
   }
 
   async function joinSessionGroupCall(sessionTitle = "") {
