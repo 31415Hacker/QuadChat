@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.12
+Current: 2.2.13
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -118,6 +118,8 @@ Rules:
 - If you add more built-in ringtones, extend the `SOUNDS` map in `callRingtone.js` and add a matching radio row in `SettingsPage.jsx`.
 
 # Signup Gating
+
+- Deployment: `api/[action].js` routes the six signup-management URLs to modules in `server/signup/`, keeping the existing URLs while deploying only one function for these handlers. Keep helper handlers outside `api/` so they do not count as additional Vercel functions. `api/signup.js` remains a separate function.
 
 - Signup requires either (a) an admin-approved request or (b) a one-time invite code. Both password and Google sign-up are gated.
 - Server endpoints (`api/`):
