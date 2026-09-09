@@ -3,7 +3,9 @@ import {
   Chrome,
   KeyRound,
   ShieldCheck,
-  UserRound
+  UserRound,
+  UserPlus,
+  Ticket
 } from "lucide-react";
 import { auth } from "../../firebase.js";
 import TurnstileWidget from "./TurnstileWidget.jsx";
@@ -19,6 +21,10 @@ export default function AuthScreen({
   setEmail,
   password,
   setPassword,
+  signupCode,
+  setSignupCode,
+  requestSubmitted,
+  setRequestSubmitted,
   pendingEmailLinkEmail,
   setPendingEmailLinkEmail,
   emailLinkError,
@@ -27,7 +33,12 @@ export default function AuthScreen({
   handleAuth,
   signInWithGoogle,
   handleEmailLinkSignIn,
-  signupHoneypot, setSignupHoneypot, signupTurnstileToken, setSignupTurnstileToken, captchaRefreshKey
+  signupHoneypot, setSignupHoneypot, signupTurnstileToken, setSignupTurnstileToken, captchaRefreshKey,
+  googleGateEmail,
+  googleGateName,
+  handleGoogleGateCode,
+  handleGoogleGateRequest,
+  cancelGoogleGate
 }) {
   if (!isAuthReady) {
     return (
@@ -40,6 +51,80 @@ export default function AuthScreen({
             <h1>QuadChat</h1>
             <p>Checking your session.</p>
           </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (authView === "google-gate") {
+    return (
+      <section className="signin-panel" aria-label="Approve your QuadChat access">
+        <div className="signin-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <img src="/logo.png" alt="QuadChat" className="brand-logo" />
+          </div>
+          <div>
+            <h1>QuadChat</h1>
+            <p>Your Google account isn&apos;t approved yet.</p>
+          </div>
+        </div>
+        <div className="google-gate-box">
+          <p>
+            <strong>{googleGateEmail || "New Google account"}</strong> has no access yet.
+            Enter an invite code to join now, or request access for an admin to approve.
+          </p>
+          <label htmlFor="google-gate-code">
+            <Ticket size={18} />
+            <span>Invite code</span>
+          </label>
+          <input
+            id="google-gate-code"
+            type="text"
+            value={signupCode}
+            onChange={(event) => setSignupCode(event.target.value)}
+            placeholder="Enter your invite code"
+            autoComplete="off"
+            maxLength={64}
+          />
+          {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
+          <button type="button" onClick={() => handleGoogleGateCode(signupCode)} disabled={!signupCode.trim()}>
+            Join with invite code
+          </button>
+          <div className="auth-divider">
+            <span>or</span>
+          </div>
+          <button type="button" onClick={handleGoogleGateRequest}>
+            Request access
+          </button>
+          <button className="google-button" type="button" onClick={cancelGoogleGate}>
+            Back
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (requestSubmitted) {
+    return (
+      <section className="signin-panel" aria-label="Request submitted">
+        <div className="signin-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <img src="/logo.png" alt="QuadChat" className="brand-logo" />
+          </div>
+          <div>
+            <h1>QuadChat</h1>
+            <p>Request sent.</p>
+          </div>
+        </div>
+        <div className="request-submitted-box">
+          <UserPlus size={28} />
+          <p>
+            Your request to join QuadChat has been sent to an admin. You&apos;ll be
+            able to sign in once it&apos;s approved.
+          </p>
+          <button type="button" onClick={() => { setRequestSubmitted(false); setAuthView("signin"); setError(""); }}>
+            Back to sign in
+          </button>
         </div>
       </section>
     );
@@ -59,7 +144,9 @@ export default function AuthScreen({
             <p>
               {authView === "signup"
                 ? "Create an account to start chatting."
-                : "Sign in to continue chatting."}
+                : authView === "signup-request"
+                  ? "Request access to QuadChat."
+                  : "Sign in to continue chatting."}
             </p>
           )}
         </div>
@@ -102,22 +189,45 @@ export default function AuthScreen({
               Sign in
             </button>
             {appSettings.settingsLoaded && appSettings.signupEnabled ? (
-              <button
-                className={authView === "signup" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setAuthView("signup");
-                  setError("");
-                }}
-              >
-                Sign up
-              </button>
+              <>
+                <button
+                  className={authView === "signup" ? "active" : ""}
+                  type="button"
+                  onClick={() => {
+                    setAuthView("signup");
+                    setError("");
+                  }}
+                >
+                  Sign up
+                </button>
+                <button
+                  className={authView === "signup-request" ? "active" : ""}
+                  type="button"
+                  onClick={() => {
+                    setAuthView("signup-request");
+                    setError("");
+                  }}
+                >
+                  Request access
+                </button>
+              </>
             ) : null}
           </div>
 
           <form className="signin-form" onSubmit={handleAuth}>
-            {authView === "signup" ? (
+            {authView === "signup" || authView === "signup-request" ? (
               <>
+                {authView === "signup" ? (
+                  <div className="invite-code-note">
+                    <Ticket size={16} />
+                    <span>Enter the invite code an admin gave you.</span>
+                  </div>
+                ) : (
+                  <div className="invite-code-note">
+                    <UserPlus size={16} />
+                    <span>An admin must approve your request before you can sign in.</span>
+                  </div>
+                )}
                 <label htmlFor="signin-name">
                   <UserRound size={18} />
                   <span>Display name</span>
@@ -132,6 +242,23 @@ export default function AuthScreen({
                   maxLength={32}
                 />
                 <label className="signup-honeypot" aria-hidden="true" htmlFor="signup-website">Website<input id="signup-website" tabIndex="-1" autoComplete="off" value={signupHoneypot} onChange={(event) => setSignupHoneypot(event.target.value)} /></label>
+              </>
+            ) : null}
+            {authView === "signup" ? (
+              <>
+                <label htmlFor="signin-code">
+                  <Ticket size={18} />
+                  <span>Invite code</span>
+                </label>
+                <input
+                  id="signin-code"
+                  type="text"
+                  value={signupCode}
+                  onChange={(event) => setSignupCode(event.target.value)}
+                  placeholder="Enter your invite code"
+                  autoComplete="off"
+                  maxLength={64}
+                />
               </>
             ) : null}
             <label htmlFor="signin-email">
@@ -149,7 +276,7 @@ export default function AuthScreen({
             />
             <label htmlFor="signin-password">
               <KeyRound size={18} />
-              <span>Password</span>
+              <span>{authView === "signup-request" ? "Password (used after approval)" : "Password"}</span>
             </label>
             <input
               id="signin-password"
@@ -157,20 +284,27 @@ export default function AuthScreen({
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Enter your password"
-              autoComplete="current-password"
+              autoComplete={authView === "signup" || authView === "signup-request" ? "new-password" : "current-password"}
               maxLength={64}
             />
             {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
-            {authView === "signup" ? <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} /> : null}
+            {authView === "signup" || authView === "signup-request" ? (
+              <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} />
+            ) : null}
             <button
               type="submit"
               disabled={
                 !email.trim() ||
                 !password.trim() ||
-                (authView === "signup" && (!draftName.trim() || !signupTurnstileToken))
+                (authView !== "signin" && (!draftName.trim() || !signupTurnstileToken)) ||
+                (authView === "signup" && !signupCode.trim())
               }
             >
-              {authView === "signup" ? "Create account" : "Sign in"}
+              {authView === "signup"
+                ? "Create account"
+                : authView === "signup-request"
+                  ? "Send request"
+                  : "Sign in"}
             </button>
           </form>
 

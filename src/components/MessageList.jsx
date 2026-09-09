@@ -2,6 +2,7 @@ import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CornerDownLeft,
   FileText,
+  Info,
   Lightbulb,
   Megaphone,
   MessageCircle,
@@ -33,6 +34,7 @@ const MessageItem = memo(function MessageItem({
   handleDeleteMessage,
   handleToggleReaction,
   isCurrentUserAdmin,
+  isCurrentUserDeveloper,
   profiles,
   knownNames,
   sessionUserId,
@@ -43,6 +45,7 @@ const MessageItem = memo(function MessageItem({
   onPreviewFile
 }) {
   const [showReactions, setShowReactions] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const reactionPickerRef = useRef(null);
 
   useEffect(() => {
@@ -55,6 +58,17 @@ const MessageItem = memo(function MessageItem({
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [showReactions]);
+
+  useEffect(() => {
+    if (!showInfo) return undefined;
+    const onPointerDown = (event) => {
+      if (!reactionPickerRef.current?.contains(event.target)) {
+        setShowInfo(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [showInfo]);
 
   const reactionEntries = useMemo(() => {
     const reactions = item.reactions || {};
@@ -93,6 +107,7 @@ const MessageItem = memo(function MessageItem({
           className="message-menu-button"
           onClick={() => {
             setShowReactions(false);
+            setShowInfo(false);
             setOpenMessageMenuId(isMenuOpen ? "" : item.id);
           }}
           title="Message options"
@@ -141,6 +156,18 @@ const MessageItem = memo(function MessageItem({
               <CornerDownLeft size={16} />
               <span>Reply</span>
             </button>
+            {isCurrentUserDeveloper ? (
+              <button
+                onClick={() => {
+                  setShowInfo((prev) => !prev);
+                  setOpenMessageMenuId("");
+                }}
+                type="button"
+              >
+                <Info size={16} />
+                <span>Message info</span>
+              </button>
+            ) : null}
             {isMine &&
             typeof item.text === "string" &&
             !item.isFile &&
@@ -166,6 +193,19 @@ const MessageItem = memo(function MessageItem({
                 <span>Delete</span>
               </button>
             ) : null}
+          </div>
+        ) : null}
+        {showInfo ? (
+          <div className="message-info-panel">
+            <strong>Message info</strong>
+            <div className="message-info-row">
+              <span className="message-info-label">ID</span>
+              <span className="message-info-value">{item.id}</span>
+            </div>
+            <div className="message-info-row">
+              <span className="message-info-label">Sender</span>
+              <span className="message-info-value">{senderName}</span>
+            </div>
           </div>
         ) : null}
       </div>
@@ -426,6 +466,7 @@ const MessageList = memo(function MessageList({
                   handleDeleteMessage={handleDeleteMessage}
                   handleToggleReaction={handleToggleReaction}
                   isCurrentUserAdmin={isCurrentUserAdmin}
+                  isCurrentUserDeveloper={isCurrentUserDeveloper}
                   profiles={profiles}
                   knownNames={mentionNames}
                   sessionUserId={sessionUserId}

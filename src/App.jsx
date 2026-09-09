@@ -230,6 +230,15 @@ export default function App() {
   const [pendingEmailLinkEmail, setPendingEmailLinkEmail] = useState("");
   const [emailLinkError, setEmailLinkError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [signupCode, setSignupCode] = useState("");
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [googleGateEmail, setGoogleGateEmail] = useState("");
+  const [googleGateName, setGoogleGateName] = useState("");
+  const [signupRequests, setSignupRequests] = useState([]);
+  const [inviteCodes, setInviteCodes] = useState([]);
+  const [inviteCodeEmail, setInviteCodeEmail] = useState("");
+  const [newInviteCode, setNewInviteCode] = useState("");
+  const [isCreatingCode, setIsCreatingCode] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [analyticsTarget, setAnalyticsTarget] = useState(null);
@@ -730,6 +739,9 @@ export default function App() {
       setIsInitialMessagesReady(!firebaseUser);
 
       if (firebaseUser) {
+        setRequestSubmitted(false);
+        setGoogleGateEmail("");
+        setGoogleGateName("");
         writeSessionUserId(firebaseUser.uid);
         setSessionUserId(firebaseUser.uid);
         saveUserProfile(firebaseUser).catch((firebaseError) => {
@@ -876,7 +888,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!appSettings.signupEnabled && authView === "signup") {
+    if (!appSettings.signupEnabled && (authView === "signup" || authView === "signup-request")) {
       setAuthView("signin");
     }
   }, [appSettings.signupEnabled, authView]);
@@ -1624,30 +1636,57 @@ export default function App() {
     const cleanName = draftName.trim();
     const cleanEmail = email.trim();
     const cleanPassword = password.trim();
-    const isSigningUp = authView === "signup";
+    const isRequestingAccess = authView === "signup-request";
+    const isSigningUpWithCode = authView === "signup";
 
-    if (!cleanEmail || !cleanPassword || (isSigningUp && !cleanName)) {
+    if (isRequestingAccess) {
+      if (!cleanEmail || !cleanPassword || !cleanName) return;
+      if (hasUsernameSpaces(cleanName)) {
+        setError("Usernames cannot contain spaces.");
+        return;
+      }
+      setError("");
+      if (!appSettings.settingsLoaded || !appSettings.signupEnabled) {
+        setError("Signup is currently disabled.");
+        return;
+      }
+      try {
+        const response = await fetch("/api/signup-request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: cleanEmail, password: cleanPassword, displayName: cleanName, provider: "password", turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        setRequestSubmitted(true);
+      } catch (firebaseError) {
+        setError(firebaseError.message || "Could not submit request. Try again.");
+        setSignupTurnstileToken("");
+        setCaptchaRefreshKey((key) => key + 1);
+      }
       return;
     }
 
-    if (isSigningUp && hasUsernameSpaces(cleanName)) {
-      setError("Usernames cannot contain spaces.");
-      return;
-    }
-
-    setError("");
-
-    if (isSigningUp && (!appSettings.settingsLoaded || !appSettings.signupEnabled)) {
-      setError("Signup is currently disabled.");
-      return;
-    }
-
-    try {
-      if (isSigningUp) {
+    if (isSigningUpWithCode) {
+      if (!cleanEmail || !cleanPassword || !cleanName) return;
+      if (hasUsernameSpaces(cleanName)) {
+        setError("Usernames cannot contain spaces.");
+        return;
+      }
+      setError("");
+      if (!appSettings.settingsLoaded || !appSettings.signupEnabled) {
+        setError("Signup is currently disabled.");
+        return;
+      }
+      if (!signupCode.trim()) {
+        setError("Enter an invite code to continue.");
+        return;
+      }
+      try {
         const response = await fetch("/api/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, password: cleanPassword, displayName: cleanName, turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
+          body: JSON.stringify({ email: cleanEmail, password: cleanPassword, displayName: cleanName, code: signupCode.trim(), turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
@@ -1655,27 +1694,32 @@ export default function App() {
         await saveUserProfile(credential.user, cleanName);
         writeSessionUserId(credential.user.uid);
         setSessionUserId(credential.user.uid);
-
-        setUser({
-          ...credential.user,
-          displayName: cleanName
-        });
-      } else {
-        const credential = await signInWithEmailAndPassword(
-          auth,
-          cleanEmail,
-          cleanPassword
-        );
-        writeSessionUserId(credential.user.uid);
-        setSessionUserId(credential.user.uid);
+        setUser({ ...credential.user, displayName: cleanName });
+        setDraftName("");
+        setEmail("");
+        setPassword("");
+        setSignupCode("");
+      } catch (firebaseError) {
+        setError(getAuthErrorMessage(firebaseError));
+        setSignupTurnstileToken("");
+        setCaptchaRefreshKey((key) => key + 1);
       }
+      return;
+    }
 
+    if (!cleanEmail || !cleanPassword) return;
+
+    setError("");
+
+    try {
+      const credential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      writeSessionUserId(credential.user.uid);
+      setSessionUserId(credential.user.uid);
       setDraftName("");
       setEmail("");
       setPassword("");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
-      if (isSigningUp) { setSignupTurnstileToken(""); setCaptchaRefreshKey((key) => key + 1); }
     }
   }
 
@@ -1696,15 +1740,84 @@ export default function App() {
         return;
       }
 
-      await saveUserProfile(credential.user);
-      writeSessionUserId(credential.user.uid);
-      setSessionUserId(credential.user.uid);
-      setDraftName("");
-      setEmail("");
-      setPassword("");
+      if (profileSnap.exists()) {
+        await saveUserProfile(credential.user);
+        writeSessionUserId(credential.user.uid);
+        setSessionUserId(credential.user.uid);
+        setDraftName("");
+        setEmail("");
+        setPassword("");
+        return;
+      }
+
+      const googleEmail = String(credential.user.email || "").toLowerCase();
+      const approvedRef = doc(db, "approved-users", googleEmail);
+      const approvedSnap = await getDoc(approvedRef);
+
+      if (approvedSnap.exists()) {
+        await saveUserProfile(credential.user);
+        writeSessionUserId(credential.user.uid);
+        setSessionUserId(credential.user.uid);
+        setDraftName("");
+        setEmail("");
+        setPassword("");
+        return;
+      }
+
+      setGoogleGateEmail(googleEmail);
+      setGoogleGateName(credential.user.displayName || "");
+      await signOutOfFirebase(auth);
+      setError("");
+      setAuthView("google-gate");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
     }
+  }
+
+  async function handleGoogleGateCode(code) {
+    if (!googleGateEmail || !code.trim()) return;
+    setError("");
+    try {
+      const response = await fetch("/api/google-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code.trim(), email: googleGateEmail })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setGoogleGateEmail("");
+      setGoogleGateName("");
+      setSignupCode("");
+      setAuthView("signin");
+      setError("Your access was approved. Sign in with Google again to join.");
+    } catch (firebaseError) {
+      setError(firebaseError.message || "Invalid invite code. Try again.");
+    }
+  }
+
+  async function handleGoogleGateRequest() {
+    if (!googleGateEmail) return;
+    setError("");
+    try {
+      const turnstileToken = await window.turnstile?.getResponse();
+      const response = await fetch("/api/signup-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: googleGateEmail, displayName: googleGateName || googleGateEmail.split("@")[0], provider: "google", turnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setRequestSubmitted(true);
+    } catch (firebaseError) {
+      setError(firebaseError.message || "Could not submit request. Try again.");
+    }
+  }
+
+  function cancelGoogleGate() {
+    setGoogleGateEmail("");
+    setGoogleGateName("");
+    setAuthView("signin");
+    setError("");
   }
 
   async function linkGoogleAccount() {
@@ -2021,6 +2134,126 @@ export default function App() {
       );
     } catch (firebaseError) {
       setSettingsMessage(firebaseError.message);
+    }
+  }
+
+  const refreshSignupRequests = useCallback(async () => {
+    if (!isCurrentUserAdmin) return;
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, "signup-requests"), orderBy("createdAt", "asc"))
+      );
+      setSignupRequests(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }))
+      );
+    } catch {
+      setSignupRequests([]);
+    }
+  }, [isCurrentUserAdmin]);
+
+  async function approveSignupRequest(requestId) {
+    if (!user || !requestId) return;
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/approve-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ requestId })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      await refreshSignupRequests();
+      setAdminAccountMessage(result.message || "Request approved.");
+    } catch (err) {
+      setAdminAccountMessage(err.message || "Could not approve request.");
+    }
+  }
+
+  async function rejectSignupRequest(requestId) {
+    if (!user || !requestId) return;
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/reject-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ requestId })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      await refreshSignupRequests();
+      setAdminAccountMessage(result.message || "Request rejected.");
+    } catch (err) {
+      setAdminAccountMessage(err.message || "Could not reject request.");
+    }
+  }
+
+  const refreshInviteCodes = useCallback(async () => {
+    if (!isCurrentUserAdmin) return;
+    try {
+      const snapshot = await getDocs(collection(db, "signup-codes"));
+      setInviteCodes(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }))
+      );
+    } catch {
+      setInviteCodes([]);
+    }
+  }, [isCurrentUserAdmin]);
+
+  async function createInviteCode() {
+    if (!user) return;
+    setIsCreatingCode(true);
+    setNewInviteCode("");
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/create-code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ email: inviteCodeEmail.trim() })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setNewInviteCode(result.code);
+      setInviteCodeEmail("");
+      await refreshInviteCodes();
+    } catch (err) {
+      setAdminAccountMessage(err.message || "Could not create invite code.");
+    } finally {
+      setIsCreatingCode(false);
+    }
+  }
+
+  async function revokeInviteCode(code) {
+    if (!user || !code) return;
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/revoke-code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ code })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      await refreshInviteCodes();
+    } catch (err) {
+      setAdminAccountMessage(err.message || "Could not revoke invite code.");
     }
   }
 
@@ -2763,6 +2996,7 @@ export default function App() {
 
     try {
       await deleteDoc(doc(db, "messages", activeChannel, "messages", messageId));
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
     } catch (firebaseError) {
       setError(firebaseError.message);
     }
@@ -3196,6 +3430,15 @@ export default function App() {
           signupTurnstileToken={signupTurnstileToken}
           setSignupTurnstileToken={setSignupTurnstileToken}
           captchaRefreshKey={captchaRefreshKey}
+          signupCode={signupCode}
+          setSignupCode={setSignupCode}
+          requestSubmitted={requestSubmitted}
+          setRequestSubmitted={setRequestSubmitted}
+          googleGateEmail={googleGateEmail}
+          googleGateName={googleGateName}
+          handleGoogleGateCode={handleGoogleGateCode}
+          handleGoogleGateRequest={handleGoogleGateRequest}
+          cancelGoogleGate={cancelGoogleGate}
         />
       ) : (
         <section className={`chat-panel${isSettingsOpen && user ? " chat-panel--hidden" : ""}`} aria-label="QuadChat room">
@@ -3569,6 +3812,18 @@ export default function App() {
            deleteAdminAccount={deleteAdminAccount}
            banAdminAccount={banAdminAccount}
            unbanAdminAccount={unbanAdminAccount}
+           signupRequests={signupRequests}
+           inviteCodes={inviteCodes}
+           refreshSignupRequests={refreshSignupRequests}
+           refreshInviteCodes={refreshInviteCodes}
+           approveSignupRequest={approveSignupRequest}
+           rejectSignupRequest={rejectSignupRequest}
+           inviteCodeEmail={inviteCodeEmail}
+           setInviteCodeEmail={setInviteCodeEmail}
+           newInviteCode={newInviteCode}
+           createInviteCode={createInviteCode}
+           isCreatingCode={isCreatingCode}
+           revokeInviteCode={revokeInviteCode}
          />
       ) : null}
       <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />

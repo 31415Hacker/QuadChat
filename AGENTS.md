@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.10
+Current: 2.2.12
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -116,6 +116,27 @@ Rules:
 - `src/utils/callRingtone.js` (`startCallRingtone`) reads the current value from `localStorage` on each start; it rebuilds the `Audio` element lazily when the source changes. The `"custom"` source is stored as a data URL in `quadchat-call-sound-custom` (uploaded in the same settings UI).
 - State lives in `App.jsx` (`callSoundType`/`setCallSoundType`, persisted via a `useEffect` writing `quadchat-call-sound`) and is threaded down to `SettingsPage.jsx`.
 - If you add more built-in ringtones, extend the `SOUNDS` map in `callRingtone.js` and add a matching radio row in `SettingsPage.jsx`.
+
+# Signup Gating
+
+- Signup requires either (a) an admin-approved request or (b) a one-time invite code. Both password and Google sign-up are gated.
+- Server endpoints (`api/`):
+  - `signup-request.js` — prospective member submits request (`{ provider, displayName, email, password?, turnstileToken? }`). Password requires captcha; Google skips captcha (email already verified by popup).
+  - `approve-request.js` — admin approves. Password: server creates auth user + writes profile + `approved-users/<email>`. Google: writes `approved-users/<email>` only (account created on Google sign-in).
+  - `reject-request.js` — admin deletes request.
+  - `create-code.js` — admin creates invite code, optionally restricted to a single email. Writes `signup-codes/<code>` (the code string is the doc ID).
+  - `revoke-code.js` — admin deletes code.
+  - `signup.js` — requires `{ code, email, password, displayName }`. Validates code, creates auth user, writes `approved-users/<email>`, marks code used.
+  - `google-signup.js` — requires `{ code, email }` (no idToken). Validates code, writes `approved-users/<email>`, marks code used.
+- Firestore collections:
+  - `approved-users/<lowercaseEmail>` — server-only writes, read only own email (rules check `request.auth.token.email.lower() == email`).
+  - `signup-requests/<requestId>` — server-only writes, admin-only reads.
+  - `signup-codes/<code>` — server-only writes, admin-only reads.
+- Client flow (`App.jsx`): `handleAuth` branches on `authView` — `"signup-request"` POSTs to `/api/signup-request` and shows pending state; `"signup"` (code) POSTs to `/api/signup` then signs in via Firebase.
+- Google gate: `signInWithGoogle` checks for existing profile. If none, checks `approved-users/<email>` — if approved, creates profile client-side. Otherwise shows `.google-gate-box` screen where user enters a code or requests access, then signs in again.
+- Rules gating: `users` create for regular users requires `(isApprovedSignup() || isAdminEmail()) && userId == request.auth.uid`. `isApprovedSignup()` checks `approved-users/<email>` exists + `signupEnabled()`.
+- Admin settings (SettingsPage): "Signup requests" section (accept/reject), "Invite codes" section (create with optional email restriction, copy, revoke).
+- `users/create` server path (`saveUserProfile`) still works for admins via the `(isAdmin() || isDeveloper())` OR branch, so admin-created profiles bypass the approval check entirely.
 
 # Composer
 

@@ -14,7 +14,7 @@ import {
   Upload,
   X
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getInitials, getProfileName } from "../utils/names.js";
 import Dialog from "./Dialog.jsx";
 import ScheduleEditor from "./ScheduleEditor.jsx";
@@ -127,9 +127,28 @@ export default function SettingsPage({
   changeAdminAccountPassword,
   deleteAdminAccount,
   banAdminAccount,
-  unbanAdminAccount
+  unbanAdminAccount,
+  signupRequests,
+  inviteCodes,
+  refreshSignupRequests,
+  refreshInviteCodes,
+  approveSignupRequest,
+  rejectSignupRequest,
+  inviteCodeEmail,
+  setInviteCodeEmail,
+  newInviteCode,
+  createInviteCode,
+  isCreatingCode,
+  revokeInviteCode
 }) {
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+
+  useEffect(() => {
+    if (settingsTab === "admin" && isCurrentUserAdmin) {
+      refreshSignupRequests();
+      refreshInviteCodes();
+    }
+  }, [settingsTab, isCurrentUserAdmin, refreshSignupRequests, refreshInviteCodes]);
 
   return (
     <div className="settings-page">
@@ -856,6 +875,107 @@ export default function SettingsPage({
                         <span>********************</span>
                         <Copy size={16} />
                       </div>
+                    </div>
+                  ) : null}
+                </section>
+                <section className="settings-section-box admin-signup-requests">
+                  <div className="admin-account-heading">
+                    <h3>Signup requests</h3>
+                    <p>Approve or reject people requesting access to QuadChat.</p>
+                  </div>
+                  {signupRequests.length === 0 ? (
+                    <p className="settings-note">No pending requests.</p>
+                  ) : (
+                    <div className="admin-request-list">
+                      {signupRequests.map((request) => (
+                        <article
+                          className="admin-request-item"
+                          key={request.id}
+                        >
+                          <div className="admin-request-info">
+                            <strong>{request.displayName}</strong>
+                            <span>{request.email}</span>
+                            <span className={`admin-request-provider admin-request-provider--${request.provider || "password"}`}>
+                              {request.provider === "google" ? "Google" : "Email + password"}
+                            </span>
+                          </div>
+                          <div className="admin-request-actions">
+                            <button
+                              onClick={() => approveSignupRequest(request.id)}
+                              type="button"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              className="danger-button"
+                              onClick={() => rejectSignupRequest(request.id)}
+                              type="button"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  </section>
+                <section className="settings-section-box admin-invite-codes">
+                  <div className="admin-account-heading">
+                    <h3>Invite codes</h3>
+                    <p>Create one-time invite codes members can use to sign up, optionally restricted to one email.</p>
+                  </div>
+                  <div className="magic-link-form">
+                    <input
+                      type="email"
+                      value={inviteCodeEmail}
+                      onChange={(event) => setInviteCodeEmail(event.target.value)}
+                      placeholder="Restrict to email (optional)"
+                      maxLength={120}
+                    />
+                    <button
+                      disabled={isCreatingCode}
+                      onClick={createInviteCode}
+                      type="button"
+                    >
+                      {isCreatingCode ? "Creating..." : "Create invite code"}
+                    </button>
+                  </div>
+                  {newInviteCode ? (
+                    <div className="magic-link-result">
+                      <div
+                        className="magic-link-url"
+                        onClick={() => navigator.clipboard.writeText(newInviteCode)}
+                        title="Copy invite code"
+                      >
+                        <span>{newInviteCode}</span>
+                        <Copy size={16} />
+                      </div>
+                    </div>
+                  ) : null}
+                  {inviteCodes.length > 0 ? (
+                    <div className="admin-invite-code-list">
+                      {inviteCodes.map((inviteCode) => (
+                        <article className="admin-invite-code-item" key={inviteCode.id}>
+                          <div className="admin-invite-code-info">
+                            <code>{inviteCode.id}</code>
+                            <span>
+                              {inviteCode.email
+                                ? `Restricted to ${inviteCode.email}`
+                                : "Valid for any email"}
+                            </span>
+                            <span className={inviteCode.used ? "admin-request-provider--google" : ""}>
+                              {inviteCode.used ? "Used" : "Available"}
+                            </span>
+                          </div>
+                          <button
+                            className="danger-button"
+                            onClick={() => revokeInviteCode(inviteCode.id)}
+                            type="button"
+                          >
+                            Revoke
+                          </button>
+                        </article>
+                      ))}
                     </div>
                   ) : null}
                 </section>

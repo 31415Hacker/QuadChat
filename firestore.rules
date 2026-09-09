@@ -86,6 +86,21 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/settings/app).data.signupEnabled != false;
     }
 
+    // A brand-new profile may only be created once a member has been approved.
+    // The server writes an `approved-users/<email>` entry when an admin accepts
+    // a signup request or a valid one-time invite code is redeemed. Email is the
+    // key here because profile docs are keyed by uid, and for email/password
+    // accounts we approve before the uid even exists.
+    function isApprovedEmail(email) {
+      return exists(/databases/$(database)/documents/approved-users/$(email.lower()));
+    }
+
+    function isApprovedSignup() {
+      return signupEnabled() && (
+        'email' in request.resource.data && isApprovedEmail(request.resource.data.email)
+      );
+    }
+
     function isDmChannel(channel) {
       return channel.matches("dm_.*");
     }
@@ -194,7 +209,7 @@ service cloud.firestore {
         && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
         && (
         (isAdmin() || isDeveloper()) || (
-          signupEnabled() &&
+          (isApprovedSignup() || isAdminEmail()) &&
           userId == request.auth.uid &&
           (isAdminEmail() ||
             (
@@ -249,6 +264,29 @@ service cloud.firestore {
     // Deletion tombstones — server (admin SDK) only
     match /deleted-users/{userId} {
       allow read, write: if false;
+    }
+
+    // Approved-emails whitelist — written by the server only (on request
+    // approval or invite-code redemption). A user may only read their own
+    // entry so the client can check whether their Google email is approved.
+    match /approved-users/{email} {
+      allow read: if signedIn() && 'email' in request.auth.token
+        && request.auth.token.email.lower() == email.lower();
+      allow write: if false;
+    }
+
+    // Signup requests — written by the server only. Only admins may read the
+    // queue (prospective members aren't signed in, so they have no read path).
+    match /signup-requests/{requestId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // One-time invite codes — secrets. Only admins may read; only the server
+    // may write (create/revoke/redeem).
+    match /signup-codes/{code} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }
