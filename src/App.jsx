@@ -5,6 +5,7 @@ import {
   linkWithPopup,
   onAuthStateChanged,
   reauthenticateWithCredential,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithEmailLink,
   signInWithPopup,
@@ -232,6 +233,7 @@ export default function App() {
   const [settingsMessage, setSettingsMessage] = useState("");
   const [signupCode, setSignupCode] = useState("");
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [passwordResetSent, setPasswordResetSent] = useState(false);
   const [googleGateEmail, setGoogleGateEmail] = useState("");
   const [googleGateName, setGoogleGateName] = useState("");
   const [signupRequests, setSignupRequests] = useState([]);
@@ -740,6 +742,7 @@ export default function App() {
 
       if (firebaseUser) {
         setRequestSubmitted(false);
+        setPasswordResetSent(false);
         setGoogleGateEmail("");
         setGoogleGateName("");
         writeSessionUserId(firebaseUser.uid);
@@ -1631,6 +1634,21 @@ export default function App() {
     return () => unsubs.forEach((unsub) => unsub());
   }, [user, sessionUserId, dmChannelIdsKey, activeChannel]);
 
+  async function handlePasswordReset() {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setError("Enter your email address first.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      setError("");
+      setPasswordResetSent(true);
+    } catch (firebaseError) {
+      setError(getAuthErrorMessage(firebaseError));
+    }
+  }
+
   async function handleAuth(event) {
     event.preventDefault();
     const cleanName = draftName.trim();
@@ -1640,7 +1658,7 @@ export default function App() {
     const isSigningUpWithCode = authView === "signup";
 
     if (isRequestingAccess) {
-      if (!cleanEmail || !cleanPassword || !cleanName) return;
+      if (!cleanEmail || !cleanName) return;
       if (hasUsernameSpaces(cleanName)) {
         setError("Usernames cannot contain spaces.");
         return;
@@ -1654,7 +1672,7 @@ export default function App() {
         const response = await fetch("/api/signup-request", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, password: cleanPassword, displayName: cleanName, provider: "password", turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
+          body: JSON.stringify({ email: cleanEmail, displayName: cleanName, provider: "password", turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
@@ -3439,6 +3457,9 @@ export default function App() {
           handleGoogleGateCode={handleGoogleGateCode}
           handleGoogleGateRequest={handleGoogleGateRequest}
           cancelGoogleGate={cancelGoogleGate}
+          handlePasswordReset={handlePasswordReset}
+          passwordResetSent={passwordResetSent}
+          setPasswordResetSent={setPasswordResetSent}
         />
       ) : (
         <section className={`chat-panel${isSettingsOpen && user ? " chat-panel--hidden" : ""}`} aria-label="QuadChat room">

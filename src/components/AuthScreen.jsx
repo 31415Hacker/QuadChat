@@ -38,7 +38,10 @@ export default function AuthScreen({
   googleGateName,
   handleGoogleGateCode,
   handleGoogleGateRequest,
-  cancelGoogleGate
+  cancelGoogleGate,
+  handlePasswordReset,
+  passwordResetSent,
+  setPasswordResetSent
 }) {
   if (!isAuthReady) {
     return (
@@ -120,9 +123,38 @@ export default function AuthScreen({
           <UserPlus size={28} />
           <p>
             Your request to join QuadChat has been sent to an admin. You&apos;ll be
-            able to sign in once it&apos;s approved.
+            able to sign in once it&apos;s approved. For email/password access, use
+            &ldquo;Forgot password?&rdquo; on the sign-in screen to set your
+            password after approval.
           </p>
           <button type="button" onClick={() => { setRequestSubmitted(false); setAuthView("signin"); setError(""); }}>
+            Back to sign in
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (passwordResetSent) {
+    return (
+      <section className="signin-panel" aria-label="Password reset sent">
+        <div className="signin-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <img src="/logo.png" alt="QuadChat" className="brand-logo" />
+          </div>
+          <div>
+            <h1>QuadChat</h1>
+            <p>Check your email.</p>
+          </div>
+        </div>
+        <div className="request-submitted-box">
+          <KeyRound size={28} />
+          <p>
+            If an account exists for that email, a password-reset link has been
+            sent. Check your inbox and follow the instructions to set your
+            password.
+          </p>
+          <button type="button" onClick={() => { setPasswordResetSent(false); setError(""); }}>
             Back to sign in
           </button>
         </div>
@@ -274,19 +306,23 @@ export default function AuthScreen({
               autoComplete="email"
               maxLength={120}
             />
-            <label htmlFor="signin-password">
-              <KeyRound size={18} />
-              <span>{authView === "signup-request" ? "Password (used after approval)" : "Password"}</span>
-            </label>
-            <input
-              id="signin-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
-              autoComplete={authView === "signup" || authView === "signup-request" ? "new-password" : "current-password"}
-              maxLength={64}
-            />
+            {authView !== "signup-request" ? (
+              <>
+                <label htmlFor="signin-password">
+                  <KeyRound size={18} />
+                  <span>Password</span>
+                </label>
+                <input
+                  id="signin-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete={authView === "signup" ? "new-password" : "current-password"}
+                  maxLength={64}
+                />
+              </>
+            ) : null}
             {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
             {authView === "signup" || authView === "signup-request" ? (
               <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} />
@@ -295,7 +331,7 @@ export default function AuthScreen({
               type="submit"
               disabled={
                 !email.trim() ||
-                !password.trim() ||
+                (authView !== "signup-request" && !password.trim()) ||
                 (authView !== "signin" && (!draftName.trim() || !signupTurnstileToken)) ||
                 (authView === "signup" && !signupCode.trim())
               }
@@ -306,6 +342,16 @@ export default function AuthScreen({
                   ? "Send request"
                   : "Sign in"}
             </button>
+            {authView === "signin" ? (
+              <button
+                type="button"
+                className="forgot-password-link"
+                onClick={handlePasswordReset}
+                disabled={!email.trim()}
+              >
+                Forgot password?
+              </button>
+            ) : null}
           </form>
 
           <div className="auth-divider">

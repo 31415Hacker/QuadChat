@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const { email, displayName, password, provider, turnstileToken, website, headless } = req.body || {};
   if (website || headless) return res.status(400).json({ error: "Unable to submit request." });
-  if (!email || !displayName) return res.status(400).json({ error: "Complete the form." });
+  if (!email || !displayName || !password) return res.status(400).json({ error: "Complete the form." });
 
   try {
     const kind = provider === "google" ? "google" : "password";
@@ -37,9 +37,6 @@ export default async function handler(req, res) {
     const db = admin.firestore();
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanName = String(displayName).trim();
-    if (kind === "password" && (typeof password !== "string" || password.length < 6 || password.length > 64)) {
-      return res.status(400).json({ error: "Password must be between 6 and 64 characters." });
-    }
 
     const existing = await admin.auth().getUserByEmail(cleanEmail).catch((error) => {
       if (error.code === "auth/user-not-found") return null;

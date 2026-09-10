@@ -29,13 +29,15 @@
   <body>
     <main>
       <h1>QuadChat Privacy Policy</h1>
-      <p><strong>Last updated:</strong> June 5, 2026</p>
+      <p><strong>Last updated:</strong> September 9, 2026</p>
 
       <p>QuadChat is a small private group chat application created and operated by a single developer. This page explains what data we collect and how it is used.</p>
 
       <h2>What data we collect</h2>
       <ul>
-        <li><strong>Account data:</strong> When you sign up, we store the email address you provide, a password hash (handled by Firebase Authentication), and the display name you choose.</li>
+        <li><strong>Account data:</strong> We use Firebase Authentication to manage accounts and password credentials, and store your email address and display name. Google sign-in provides account information such as your email address, name, and profile picture; QuadChat does not receive your Google password.</li>
+        <li><strong>Signup requests:</strong> When you request access, we store your email address, display name, sign-in provider, request status, and submission time. Review records include the reviewing admin's user ID and review time. Password-based requests also store your chosen password as described below.</li>
+        <li><strong>Invites and approvals:</strong> We store invite codes, optional email restrictions, the creating admin's user ID, creation time, and whether a code was used. Redemption records include the email address that used the code and when. Approval records are associated with your email address and may include your name, provider, approving admin, and approval source.</li>
         <li><strong>Profile data:</strong> You may optionally upload a profile picture, which is stored on Cloudinary.</li>
         <li><strong>Messages:</strong> Messages and files you send in channels are stored in Firebase Firestore and Firebase Realtime Database so other signed-in users can see them.</li>
         <li><strong>Presence:</strong> While you are signed in, we record that you are online using Firebase Realtime Database. This is removed when you sign out.</li>
@@ -43,19 +45,28 @@
       </ul>
 
       <h2>How we use your data</h2>
-      <p>Data is used only to operate the chat application: showing messages to other users, displaying your profile, and showing online status. We do not sell or share your data with third parties for advertising or marketing.</p>
+      <p>Data is used to operate the chat application: reviewing access requests, validating invite codes, recording approvals, creating accounts, preventing abuse, showing messages to other users, displaying your profile, and showing online status. We do not sell or share your data with third parties for advertising or marketing.</p>
+
+      <h2>Signup request passwords and admin access</h2>
+      <p>For a password-based access request, the current implementation stores your chosen password in readable form in the Firestore request record so an admin can approve creation of your account. This is separate from Firebase Authentication's password storage. Authorized admins can read the complete request record, including this password, even though the admin interface does not display it. Do not reuse a password from another service for an access request.</p>
+      <p>Admins can read signup requests and invite-code records to manage access. Signed-in users can read only the approval record for their own email address through the client. Direct password signup with an invite code does not create a password-bearing request record.</p>
+
+      <h2>Retention of signup records</h2>
+      <p>Rejecting a request deletes its request record. Approval currently retains the request record, including its password for password-based requests. There is no automatic expiration for these records. Used invite codes remain stored until revoked, and approval records remain stored. Deleting your account does not automatically delete signup requests, approval records, or invite-code redemption records. Contact the operator below to request removal of these retained records.</p>
 
       <h2>Third-party services</h2>
       <ul>
-        <li><strong>Firebase Authentication</strong> handles sign-in and password storage.</li>
-        <li><strong>Firebase Firestore and Realtime Database</strong> store messages, profiles, and presence.</li>
+        <li><strong>Firebase Authentication</strong> handles sign-in and account credentials. Passwords submitted with access requests are also stored separately in Firestore as explained above.</li>
+        <li><strong>Firebase Firestore and Realtime Database</strong> store messages, profiles, presence, and signup-management records.</li>
         <li><strong>Cloudinary</strong> stores uploaded files and profile pictures.</li>
+        <li><strong>Cloudflare Turnstile</strong> provides CAPTCHA for password signup and access requests. The browser interacts with Cloudflare for verification, and our server sends the CAPTCHA response token to Cloudflare to validate it.</li>
+        <li><strong>Vercel</strong> hosts the application and server endpoints that process signup requests, approvals, and invite codes.</li>
       </ul>
       <p>These providers have their own privacy practices.</p>
 
       <h2>Your choices</h2>
       <ul>
-        <li>You can remove your account at any time from the Settings panel. This deletes your profile data and account.</li>
+        <li>You can remove your account at any time from the Settings panel. This deletes your profile data and authentication account, but not the retained signup records described above.</li>
         <li>Messages you have sent may remain visible to other users unless an admin removes them.</li>
         <li>You can clear browser data to remove local state.</li>
       </ul>

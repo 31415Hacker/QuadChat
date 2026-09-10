@@ -118,12 +118,12 @@ export default async function handler(req, res) {
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: caller.uid
         }),
-        requestRef.update({ status: "approved", reviewedAt: admin.firestore.FieldValue.serverTimestamp(), reviewedBy: caller.uid })
+        requestRef.update({ status: "approved", reviewedAt: admin.firestore.FieldValue.serverTimestamp(), reviewedBy: caller.uid, password: admin.firestore.FieldValue.delete() })
       ]);
 
       return res.status(200).json({
         ok: true,
-        message: "Request approved. The member can now sign in with their email and password."
+        message: "Request approved. The member should use &ldquo;Forgot password?&rdquo; on the sign-in screen to set their password."
       });
     }
 
