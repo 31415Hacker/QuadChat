@@ -31,6 +31,7 @@ export default function AuthScreen({
   error,
   setError,
   handleAuth,
+  handleRequestAccess,
   signInWithGoogle,
   handleEmailLinkSignIn,
   signupHoneypot, setSignupHoneypot, signupTurnstileToken, setSignupTurnstileToken, captchaRefreshKey,
@@ -176,9 +177,7 @@ export default function AuthScreen({
             <p>
               {authView === "signup"
                 ? "Create an account to start chatting."
-                : authView === "signup-request"
-                  ? "Request access to QuadChat."
-                  : "Sign in to continue chatting."}
+                : "Sign in to continue chatting."}
             </p>
           )}
         </div>
@@ -221,45 +220,26 @@ export default function AuthScreen({
               Sign in
             </button>
             {appSettings.settingsLoaded && appSettings.signupEnabled ? (
-              <>
-                <button
-                  className={authView === "signup" ? "active" : ""}
-                  type="button"
-                  onClick={() => {
-                    setAuthView("signup");
-                    setError("");
-                  }}
-                >
-                  Sign up
-                </button>
-                <button
-                  className={authView === "signup-request" ? "active" : ""}
-                  type="button"
-                  onClick={() => {
-                    setAuthView("signup-request");
-                    setError("");
-                  }}
-                >
-                  Request access
-                </button>
-              </>
+              <button
+                className={authView === "signup" ? "active" : ""}
+                type="button"
+                onClick={() => {
+                  setAuthView("signup");
+                  setError("");
+                }}
+              >
+                Sign up
+              </button>
             ) : null}
           </div>
 
           <form className="signin-form" onSubmit={handleAuth}>
-            {authView === "signup" || authView === "signup-request" ? (
+            {authView === "signup" ? (
               <>
-                {authView === "signup" ? (
-                  <div className="invite-code-note">
-                    <Ticket size={16} />
-                    <span>Enter the invite code an admin gave you.</span>
-                  </div>
-                ) : (
-                  <div className="invite-code-note">
-                    <UserPlus size={16} />
-                    <span>An admin must approve your request before you can sign in.</span>
-                  </div>
-                )}
+                <div className="invite-code-note">
+                  <Ticket size={16} />
+                  <span>Enter an invite code to join now, or request access below.</span>
+                </div>
                 <label htmlFor="signin-name">
                   <UserRound size={18} />
                   <span>Display name</span>
@@ -274,10 +254,32 @@ export default function AuthScreen({
                   maxLength={32}
                 />
                 <label className="signup-honeypot" aria-hidden="true" htmlFor="signup-website">Website<input id="signup-website" tabIndex="-1" autoComplete="off" value={signupHoneypot} onChange={(event) => setSignupHoneypot(event.target.value)} /></label>
-              </>
-            ) : null}
-            {authView === "signup" ? (
-              <>
+                <label htmlFor="signin-email">
+                  <UserRound size={18} />
+                  <span>Email</span>
+                </label>
+                <input
+                  id="signin-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  maxLength={120}
+                />
+                <label htmlFor="signin-password">
+                  <KeyRound size={18} />
+                  <span>Password</span>
+                </label>
+                <input
+                  id="signin-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete="new-password"
+                  maxLength={64}
+                />
                 <label htmlFor="signin-code">
                   <Ticket size={18} />
                   <span>Invite code</span>
@@ -293,55 +295,29 @@ export default function AuthScreen({
                 />
               </>
             ) : null}
-            <label htmlFor="signin-email">
-              <UserRound size={18} />
-              <span>Email</span>
-            </label>
-            <input
-              id="signin-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              maxLength={120}
-            />
-            {authView !== "signup-request" ? (
-              <>
-                <label htmlFor="signin-password">
-                  <KeyRound size={18} />
-                  <span>Password</span>
-                </label>
-                <input
-                  id="signin-password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter your password"
-                  autoComplete={authView === "signup" ? "new-password" : "current-password"}
-                  maxLength={64}
-                />
-              </>
-            ) : null}
             {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
-            {authView === "signup" || authView === "signup-request" ? (
+            {authView === "signup" ? (
               <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} />
             ) : null}
             <button
               type="submit"
               disabled={
                 !email.trim() ||
-                (authView !== "signup-request" && !password.trim()) ||
-                (authView !== "signin" && (!draftName.trim() || !signupTurnstileToken)) ||
-                (authView === "signup" && !signupCode.trim())
+                (authView === "signin" && !password.trim()) ||
+                (authView === "signup" && (!draftName.trim() || !password.trim() || !signupTurnstileToken || !signupCode.trim()))
               }
             >
-              {authView === "signup"
-                ? "Create account"
-                : authView === "signup-request"
-                  ? "Send request"
-                  : "Sign in"}
+              {authView === "signup" ? "Create account" : "Sign in"}
             </button>
+            {authView === "signup" ? (
+              <button
+                type="button"
+                onClick={handleRequestAccess}
+                disabled={!email.trim() || !draftName.trim() || !signupTurnstileToken}
+              >
+                Request access
+              </button>
+            ) : null}
             {authView === "signin" ? (
               <button
                 type="button"

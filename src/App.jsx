@@ -893,7 +893,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!appSettings.signupEnabled && (authView === "signup" || authView === "signup-request")) {
+    if (!appSettings.signupEnabled && authView === "signup") {
       setAuthView("signin");
     }
   }, [appSettings.signupEnabled, authView]);
@@ -1656,36 +1656,7 @@ export default function App() {
     const cleanName = draftName.trim();
     const cleanEmail = email.trim();
     const cleanPassword = password.trim();
-    const isRequestingAccess = authView === "signup-request";
     const isSigningUpWithCode = authView === "signup";
-
-    if (isRequestingAccess) {
-      if (!cleanEmail || !cleanName) return;
-      if (hasUsernameSpaces(cleanName)) {
-        setError("Usernames cannot contain spaces.");
-        return;
-      }
-      setError("");
-      if (!appSettings.settingsLoaded || !appSettings.signupEnabled) {
-        setError("Signup is currently disabled.");
-        return;
-      }
-      try {
-        const response = await fetch("/api/signup-request", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, displayName: cleanName, provider: "password", turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
-        setRequestSubmitted(true);
-      } catch (firebaseError) {
-        setError(firebaseError.message || "Could not submit request. Try again.");
-        setSignupTurnstileToken("");
-        setCaptchaRefreshKey((key) => key + 1);
-      }
-      return;
-    }
 
     if (isSigningUpWithCode) {
       if (!cleanEmail || !cleanPassword || !cleanName) return;
@@ -1740,6 +1711,37 @@ export default function App() {
       setPassword("");
     } catch (firebaseError) {
       setError(getAuthErrorMessage(firebaseError));
+    }
+  }
+
+  async function handleRequestAccess(event) {
+    event.preventDefault();
+    const cleanName = draftName.trim();
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
+    if (!cleanEmail || !cleanName) return;
+    if (hasUsernameSpaces(cleanName)) {
+      setError("Usernames cannot contain spaces.");
+      return;
+    }
+    setError("");
+    if (!appSettings.settingsLoaded || !appSettings.signupEnabled) {
+      setError("Signup is currently disabled.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/signup-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, displayName: cleanName, password: cleanPassword || undefined, provider: "password", turnstileToken: signupTurnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setRequestSubmitted(true);
+    } catch (firebaseError) {
+      setError(firebaseError.message || "Could not submit request. Try again.");
+      setSignupTurnstileToken("");
+      setCaptchaRefreshKey((key) => key + 1);
     }
   }
 
@@ -3447,6 +3449,7 @@ export default function App() {
           error={error}
           setError={setError}
           handleAuth={handleAuth}
+          handleRequestAccess={handleRequestAccess}
           signInWithGoogle={signInWithGoogle}
           handleEmailLinkSignIn={handleEmailLinkSignIn}
           signupHoneypot={signupHoneypot}
