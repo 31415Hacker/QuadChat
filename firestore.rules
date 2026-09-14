@@ -88,16 +88,19 @@ service cloud.firestore {
 
     // A brand-new profile may only be created once a member has been approved.
     // The server writes an `approved-users/<email>` entry when an admin accepts
-    // a signup request or a valid one-time invite code is redeemed. Email is the
-    // key here because profile docs are keyed by uid, and for email/password
-    // accounts we approve before the uid even exists.
-    function isApprovedEmail(email) {
-      return exists(/databases/$(database)/documents/approved-users/$(email.lower()));
+    // a signup request or a valid one-time invite code is redeemed. Each entry
+    // is bound to the exact Firebase account (`uid`) that was approved, so an
+    // approval for one account (its profile, provider, etc.) can never be
+    // inherited by a different identity that merely shares the same email.
+    function isApprovedForUid(email, uid) {
+      return exists(/databases/$(database)/documents/approved-users/$(email.lower()))
+        && ('uid' in get(/databases/$(database)/documents/approved-users/$(email.lower())).data)
+        && get(/databases/$(database)/documents/approved-users/$(email.lower())).data.uid == uid;
     }
 
     function isApprovedSignup() {
       return signupEnabled() && (
-        'email' in request.resource.data && isApprovedEmail(request.resource.data.email)
+        'email' in request.resource.data && isApprovedForUid(request.resource.data.email, request.auth.uid)
       );
     }
 
@@ -266,9 +269,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Approved-emails whitelist — written by the server only (on request
-    // approval or invite-code redemption). A user may only read their own
-    // entry so the client can check whether their Google email is approved.
+    // Approved-account whitelist — written by the server only (on request
+    // approval or invite-code redemption). Each entry pins the `uid` that was
+    // approved, so a Google account can never inherit an approval that was
+    // granted to a different account sharing the same email. A user may only
+    // read their own entry so the client can check whether they're approved.
     match /approved-users/{email} {
       allow read: if signedIn() && 'email' in request.auth.token
         && request.auth.token.email.lower() == email.lower();

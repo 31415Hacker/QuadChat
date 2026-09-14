@@ -236,6 +236,7 @@ export default function App() {
   const [passwordResetSent, setPasswordResetSent] = useState(false);
   const [googleGateEmail, setGoogleGateEmail] = useState("");
   const [googleGateName, setGoogleGateName] = useState("");
+  const [googleGateUid, setGoogleGateUid] = useState("");
   const [signupRequests, setSignupRequests] = useState([]);
   const [inviteCodes, setInviteCodes] = useState([]);
   const [inviteCodeEmail, setInviteCodeEmail] = useState("");
@@ -745,6 +746,7 @@ export default function App() {
         setPasswordResetSent(false);
         setGoogleGateEmail("");
         setGoogleGateName("");
+        setGoogleGateUid("");
         writeSessionUserId(firebaseUser.uid);
         setSessionUserId(firebaseUser.uid);
         saveUserProfile(firebaseUser).catch((firebaseError) => {
@@ -1772,7 +1774,8 @@ export default function App() {
       const approvedRef = doc(db, "approved-users", googleEmail);
       const approvedSnap = await getDoc(approvedRef);
 
-      if (approvedSnap.exists()) {
+      const approvedUid = approvedSnap.exists() ? approvedSnap.data()?.uid || "" : "";
+      if (approvedSnap.exists() && approvedUid === credential.user.uid) {
         await saveUserProfile(credential.user);
         writeSessionUserId(credential.user.uid);
         setSessionUserId(credential.user.uid);
@@ -1784,6 +1787,7 @@ export default function App() {
 
       setGoogleGateEmail(googleEmail);
       setGoogleGateName(credential.user.displayName || "");
+      setGoogleGateUid(credential.user.uid);
       await signOutOfFirebase(auth);
       setError("");
       setAuthView("google-gate");
@@ -1799,12 +1803,13 @@ export default function App() {
       const response = await fetch("/api/google-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim(), email: googleGateEmail })
+        body: JSON.stringify({ code: code.trim(), email: googleGateEmail, uid: googleGateUid })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       setGoogleGateEmail("");
       setGoogleGateName("");
+      setGoogleGateUid("");
       setSignupCode("");
       setAuthView("signin");
       setError("Your access was approved. Sign in with Google again to join.");
@@ -1821,7 +1826,7 @@ export default function App() {
       const response = await fetch("/api/signup-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: googleGateEmail, displayName: googleGateName || googleGateEmail.split("@")[0], provider: "google", turnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
+        body: JSON.stringify({ email: googleGateEmail, displayName: googleGateName || googleGateEmail.split("@")[0], provider: "google", uid: googleGateUid, turnstileToken, website: signupHoneypot, headless: Boolean(navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
@@ -1834,6 +1839,7 @@ export default function App() {
   function cancelGoogleGate() {
     setGoogleGateEmail("");
     setGoogleGateName("");
+    setGoogleGateUid("");
     setAuthView("signin");
     setError("");
   }

@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import crypto from "crypto";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -74,9 +75,14 @@ export default async function handler(req, res) {
     if (!displayName) displayName = normalizeDisplayName(displayName, email);
 
     if (request.provider === "password") {
-      if (typeof request.password !== "string" || request.password.length < 6) {
-        return res.status(400).json({ error: "Request is missing a valid password." });
-      }
+      // A password is optional at request time; when none was supplied, the
+      // member sets one afterwards via "Forgot password?" (the UI advertises
+      // that flow). The account is created with a random throwaway password.
+      const submittedPassword =
+        typeof request.password === "string" && request.password.length >= 6
+          ? request.password
+          : crypto.randomBytes(16).toString("hex");
+
       const existing = await admin.auth().getUserByEmail(email).catch((error) => {
         if (error.code === "auth/user-not-found") return null;
         throw error;
@@ -87,7 +93,7 @@ export default async function handler(req, res) {
 
       const created = await admin.auth().createUser({
         email,
-        password: request.password,
+        password: submittedPassword,
         displayName
       });
 
@@ -114,6 +120,7 @@ export default async function handler(req, res) {
         db.doc(`approved-users/${email}`).set({
           email,
           displayName,
+          uid: created.uid,
           provider: "password",
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: caller.uid
@@ -128,10 +135,14 @@ export default async function handler(req, res) {
     }
 
     if (request.provider === "google") {
+      if (typeof request.uid !== "string" || !request.uid) {
+        return res.status(400).json({ error: "They must sign in with Google first so this approval can be bound to their account." });
+      }
       await Promise.all([
         db.doc(`approved-users/${email}`).set({
           email,
           displayName,
+          uid: request.uid,
           provider: "google",
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: caller.uid

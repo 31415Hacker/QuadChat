@@ -6,12 +6,15 @@ if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  const { email, displayName, password, provider, turnstileToken, website, headless } = req.body || {};
+  const { email, displayName, password, provider, turnstileToken, website, headless, uid } = req.body || {};
   if (website || headless) return res.status(400).json({ error: "Unable to submit request." });
-  if (!email || !displayName || !password) return res.status(400).json({ error: "Complete the form." });
+  if (!email || !displayName) return res.status(400).json({ error: "Complete the form." });
 
   try {
     const kind = provider === "google" ? "google" : "password";
+    if (kind === "google" && !uid) {
+      return res.status(400).json({ error: "Sign in with Google first so the request can be bound to your account." });
+    }
     if (kind === "google") {
       if (!process.env.TURNSTILE_SECRET_KEY) {
         // Google sign-in already verifies the caller's email, so CAPTCHA is
@@ -59,7 +62,9 @@ export default async function handler(req, res) {
       status: "pending",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     };
-    if (kind === "password") {
+    if (kind === "google") {
+      requestData.uid = uid;
+    } else if (password) {
       requestData.password = password;
     }
     await db.collection("signup-requests").add(requestData);

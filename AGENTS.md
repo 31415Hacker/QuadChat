@@ -13,6 +13,7 @@ Rules:
 - Built with `npm run build` (Vite)
 - Deployed on Vercel (auto-deploys from main branch)
 - Dev server: `npm run dev` (Vite, --host 0.0.0.0)
+- Firebase rules auto-deploy on push to `main` via `.github/workflows/firebase-rules.yml` (path-filtered to `firestore.rules` + `database.rules.json`, uses `FIREBASE_SERVICE_ACCOUNT` secret). Just push rule changes — no manual `firebase deploy` needed.
 
 # UI
 
@@ -122,21 +123,22 @@ Rules:
 - Deployment: `api/[action].js` routes the six signup-management URLs to modules in `server/signup/`, keeping the existing URLs while deploying only one function for these handlers. Keep helper handlers outside `api/` so they do not count as additional Vercel functions. `api/signup.js` remains a separate function.
 
 - Signup requires either (a) an admin-approved request or (b) a one-time invite code. Both password and Google sign-up are gated.
+- **Approvals are bound to a specific Firebase account, not just an email.** Every `approved-users/<email>` doc pins the `uid` (+ `provider`) of the exact account that was approved, and both the client gate and the Firestore rules require `approved-users/<email>.uid == auth.uid`. This closes an account-takeover hole where an identity that merely *shares* an approved email (e.g. the real owner of `secret@gmail.com` winning access via a **password** test account that was approved for that email, signing in with Google) could create a profile and get in. Google gate, `google-signup.js`, and `approve-request.js`'s Google branch all require the requester's uid to exist first.
 - Server endpoints (`api/`):
-  - `signup-request.js` — prospective member submits request (`{ provider, displayName, email, password?, turnstileToken? }`). Password requires captcha; Google skips captcha (email already verified by popup).
-  - `approve-request.js` — admin approves. Password: server creates auth user + writes profile + `approved-users/<email>`. Google: writes `approved-users/<email>` only (account created on Google sign-in).
+  - `signup-request.js` — prospective member submits request (`{ provider, displayName, email, uid?, password?, turnstileToken? }`). Google requests require `uid` (bound at submission) and skip captcha (email already verified by popup). Password requests are captcha-gated; password is optional at request time.
+  - `approve-request.js` — admin approves. Password: server creates auth user + writes profile + `approved-users/<email>` with the created `uid` (when no password was supplied, a random throwaway password is set and the member uses "Forgot password?"). Google: writes `approved-users/<email>` with the request's `uid`.
   - `reject-request.js` — admin deletes request.
   - `create-code.js` — admin creates invite code, optionally restricted to a single email. Writes `signup-codes/<code>` (the code string is the doc ID).
   - `revoke-code.js` — admin deletes code.
-  - `signup.js` — requires `{ code, email, password, displayName }`. Validates code, creates auth user, writes `approved-users/<email>`, marks code used.
-  - `google-signup.js` — requires `{ code, email }` (no idToken). Validates code, writes `approved-users/<email>`, marks code used.
+  - `signup.js` — requires `{ code, email, password, displayName }`. Validates code, creates auth user, writes `approved-users/<email>` with the created `uid`, marks code used.
+  - `google-signup.js` — requires `{ code, email, uid }` (no idToken). Validates the code, verifies via Admin SDK that `uid` is a real Google account whose email matches, writes `approved-users/<email>` with that `uid`, marks code used.
 - Firestore collections:
-  - `approved-users/<lowercaseEmail>` — server-only writes, read only own email (rules check `request.auth.token.email.lower() == email`).
-  - `signup-requests/<requestId>` — server-only writes, admin-only reads.
+  - `approved-users/<lowercaseEmail>` — server-only writes, read only own email (rules check `request.auth.token.email.lower() == email`). Each doc contains `uid` + `provider`; the entry only grants access to that exact account.
+  - `signup-requests/<requestId>` — server-only writes, admin-only reads. Google requests carry the requester's `uid`.
   - `signup-codes/<code>` — server-only writes, admin-only reads.
 - Client flow (`App.jsx`): `handleAuth` branches on `authView` — `"signup-request"` POSTs to `/api/signup-request` and shows pending state; `"signup"` (code) POSTs to `/api/signup` then signs in via Firebase.
-- Google gate: `signInWithGoogle` checks for existing profile. If none, checks `approved-users/<email>` — if approved, creates profile client-side. Otherwise shows `.google-gate-box` screen where user enters a code or requests access, then signs in again.
-- Rules gating: `users` create for regular users requires `(isApprovedSignup() || isAdminEmail()) && userId == request.auth.uid`. `isApprovedSignup()` checks `approved-users/<email>` exists + `signupEnabled()`.
+- Google gate: `signInWithGoogle` checks for existing profile. If none, checks `approved-users/<email>` — if approved **and** `approved-users/<email>.uid == credential.user.uid`, creates profile client-side. Otherwise shows `.google-gate-box` screen where the user enters a code (`/api/google-signup`, sending the uid) or requests access (`/api/signup-request`, sending the uid), then signs in again. The gate uid is tracked in `googleGateUid`.
+- Rules gating: `users` create for regular users requires `(isApprovedSignup() || isAdminEmail()) && userId == request.auth.uid`. `isApprovedSignup()` checks `signupEnabled()` + `approved-users/<email>.uid == auth.uid` (guarded with `'uid' in ...` — never read the field unguarded).
 - Admin settings (SettingsPage): "Signup requests" section (accept/reject), "Invite codes" section (create with optional email restriction, copy, revoke).
 - `users/create` server path (`saveUserProfile`) still works for admins via the `(isAdmin() || isDeveloper())` OR branch, so admin-created profiles bypass the approval check entirely.
 

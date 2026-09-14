@@ -25,14 +25,27 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { code, email } = parseBody(req);
-    if (!code || !email) {
-      return res.status(400).json({ error: "Missing invite code or email." });
+    const { code, email, uid } = parseBody(req);
+    if (!code || !email || !uid) {
+      return res.status(400).json({ error: "Missing invite code, email, or account ID." });
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
     if (!cleanEmail) {
       return res.status(400).json({ error: "Email is required." });
+    }
+
+    let verifiedUser;
+    try {
+      verifiedUser = await admin.auth().getUser(uid);
+    } catch (error) {
+      return res.status(400).json({ error: "Could not verify your Google account. Sign in with Google again and retry." });
+    }
+    if (String(verifiedUser.email || "").toLowerCase() !== cleanEmail) {
+      return res.status(400).json({ error: "That account doesn't match the Google email you signed in with." });
+    }
+    if (!(verifiedUser.providerData || []).some((provider) => provider.providerId === "google.com")) {
+      return res.status(400).json({ error: "That's not a Google account. Sign in with Google to redeem this code." });
     }
 
     const settingsSnapshot = await admin.firestore().doc("settings/app").get();
@@ -55,6 +68,7 @@ export default async function handler(req, res) {
       codeRef.update({ used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail }),
       db.doc(`approved-users/${cleanEmail}`).set({
         email: cleanEmail,
+        uid,
         provider: "google",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         source: "invite-code"

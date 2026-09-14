@@ -37,13 +37,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "That invite code is not valid for this email." });
     }
 
-    await admin.auth().createUser({ email: cleanEmail, password: String(password), displayName: String(displayName).trim() });
+    const created = await admin.auth().createUser({ email: cleanEmail, password: String(password), displayName: String(displayName).trim() });
 
     await Promise.all([
       codeRef.update({ used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail }),
       db.doc(`approved-users/${cleanEmail}`).set({
         email: cleanEmail,
         displayName: String(displayName).trim(),
+        uid: created.uid,
+        provider: "password",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         source: "invite-code"
       })
