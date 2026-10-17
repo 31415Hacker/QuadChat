@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.14
+Current: 2.2.18
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -14,6 +14,7 @@ Rules:
 - Deployed on Vercel (auto-deploys from main branch)
 - Dev server: `npm run dev` (Vite, --host 0.0.0.0)
 - Firebase rules auto-deploy on push to `main` via `.github/workflows/firebase-rules.yml` (path-filtered to `firestore.rules` + `database.rules.json`, uses `FIREBASE_SERVICE_ACCOUNT` secret). Just push rule changes — no manual `firebase deploy` needed.
+- Cloudflare worker auto-deploys on push to `main` via `.github/workflows/deploy-cloudflare-worker.yml` (path-filtered to `quadchat-worker/**`, runs worker tests first, then `wrangler deploy`). Uses `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets. The worker URL is in `VITE_PRESENCE_WORKER_URL` — keep both `wss://` (presence websocket) and `https://` (moderation endpoint) in sync.
 
 # UI
 
@@ -117,6 +118,18 @@ Rules:
 - `src/utils/callRingtone.js` (`startCallRingtone`) reads the current value from `localStorage` on each start; it rebuilds the `Audio` element lazily when the source changes. The `"custom"` source is stored as a data URL in `quadchat-call-sound-custom` (uploaded in the same settings UI).
 - State lives in `App.jsx` (`callSoundType`/`setCallSoundType`, persisted via a `useEffect` writing `quadchat-call-sound`) and is threaded down to `SettingsPage.jsx`.
 - If you add more built-in ringtones, extend the `SOUNDS` map in `callRingtone.js` and add a matching radio row in `SettingsPage.jsx`.
+
+## Swear Word Filter — Cloudflare API Auto-Mute
+- When a non-admin sends or edits a text message, `App.jsx` (`sendMessage`, both the new-message and the edit branch) calls `checkMessageProfanity(user, text, channel)` (`src/utils/profanity.js`) *before* writing to Firestore. If the API reports the text as profane, the message is blocked client-side (never written to chat, never displayed) and the sender is auto-muted for 24 hours.
+- The check is done by a **remote API, not a local dictionary**, and runs **on the Cloudflare Worker, not Vercel**: the client POSTs to `https://<worker>/moderate` (HTTP base derived from `VITE_PRESENCE_WORKER_URL`, the existing presence env var — keep them in sync), and `quadchat-worker/src/index.js` (`checkProfanity` + `handleModerate`) calls the free PurgoMalum API (`https://www.purgomalum.com/service/json`). The worker verifies the caller's Firebase ID token via its existing JWKS helper, so only real signed-in users can trigger a moderation. CORS is handled on the `/moderate` route.
+- **Standalone-word rule (no dictionary).** PurgoMalum does substring matching (`containsprofanity` returns true for `fhrsogrsgosdj(shit)reijgwsldkmg`), so `checkProfanity` requests `fill_char=*` and feeds original + censored text into `findStandaloneProfanity` (`exported for tests`). A whitespace-delimited chunk only counts if its censored version contains `*` AND has no remaining alphanumeric characters — i.e. the entire chunk is a profane word `(shit)` → caught, while a keyboard smash `fhrsogrsgosdj(shit)reijgwsldkmg` → letters remain → NOT caught. This also kills PurgoMalum false positives like `class`/`password`. If you change the profanity provider, keep this chunk rule (it's what implements the "block `(word) you`, not `sdj(word)reij` smash" requirement) or the filter will over-block.
+- The worker writes flagged messages to **`bad-messages/<uuid>`** (Firestore): `text`, `channel`, `userId`, `words` (caught profanities), `createdAt` server-time. Firestore rules (`firestore.rules`) make `bad-messages` admin-read / no-client-write — clients can't read or write it, only the Admin-SDK-style worker REST writes land there. There is no app UI to review it yet — admins can read it directly.
+- On a flag the worker also writes the 24h auto-mute via Firestore REST to `users/<uid>`: `muted: true`, `mutedUntil` = timestamp now+24h, `mutedBy: "__auto-mod__"`, `mutedUpdatedAt` server-time. Same fields as the manual `?mute`/sidebar mute, so every existing mute UI/label/expiry path treats it identically. Both the bad-message write and the mute are one atomic `documents:commit`.
+- Admins and developers (via the caller's `users/<uid>` doc `isAdmin`/`isDeveloper`) are exempt **on both ends**: the client skips the check for `isCurrentUserAdmin`, and the worker never auto-mutes an admin (a tampered client can't mute an admin via the endpoint) — their flagged text is still filed to `bad-messages` for the record.
+- "Only people with mute/unmute perms can unmute" is enforced by the existing Firestore rules, not new code: regular users can only self-clear `voiceMutedTemporary*` fields, never `muted`/`mutedUntil`, so the auto-mute can only be lifted by an admin/dev (`?unmute`, the sidebar mute toggle). The `isProtectedAdminTarget()` guard in `firestore.rules` still prevents muting admins.
+- Fail-open: if PurgoMalum (or the worker's `/moderate`) is unreachable, `checkProfanity` returns null → the client allows the message (`checkMessageProfanity` returns null → not flagged). Chat never breaks on a moderation outage.
+- The old Vercel `api/check-profanity.js` was *removed* — there is exactly one moderation path (the worker). Don't reintroduce a second one.
+- Enforcement is client-initiated for the block (same trust model as message sending) but the auto-mute write is server-only and cannot be erased by the target.
 
 # Signup Gating
 

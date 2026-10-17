@@ -1,4 +1,20 @@
-import { MessageCircle, Mic, MicOff, Monitor, MonitorOff, Phone, PhoneOff, Users } from "lucide-react";
+import { MessageCircle, Mic, MicOff, Monitor, MonitorOff, Phone, PhoneOff, Users, Waves } from "lucide-react";
+import { NOISE_MODE_LABELS } from "../utils/noiseSuppression.js";
+
+function NoiseModeButton({ noiseMode, onCycleNoiseMode }) {
+  const label = NOISE_MODE_LABELS[noiseMode] || noiseMode;
+  return (
+    <button
+      className={`call-action-btn${noiseMode !== "off" ? " call-action-btn--active" : ""}`}
+      type="button"
+      onClick={onCycleNoiseMode}
+      title={`Noise suppression: ${label}`}
+      aria-label={`Noise suppression: ${label}. Click to change.`}
+    >
+      <Waves size={16} />
+    </button>
+  );
+}
 
 export function ScreenShareRequestBanner({ screenShareRequest, onStopSharing }) {
   if (!screenShareRequest) return null;
@@ -28,7 +44,9 @@ export function ActiveCallBar({
   toggleScreenShare,
   hangUp,
   remoteAudioRef,
-  screenAudioRef
+  screenAudioRef,
+  noiseMode,
+  onCycleNoiseMode
 }) {
   return (
     <div className="active-call-bar">
@@ -40,6 +58,7 @@ export function ActiveCallBar({
       </div>
       <div className="active-call-actions">
         {remoteMuted ? <MicOff size={14} className="remote-muted-icon" title="Other party is muted" /> : null}
+        <NoiseModeButton noiseMode={noiseMode} onCycleNoiseMode={onCycleNoiseMode} />
         {remoteScreenStream && !isSharingScreen ? (
           <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
             {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}
@@ -84,7 +103,9 @@ export function GroupCallBar({
   onLeave,
   mutes,
   canMute,
-  onMuteParticipant
+  onMuteParticipant,
+  noiseMode,
+  onCycleNoiseMode
 }) {
   return (
     <div className="active-call-bar group-call-bar">
@@ -95,6 +116,7 @@ export function GroupCallBar({
         <span>Group call — <strong>{Object.keys(participants).length + 1}</strong> participant{Object.keys(participants).length + 1 === 1 ? "" : "s"}</span>
       </div>
       <div className="active-call-actions">
+        <NoiseModeButton noiseMode={noiseMode} onCycleNoiseMode={onCycleNoiseMode} />
         {remoteScreenStream && !isSharingScreen ? (
           <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
             {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}

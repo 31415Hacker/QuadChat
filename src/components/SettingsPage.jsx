@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getInitials, getProfileName } from "../utils/names.js";
+import { NOISE_MODES, NOISE_MODE_LABELS, NOISE_MODE_HINTS, isAiNoiseSupported } from "../utils/noiseSuppression.js";
 import Dialog from "./Dialog.jsx";
 import ScheduleEditor from "./ScheduleEditor.jsx";
 
@@ -98,6 +99,8 @@ export default function SettingsPage({
   setDmSoundType,
   callSoundType,
   setCallSoundType,
+  noiseMode,
+  setNoiseMode,
   dmSoundsEnabled,
   setDmSoundsEnabled,
   groupSoundsEnabled,
@@ -527,6 +530,33 @@ export default function SettingsPage({
                   </label>
                 </section>
 
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Noise suppression</h3>
+                    <p>Choose how your microphone is cleaned up before it is sent during calls. This only affects your outgoing audio.</p>
+                    <p>{NOISE_MODE_HINTS[noiseMode]}</p>
+                    {!isAiNoiseSupported() ? (
+                      <p>AI mode needs AudioWorklet support, which this browser does not provide.</p>
+                    ) : null}
+                  </div>
+                  <div className="dm-sound-options">
+                    {NOISE_MODES.map((mode) => {
+                      const aiUnavailable = mode === "ai" && !isAiNoiseSupported();
+                      return (
+                        <label className="dm-sound-option" key={mode}>
+                          <input
+                            checked={noiseMode === mode}
+                            disabled={aiUnavailable}
+                            name="noise-mode"
+                            onChange={() => setNoiseMode(mode)}
+                            type="radio"
+                          />
+                          <span>{NOISE_MODE_LABELS[mode]}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
                 <section className="settings-section-box">
                   <div>
                     <h3>

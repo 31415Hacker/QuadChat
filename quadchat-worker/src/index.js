@@ -2,8 +2,217 @@ import { DurableObject } from "cloudflare:workers";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
+const FIRESTORE_BASE = "https://firestore.googleapis.com/v1";
 const JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+const PROFANITY_API = "https://www.purgomalum.com/service/json";
+const PROFANITY_FILL = "*";
+const AUTO_MUTE_DURATION_MS = 24 * 60 * 60 * 1000;
+const AUTO_MUTE_BY = "__auto-mod__";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400"
+};
+
+function json(data, status = 200, cors = false) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...(cors ? CORS_HEADERS : {})
+    }
+  });
+}
+
+function databasePath(account) {
+  return `projects/${account.project_id}/databases/(default)`;
+}
+
+export function findStandaloneProfanity(originalText, censoredText) {
+  if (!originalText || !censoredText || originalText === censoredText) {
+    return [];
+  }
+
+  const originalChunks = originalText.split(/\s+/).filter(Boolean);
+  const censoredChunks = censoredText.split(/\s+/).filter(Boolean);
+  const caught = [];
+
+  for (let i = 0; i < originalChunks.length; i++) {
+    const censored = censoredChunks[i] || "";
+    if (!censored.includes(PROFANITY_FILL)) continue;
+
+    const lettersRemaining = censored
+      .split(PROFANITY_FILL)
+      .join("")
+      .replace(/[^a-zA-Z0-9]/g, "");
+    if (lettersRemaining.length > 0) continue;
+
+    const word = originalChunks[i].replace(/[^a-zA-Z0-9]/g, "");
+    if (word) caught.push(word);
+  }
+
+  return caught;
+}
+
+async function checkProfanity(text) {
+  try {
+    const params = new URLSearchParams({ text, fill_char: PROFANITY_FILL });
+    const response = await fetch(`${PROFANITY_API}?${params.toString()}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const censored = typeof data?.result === "string" ? data.result : null;
+    if (censored === null) return null;
+    return findStandaloneProfanity(text, censored);
+  } catch (err) {
+    console.error("[PROFANITY] moderation API unreachable, failing open:", err?.message || err);
+    return null;
+  }
+}
+
+async function readFirestoreDoc(account, collection, docId) {
+  const accessToken = await getAccessToken(account);
+  const documentName = `${databasePath(account)}/documents/${collection}/${docId}`;
+  const url = `${FIRESTORE_BASE}/${documentName}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Firestore read failed: ${response.status} ${text}`);
+  }
+  return response.json();
+}
+
+async function commitFirestoreWrites(account, writes) {
+  const accessToken = await getAccessToken(account);
+  const url = `${FIRESTORE_BASE}/${databasePath(account)}/documents:commit`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ writes })
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Firestore commit failed: ${response.status} ${text}`);
+  }
+}
+
+function buildBadMessageWrite(account, uid, text, channel, words) {
+  const documentName = `${databasePath(account)}/documents/bad-messages/${crypto.randomUUID()}`;
+  return {
+    update: {
+      name: documentName,
+      fields: {
+        text: { stringValue: text },
+        channel: { stringValue: channel },
+        userId: { stringValue: uid },
+        words: { arrayValue: { values: words.map((word) => ({ stringValue: word })) } }
+      },
+      updateMask: {
+        fieldPaths: ["text", "channel", "userId", "words", "createdAt"]
+      },
+      updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
+    }
+  };
+}
+
+function buildAutoMuteWrite(account, uid) {
+  const documentName = `${databasePath(account)}/documents/users/${uid}`;
+  return {
+    update: {
+      name: documentName,
+      fields: {
+        muted: { booleanValue: true },
+        mutedUntil: {
+          timestampValue: new Date(Date.now() + AUTO_MUTE_DURATION_MS).toISOString()
+        },
+        mutedBy: { stringValue: AUTO_MUTE_BY }
+      },
+      updateMask: {
+        fieldPaths: ["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]
+      },
+      updateTransforms: [{ fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" }]
+    }
+  };
+}
+
+async function handleModerate(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405, true);
+  }
+
+  const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!idToken) {
+    return json({ error: "Not authenticated" }, 401, true);
+  }
+
+  let callerUid;
+  try {
+    callerUid = await verifyFirebaseIdToken(idToken);
+  } catch (err) {
+    return json({ error: `Unauthorized: ${err.message}` }, 401, true);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body" }, 400, true);
+  }
+
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  const channel = typeof body?.channel === "string" ? body.channel.slice(0, 64) : "";
+  if (!text) {
+    return json({ error: "No text supplied" }, 400, true);
+  }
+  if (text.length > 2500) {
+    return json({ error: "Text too long" }, 400, true);
+  }
+
+  const words = await checkProfanity(text);
+  if (!words || words.length === 0) {
+    return json({ flagged: false, words: [] }, 200, true);
+  }
+
+  const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+
+  let isAdmin = false;
+  try {
+    const callerDoc = await readFirestoreDoc(account, "users", callerUid);
+    const callerData = callerDoc?.fields || {};
+    isAdmin =
+      callerData.isAdmin?.booleanValue === true ||
+      callerData.isDeveloper?.booleanValue === true;
+  } catch (err) {
+    console.error("[PROFANITY] failed to read caller profile:", err?.message || err);
+  }
+
+  const writes = [buildBadMessageWrite(account, callerUid, text, channel, words)];
+  let muted = false;
+  if (!isAdmin) {
+    writes.push(buildAutoMuteWrite(account, callerUid));
+    muted = true;
+  }
+
+  try {
+    await commitFirestoreWrites(account, writes);
+  } catch (err) {
+    return json({ error: err.message }, 500, true);
+  }
+
+  return json({ flagged: true, muted, words }, 200, true);
+}
 
 const FIREBASE_PROJECT_ID = "quadchat-cf697";
 const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
@@ -218,6 +427,12 @@ async function updateLastOnline(env, userId) {
 
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/moderate") {
+      return handleModerate(request, env);
+    }
+
     if (request.headers.get("Upgrade") === "websocket") {
       const id = env.PRESENCE.idFromName("global-presence");
       const stub = env.PRESENCE.get(id);

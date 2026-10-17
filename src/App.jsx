@@ -76,6 +76,7 @@ import {
   isFreshMessage,
   getFilePreview
 } from "./utils/messages.jsx";
+import { checkMessageProfanity } from "./utils/profanity.js";
 import {
   getAuthErrorMessage,
   saveUserProfile,
@@ -88,6 +89,7 @@ import {
 import { createDefaultSchedule, normalizeSchedule } from "./utils/schedule.js";
 import { startCallRingtone, stopCallRingtone, unlockCallAudio, resumeCallAudio } from "./utils/callRingtone.js";
 import { playDmReceiveSound } from "./utils/dmSound.js";
+import { getStoredNoiseMode, storeNoiseMode, NOISE_MODES } from "./utils/noiseSuppression.js";
 
 import { usePresence } from "./hooks/usePresence.js";
 import { useNotifications } from "./hooks/useNotifications.js";
@@ -201,6 +203,7 @@ export default function App() {
   const [callSoundType, setCallSoundType] = useState(() => {
     return localStorage.getItem("quadchat-call-sound") || "default";
   });
+  const [noiseMode, setNoiseMode] = useState(() => getStoredNoiseMode());
   const [dmSoundsEnabled, setDmSoundsEnabled] = useState(() => localStorage.getItem("quadchat-dm-sound-enabled") !== "false");
   const [groupSoundsEnabled, setGroupSoundsEnabled] = useState(() => localStorage.getItem("quadchat-group-sound-enabled") === "true");
   const [messageSoundVolume, setMessageSoundVolume] = useState(() => {
@@ -534,8 +537,17 @@ export default function App() {
     voiceMutedUntil: currentProfile?.voiceMutedUntil,
     isVoiceTemporarilyMuted,
     voiceMutedTemporaryUntil: currentProfile?.voiceMutedTemporaryUntil,
-    onTemporaryVoiceUnmute: clearTemporaryVoiceMute
+    onTemporaryVoiceUnmute: clearTemporaryVoiceMute,
+    noiseMode,
+    setNoiseMode
   });
+
+  const cycleNoiseMode = useCallback(() => {
+    setNoiseMode((current) => {
+      const index = NOISE_MODES.indexOf(current);
+      return NOISE_MODES[(index + 1) % NOISE_MODES.length];
+    });
+  }, []);
 
   const joinGroupCallRef = useRef(joinGroupCall);
   joinGroupCallRef.current = joinGroupCall;
@@ -856,6 +868,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("quadchat-call-sound", callSoundType);
   }, [callSoundType]);
+
+  useEffect(() => {
+    storeNoiseMode(noiseMode);
+  }, [noiseMode]);
 
   useEffect(() => {
     localStorage.setItem("quadchat-dm-sound-enabled", dmSoundsEnabled ? "true" : "false");
@@ -3165,6 +3181,17 @@ export default function App() {
       setIsSending(true);
       setError("");
       try {
+        if (!isCurrentUserAdmin) {
+          const moderation = await checkMessageProfanity(user, cleanEdit, activeChannel);
+          if (moderation?.flagged) {
+            setError(
+              moderation.muted
+                ? "🚫 That edit was blocked by the swear filter. You've been auto-muted for 24 hours. Only an admin can unmute you."
+                : "🚫 That edit was blocked by the swear filter."
+            );
+            return;
+          }
+        }
         await updateDoc(
           doc(db, "messages", activeChannel, "messages", editingMessage.id),
           {
@@ -3217,6 +3244,18 @@ export default function App() {
       if (!isCurrentUserAdmin && isProfileMuted(currentProfile)) {
         setError(muteLabel || "You are muted.");
         return;
+      }
+
+      if (!isCurrentUserAdmin && cleanMessage) {
+        const moderation = await checkMessageProfanity(user, cleanMessage, activeChannel);
+        if (moderation?.flagged) {
+          setError(
+            moderation.muted
+              ? `🚫 That message was blocked by the swear filter. You've been auto-muted for 24 hours. Only an admin can unmute you.${moderation.words?.[0] ? ` (caught: "${moderation.words[0]}")` : ""}`
+              : "🚫 That message was blocked by the swear filter."
+          );
+          return;
+        }
       }
 
       const uploadedAttachments = [];
@@ -3607,6 +3646,8 @@ export default function App() {
                 hangUp={hangUp}
                 remoteAudioRef={remoteAudioRef}
                 screenAudioRef={screenAudioRef}
+                noiseMode={noiseMode}
+                onCycleNoiseMode={cycleNoiseMode}
               />
             ) : null}
 
@@ -3626,6 +3667,8 @@ export default function App() {
                 mutes={groupCallMutes}
                 canMute={canMuteGroupParticipants}
                 onMuteParticipant={handleGroupCallParticipantMute}
+                noiseMode={noiseMode}
+                onCycleNoiseMode={cycleNoiseMode}
               />
             ) : p2pGroupCallStatus === "connected" ? (
               <GroupCallBar
@@ -3641,6 +3684,8 @@ export default function App() {
                 toggleMute={toggleP2PGroupCallMute}
                 toggleScreenShare={toggleScreenShare}
                 onLeave={leaveP2PGroupCall}
+                noiseMode={noiseMode}
+                onCycleNoiseMode={cycleNoiseMode}
               />
             ) : null}
 
@@ -3807,6 +3852,8 @@ export default function App() {
            setDmSoundType={setDmSoundType}
            callSoundType={callSoundType}
            setCallSoundType={setCallSoundType}
+           noiseMode={noiseMode}
+           setNoiseMode={setNoiseMode}
            dmSoundsEnabled={dmSoundsEnabled}
            setDmSoundsEnabled={setDmSoundsEnabled}
            groupSoundsEnabled={groupSoundsEnabled}

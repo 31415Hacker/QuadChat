@@ -4251,6 +4251,17 @@ button.user-avatar--clickable:focus-visible {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.call-action-btn--active {
+  background: var(--accent-teal);
+  border-color: var(--accent-teal);
+  color: var(--text-on-accent);
+}
+
+.call-action-btn--active:hover {
+  background: var(--accent-teal);
+  filter: brightness(1.1);
+}
+
 .call-end-btn {
   background: var(--accent-red);
   border-color: var(--accent-red);

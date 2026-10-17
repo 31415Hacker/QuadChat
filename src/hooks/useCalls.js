@@ -15,6 +15,11 @@ import {
 import { rtdb } from "../../firebase.js";
 import { notificationIcon, OPUS_BITRATE, rtcConfig } from "../constants.js";
 import { applyOpusBitrate, computeCapability } from "../utils/media.js";
+import {
+  captureConstraintsForMode,
+  createNoiseController,
+  normalizeNoiseMode
+} from "../utils/noiseSuppression.js";
 
 function bytesToHex(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -44,7 +49,9 @@ export function useCalls({
   voiceMutedUntil,
   isVoiceTemporarilyMuted,
   voiceMutedTemporaryUntil,
-  onTemporaryVoiceUnmute
+  onTemporaryVoiceUnmute,
+  noiseMode,
+  setNoiseMode
 }) {
   const [callStatus, setCallStatus] = useState("idle");
   const [callPartnerId, setCallPartnerId] = useState(null);
@@ -54,6 +61,9 @@ export function useCalls({
   const [incomingCall, setIncomingCall] = useState(null);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
+  const noiseControllerRef = useRef(null);
+  const currentOutgoingTrackRef = useRef(null);
+  const noiseModeRef = useRef(normalizeNoiseMode(noiseMode));
   const [remoteStream, setRemoteStream] = useState(null);
   const callNodeRef = useRef(null);
   const seenCallIdsRef = useRef(new Set());
@@ -80,6 +90,7 @@ export function useCalls({
   const [groupCallParticipants, setGroupCallParticipants] = useState({});
   const [groupCallLocalMuted, setGroupCallLocalMuted] = useState(false);
   const groupCallLocalStreamRef = useRef(null);
+  const groupCallPublishedTrackRef = useRef(null);
   const groupCallAudioContainerRef = useRef(null);
   const groupCallCleaningRef = useRef(false);
   const [activeGroupCallKey, setActiveGroupCallKey] = useState(null);
@@ -156,6 +167,79 @@ export function useCalls({
   );
   const voiceMuteActiveRef = useRef(voiceMuteActive);
   voiceMuteActiveRef.current = voiceMuteActive;
+
+  // Replace the outgoing microphone track on every active sender. Used when
+  // the noise-suppression mode swaps between the raw track and the AI output.
+  function replaceOutgoingTrack(nextTrack) {
+    if (!nextTrack) return;
+    const prevTrack = currentOutgoingTrackRef.current;
+    if (prevTrack && prevTrack !== nextTrack) {
+      // Preserve the current mute state (track.enabled) across the swap.
+      nextTrack.enabled = prevTrack.enabled;
+      const replaceOnPc = (pc) => {
+        if (!pc) return;
+        pc.getSenders().forEach((sender) => {
+          if (sender.track === prevTrack) {
+            sender.replaceTrack(nextTrack).catch((error) =>
+              console.error("[NOISE] replaceTrack failed:", error)
+            );
+          }
+        });
+      };
+      replaceOnPc(peerRef.current);
+      Object.values(p2pGroupCallConnectionsRef.current).forEach(replaceOnPc);
+      const published = groupCallPublishedTrackRef.current;
+      if (published) {
+        published.replaceTrack(nextTrack).catch((error) =>
+          console.error("[NOISE] LiveKit replaceTrack failed:", error)
+        );
+      }
+    }
+    currentOutgoingTrackRef.current = nextTrack;
+  }
+
+  async function acquireMicStream() {
+    const rawStream = await navigator.mediaDevices.getUserMedia({
+      audio: captureConstraintsForMode(noiseModeRef.current),
+      video: false
+    });
+    const outgoingStream = new MediaStream(rawStream.getAudioTracks());
+    currentOutgoingTrackRef.current = outgoingStream.getAudioTracks()[0];
+    noiseControllerRef.current?.destroy();
+    const controller = createNoiseController({
+      rawStream,
+      outgoingStream,
+      initialMode: noiseModeRef.current,
+      onOutgoingTrackChange: replaceOutgoingTrack,
+      onError: () => {
+        noiseModeRef.current = "browser";
+        setNoiseMode?.("browser");
+        pushInAppNotification({
+          type: "call",
+          channelId: null,
+          channelLabel: null,
+          senderName: "Noise suppression",
+          body: "AI mode is unavailable — switched to Standard.",
+          id: `noise-ai-fallback-${Date.now()}`
+        });
+      }
+    });
+    noiseControllerRef.current = controller;
+    // Build the AI pipeline in the background so the call connects immediately.
+    controller.setMode(noiseModeRef.current).catch((error) =>
+      console.error("[NOISE] initial mode setup failed:", error)
+    );
+    return outgoingStream;
+  }
+
+  useEffect(() => {
+    noiseModeRef.current = normalizeNoiseMode(noiseMode);
+    const controller = noiseControllerRef.current;
+    if (!controller) return;
+    controller.setMode(noiseModeRef.current).catch((error) =>
+      console.error("[NOISE] failed to switch mode:", error)
+    );
+  }, [noiseMode]);
 
   const [groupCallForcedMuted, setGroupCallForcedMuted] = useState(false);
   const groupCallForcedMutedRef = useRef(false);
@@ -307,6 +391,11 @@ export function useCalls({
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    if (noiseControllerRef.current) {
+      noiseControllerRef.current.destroy();
+      noiseControllerRef.current = null;
+    }
+    currentOutgoingTrackRef.current = null;
     const nodeRef = callNodeRef.current;
     callNodeRef.current = null;
     if (nodeRef) {
@@ -412,7 +501,7 @@ export function useCalls({
     startCallLockRef.current = true;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await acquireMicStream();
       console.log("[CALL-START] got local media stream");
       localStreamRef.current = stream;
 
@@ -613,7 +702,7 @@ export function useCalls({
 
     try {
       clearRing(sessionUserId, incomingCall.key);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await acquireMicStream();
       console.log("[CALL-ANSWER] got local media stream");
       localStreamRef.current = stream;
 
@@ -899,6 +988,12 @@ export function useCalls({
       groupCallLocalStreamRef.current.getTracks().forEach((t) => t.stop());
       groupCallLocalStreamRef.current = null;
     }
+    if (noiseControllerRef.current) {
+      noiseControllerRef.current.destroy();
+      noiseControllerRef.current = null;
+    }
+    currentOutgoingTrackRef.current = null;
+    groupCallPublishedTrackRef.current = null;
     if (groupCallAudioContainerRef.current) {
       groupCallAudioContainerRef.current.querySelectorAll("audio").forEach((el) => {
         el.srcObject = null;
@@ -948,6 +1043,11 @@ export function useCalls({
       p2pGroupCallStreamRef.current.getTracks().forEach((t) => t.stop());
       p2pGroupCallStreamRef.current = null;
     }
+    if (noiseControllerRef.current) {
+      noiseControllerRef.current.destroy();
+      noiseControllerRef.current = null;
+    }
+    currentOutgoingTrackRef.current = null;
 
     if (p2pGroupCallAudioContainerRef.current) {
       p2pGroupCallAudioContainerRef.current.querySelectorAll("audio").forEach((el) => {
@@ -1165,7 +1265,7 @@ export function useCalls({
   async function ensureP2PAudioStream() {
     if (p2pGroupCallStreamRef.current) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await acquireMicStream();
       p2pGroupCallStreamRef.current = stream;
       if (voiceMuteActive) {
         stream.getAudioTracks().forEach((track) => { track.enabled = false; });
@@ -1443,7 +1543,7 @@ export function useCalls({
       }
       const { token, url } = await res.json();
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await acquireMicStream();
       groupCallLocalStreamRef.current = stream;
       if (voiceMuteActive) {
         stream.getAudioTracks().forEach((track) => { track.enabled = false; });
@@ -1585,8 +1685,10 @@ export function useCalls({
         );
       });
 
+      groupCallPublishedTrackRef.current = null;
       for (const track of stream.getAudioTracks()) {
         const pub = await room.localParticipant.publishTrack(track, { dtx: true });
+        if (pub.track) groupCallPublishedTrackRef.current = pub.track;
         try {
           const sender = pub.track?.sender;
           if (sender) {
@@ -1595,6 +1697,17 @@ export function useCalls({
             sender.setParameters(params);
           }
         } catch (_e) { /* some LiveKit versions ignore setParameters for audio */ }
+      }
+
+      // The AI pipeline may have finished building while we were publishing;
+      // make sure the published track matches the current outgoing track.
+      const controller = noiseControllerRef.current;
+      const desiredTrack = controller?.getOutgoingTrack?.();
+      const publishedTrack = groupCallPublishedTrackRef.current;
+      if (desiredTrack && publishedTrack && desiredTrack !== publishedTrack.mediaStreamTrack) {
+        await publishedTrack.replaceTrack(desiredTrack).catch((error) =>
+          console.error("[NOISE] LiveKit reconcile failed:", error)
+        );
       }
 
       const participants = {};
