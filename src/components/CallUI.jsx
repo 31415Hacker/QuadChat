@@ -1,4 +1,4 @@
-import { MessageCircle, Mic, MicOff, Monitor, MonitorOff, Phone, PhoneOff, Users, Waves } from "lucide-react";
+import { Camera, CameraOff, MessageCircle, Mic, MicOff, Monitor, MonitorOff, Phone, PhoneOff, Users, Waves } from "lucide-react";
 import { NOISE_MODE_LABELS } from "../utils/noiseSuppression.js";
 
 function NoiseModeButton({ noiseMode, onCycleNoiseMode }) {
@@ -45,6 +45,8 @@ export function ActiveCallBar({
   hangUp,
   remoteAudioRef,
   screenAudioRef,
+  cameraEnabled,
+  toggleCamera,
   noiseMode,
   onCycleNoiseMode
 }) {
@@ -59,6 +61,9 @@ export function ActiveCallBar({
       <div className="active-call-actions">
         {remoteMuted ? <MicOff size={14} className="remote-muted-icon" title="Other party is muted" /> : null}
         <NoiseModeButton noiseMode={noiseMode} onCycleNoiseMode={onCycleNoiseMode} />
+        <button className="call-action-btn" type="button" onClick={toggleCamera} title={cameraEnabled ? "Turn camera off" : "Turn camera on"}>
+          {cameraEnabled ? <Camera size={16} /> : <CameraOff size={16} />}
+        </button>
         {remoteScreenStream && !isSharingScreen ? (
           <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
             {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}
@@ -104,6 +109,8 @@ export function GroupCallBar({
   mutes,
   canMute,
   onMuteParticipant,
+  cameraEnabled,
+  toggleCamera,
   noiseMode,
   onCycleNoiseMode
 }) {
@@ -117,6 +124,9 @@ export function GroupCallBar({
       </div>
       <div className="active-call-actions">
         <NoiseModeButton noiseMode={noiseMode} onCycleNoiseMode={onCycleNoiseMode} />
+        <button className="call-action-btn" type="button" onClick={toggleCamera} title={cameraEnabled ? "Turn camera off" : "Turn camera on"}>
+          {cameraEnabled ? <Camera size={16} /> : <CameraOff size={16} />}
+        </button>
         {remoteScreenStream && !isSharingScreen ? (
           <button className="call-action-btn" type="button" onClick={() => setViewingScreen(!viewingScreen)} title={viewingScreen ? "Back to chat" : "View screen"}>
             {viewingScreen ? <MessageCircle size={16} /> : <Monitor size={16} />}

@@ -75,6 +75,12 @@ export function useCalls({
   const screenAudioRef = useRef(null);
   const screenVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
+  const localCameraStreamRef = useRef(null);
+  const [localCameraStream, setLocalCameraStream] = useState(null);
+  const [remoteCameraStream, setRemoteCameraStream] = useState(null);
+  const [groupCallVideoStreams, setGroupCallVideoStreams] = useState({});
+  const [localScreenStream, setLocalScreenStream] = useState(null);
+  const groupCallCameraTrackRef = useRef(null);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const isSharingScreenRef = useRef(false);
   const [remoteScreenStream, setRemoteScreenStream] = useState(null);
@@ -83,6 +89,7 @@ export function useCalls({
   const [screenShareRequest, setScreenShareRequest] = useState(null);
   const screenShareRequestTimerRef = useRef(null);
   const callStatusRef = useRef(callStatus);
+  const remoteScreenShareActiveRef = useRef(false);
 
   const [groupCallStatus, setGroupCallStatus] = useState("idle");
   const groupCallRoomRef = useRef(null);
@@ -198,6 +205,77 @@ export function useCalls({
     currentOutgoingTrackRef.current = nextTrack;
   }
 
+  function removeCameraSenders(pc, cameraTrack) {
+    if (!pc || !cameraTrack) return;
+    pc.getSenders().forEach((sender) => {
+      if (sender.track === cameraTrack) pc.removeTrack(sender);
+    });
+  }
+
+  async function stopCamera() {
+    const stream = localCameraStreamRef.current;
+    if (!stream) return;
+    const cameraTrack = stream.getVideoTracks()[0];
+
+    if (groupCallRoomRef.current && cameraTrack) {
+      await groupCallRoomRef.current.localParticipant.unpublishTrack(cameraTrack).catch(() => {});
+      groupCallCameraTrackRef.current = null;
+    }
+    removeCameraSenders(peerRef.current, cameraTrack);
+    Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) =>
+      removeCameraSenders(pc, cameraTrack)
+    );
+    stream.getTracks().forEach((track) => track.stop());
+    localCameraStreamRef.current = null;
+    setLocalCameraStream(null);
+  }
+
+  async function toggleCamera() {
+    if (localCameraStreamRef.current) {
+      await stopCamera();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+      const cameraTrack = stream.getVideoTracks()[0];
+      if (!cameraTrack) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      cameraTrack.onended = () => {
+        if (localCameraStreamRef.current === stream) {
+          localCameraStreamRef.current = null;
+          setLocalCameraStream(null);
+        }
+      };
+
+      if (groupCallRoomRef.current) {
+        await groupCallRoomRef.current.localParticipant.publishTrack(cameraTrack, { source: "camera" });
+        groupCallCameraTrackRef.current = cameraTrack;
+      } else if (peerRef.current) {
+        peerRef.current.addTrack(cameraTrack, stream);
+      } else {
+        Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => pc.addTrack(cameraTrack, stream));
+      }
+
+      localCameraStreamRef.current = stream;
+      setLocalCameraStream(stream);
+    } catch (error) {
+      if (error?.name !== "NotAllowedError" && error?.name !== "AbortError") {
+        console.error("[CAMERA] failed to start:", error);
+      }
+      onCallError?.("Could not start your camera.");
+    }
+  }
+
   async function acquireMicStream() {
     const rawStream = await navigator.mediaDevices.getUserMedia({
       audio: captureConstraintsForMode(noiseModeRef.current),
@@ -269,6 +347,7 @@ export function useCalls({
   }, [remoteScreenStream, viewingScreen]);
 
   function clearRemoteScreenShare() {
+    remoteScreenShareActiveRef.current = false;
     setRemoteScreenStream(null);
     setViewingScreen(false);
     setScreenSharedByName(null);
@@ -391,6 +470,7 @@ export function useCalls({
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    stopCamera();
     if (noiseControllerRef.current) {
       noiseControllerRef.current.destroy();
       noiseControllerRef.current = null;
@@ -408,6 +488,7 @@ export function useCalls({
     }
     console.log("[CALL-CLEANUP] resetting state variables");
     setRemoteStream(null);
+    setRemoteCameraStream(null);
     setRemoteScreenStream(null);
     setScreenSharedByName(null);
     stopScreenShare();
@@ -442,10 +523,17 @@ export function useCalls({
     pc.ontrack = (e) => {
       const stream = e.streams[0];
       if (e.track.kind === "video") {
-        console.log("[CALL] ontrack — screen video received");
-        setRemoteScreenStream(stream);
-        e.track.onmute = clearRemoteScreenShare;
-        e.track.onended = clearRemoteScreenShare;
+        if (remoteScreenShareActiveRef.current) {
+          console.log("[CALL] ontrack — screen video received");
+          setRemoteScreenStream(stream);
+          e.track.onmute = clearRemoteScreenShare;
+          e.track.onended = clearRemoteScreenShare;
+        } else {
+          console.log("[CALL] ontrack — camera video received");
+          setRemoteCameraStream(stream);
+          e.track.onmute = () => setRemoteCameraStream(null);
+          e.track.onended = () => setRemoteCameraStream(null);
+        }
       } else if (stream?.getVideoTracks().length) {
         // Display audio shares a MediaStream with the screen video. Do not
         // replace the microphone stream used by the normal call audio.
@@ -580,8 +668,10 @@ export function useCalls({
       const unsubScreen = onValue(screenShareRef, (snap) => {
         const val = snap.val();
         if (val && typeof val === "object") {
+          remoteScreenShareActiveRef.current = true;
           setScreenSharedByName(val.name);
         } else {
+          remoteScreenShareActiveRef.current = false;
           clearRemoteScreenShare();
         }
       });
@@ -759,8 +849,10 @@ export function useCalls({
       const unsubScreen = onValue(screenShareRef, (snap) => {
         const val = snap.val();
         if (val && typeof val === "object") {
+          remoteScreenShareActiveRef.current = true;
           setScreenSharedByName(val.name);
         } else {
+          remoteScreenShareActiveRef.current = false;
           clearRemoteScreenShare();
         }
       });
@@ -913,10 +1005,26 @@ export function useCalls({
       // checkbox when the caller selects a browser tab.
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = stream;
+      setLocalScreenStream(stream);
       const track = stream.getVideoTracks()[0];
       if (!track) return;
 
       track.onended = () => stopScreenShare();
+
+      // Signal before adding the video track so private/P2P receivers can
+      // classify the incoming video as a screen share rather than a camera.
+      const sharePresenceWrites = [];
+      if (callNodeRef.current) {
+        sharePresenceWrites.push(
+          set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), { name: activeName })
+        );
+      }
+      if (p2pGroupCallNodeRef.current) {
+        sharePresenceWrites.push(
+          set(rtdbRef(rtdb, `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareActive`), { name: activeName })
+        );
+      }
+      await Promise.all(sharePresenceWrites.map((write) => write.catch(() => {})));
 
       stream.getTracks().forEach((shareTrack) => {
         if (callStatus !== "idle" && peerRef.current) {
@@ -932,13 +1040,6 @@ export function useCalls({
         }
       });
 
-      if (callNodeRef.current) {
-        set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), { name: activeName }).catch(() => {});
-      }
-      if (p2pGroupCallNodeRef.current) {
-        set(rtdbRef(rtdb, `group-calls/${p2pGroupCallNodeRef.current.key}/screenShareActive`), { name: activeName }).catch(() => {});
-      }
-
       setIsSharingScreen(true);
     } catch (e) {
       if (e.name !== "NotAllowedError" && e.name !== "AbortError") {
@@ -952,6 +1053,7 @@ export function useCalls({
       screenStreamRef.current.getTracks().forEach((t) => t.stop());
       screenStreamRef.current = null;
     }
+    setLocalScreenStream(null);
     if (callNodeRef.current) {
       set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareActive`), false).catch(() => {});
       set(rtdbRef(rtdb, `calls/${callNodeRef.current.key}/screenShareRequest`), null).catch(() => {});
@@ -988,6 +1090,7 @@ export function useCalls({
       groupCallLocalStreamRef.current.getTracks().forEach((t) => t.stop());
       groupCallLocalStreamRef.current = null;
     }
+    stopCamera();
     if (noiseControllerRef.current) {
       noiseControllerRef.current.destroy();
       noiseControllerRef.current = null;
@@ -1007,6 +1110,7 @@ export function useCalls({
     groupCallForcedMutedRef.current = false;
     setGroupCallForcedMuted(false);
     setGroupCallMutes({});
+    setGroupCallVideoStreams({});
     setGroupCallParticipants({});
     setGroupCallLocalMuted(false);
     setActiveGroupCallKey(null);
@@ -1043,6 +1147,7 @@ export function useCalls({
       p2pGroupCallStreamRef.current.getTracks().forEach((t) => t.stop());
       p2pGroupCallStreamRef.current = null;
     }
+    stopCamera();
     if (noiseControllerRef.current) {
       noiseControllerRef.current.destroy();
       noiseControllerRef.current = null;
@@ -1065,6 +1170,7 @@ export function useCalls({
     setP2pGroupCallHostId(null);
     setP2pGroupCallLocalMuted(false);
     setRemoteScreenStream(null);
+    setRemoteCameraStream(null);
     setScreenSharedByName(null);
     stopScreenShare();
     setP2pGroupCallStatus("idle");
@@ -1078,6 +1184,9 @@ export function useCalls({
 
     if (p2pGroupCallStreamRef.current) {
       p2pGroupCallStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, p2pGroupCallStreamRef.current));
+    }
+    if (localCameraStreamRef.current) {
+      localCameraStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localCameraStreamRef.current));
     }
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, screenStreamRef.current));
@@ -1094,10 +1203,16 @@ export function useCalls({
 
     pc.ontrack = (e) => {
       if (e.track.kind === "video") {
-        console.log("[P2P] ontrack — screen video from", remoteUid);
-        setRemoteScreenStream(e.streams[0]);
-        e.track.onmute = clearRemoteScreenShare;
-        e.track.onended = clearRemoteScreenShare;
+        if (remoteScreenShareActiveRef.current) {
+          console.log("[P2P] ontrack — screen video from", remoteUid);
+          setRemoteScreenStream(e.streams[0]);
+          e.track.onmute = clearRemoteScreenShare;
+          e.track.onended = clearRemoteScreenShare;
+        } else {
+          setRemoteCameraStream(e.streams[0]);
+          e.track.onmute = () => setRemoteCameraStream(null);
+          e.track.onended = () => setRemoteCameraStream(null);
+        }
       } else {
         const audio = document.createElement("audio");
         audio.srcObject = e.streams[0];
@@ -1382,8 +1497,10 @@ export function useCalls({
       const unsubP2pScreen = onValue(p2pScreenShareRef, (snap) => {
         const val = snap.val();
         if (val && typeof val === "object") {
+          remoteScreenShareActiveRef.current = true;
           setScreenSharedByName(val.name);
         } else {
+          remoteScreenShareActiveRef.current = false;
           clearRemoteScreenShare();
         }
       });
@@ -1554,12 +1671,24 @@ export function useCalls({
 
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === "video") {
-          console.log("[LIVEKIT] subscribed to screen video from", participant.identity);
-          setRemoteScreenStream(new MediaStream([track.mediaStreamTrack]));
-          setScreenSharedByName(participant.name || participant.identity);
-          track.onMuted = () => {
-            clearRemoteScreenShare();
-          };
+          const stream = new MediaStream([track.mediaStreamTrack]);
+          const isScreen = String(publication.source || "").includes("screen");
+          if (isScreen) {
+            console.log("[LIVEKIT] subscribed to screen video from", participant.identity);
+            setRemoteScreenStream(stream);
+            setScreenSharedByName(participant.name || participant.identity);
+            track.onMuted = clearRemoteScreenShare;
+          } else {
+            setGroupCallVideoStreams((prev) => ({
+              ...prev,
+              [participant.identity]: { name: participant.name || participant.identity, stream }
+            }));
+            track.onMuted = () => setGroupCallVideoStreams((prev) => {
+              const next = { ...prev };
+              delete next[participant.identity];
+              return next;
+            });
+          }
         } else {
           const audio = document.createElement("audio");
           audio.srcObject = new MediaStream([track.mediaStreamTrack]);
@@ -1572,7 +1701,15 @@ export function useCalls({
 
       room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
         if (track.kind === "video") {
-          clearRemoteScreenShare();
+          if (String(publication.source || "").includes("screen")) {
+            clearRemoteScreenShare();
+          } else {
+            setGroupCallVideoStreams((prev) => {
+              const next = { ...prev };
+              delete next[participant.identity];
+              return next;
+            });
+          }
           return;
         }
         const selector = publication.trackSid
@@ -1607,6 +1744,11 @@ export function useCalls({
 
       room.on(RoomEvent.ParticipantDisconnected, (participant) => {
         setGroupCallParticipants((prev) => {
+          const next = { ...prev };
+          delete next[participant.identity];
+          return next;
+        });
+        setGroupCallVideoStreams((prev) => {
           const next = { ...prev };
           delete next[participant.identity];
           return next;
@@ -1793,7 +1935,10 @@ export function useCalls({
     remoteMuted,
     incomingCall,
     remoteStream,
+    remoteCameraStream,
+    localCameraStream,
     isSharingScreen,
+    localScreenStream,
     remoteScreenStream,
     viewingScreen,
     setViewingScreen,
@@ -1804,6 +1949,7 @@ export function useCalls({
     screenVideoRef,
     groupCallStatus,
     groupCallParticipants,
+    groupCallVideoStreams,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
     groupCallMutes,
@@ -1822,6 +1968,7 @@ export function useCalls({
     rejectCall,
     hangUp,
     toggleCallMute,
+    toggleCamera,
     toggleScreenShare,
     stopScreenShare,
     dismissScreenShareRequest,

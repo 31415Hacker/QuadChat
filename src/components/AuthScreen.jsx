@@ -254,32 +254,6 @@ export default function AuthScreen({
                   maxLength={32}
                 />
                 <label className="signup-honeypot" aria-hidden="true" htmlFor="signup-website">Website<input id="signup-website" tabIndex="-1" autoComplete="off" value={signupHoneypot} onChange={(event) => setSignupHoneypot(event.target.value)} /></label>
-                <label htmlFor="signin-email">
-                  <UserRound size={18} />
-                  <span>Email</span>
-                </label>
-                <input
-                  id="signin-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  maxLength={120}
-                />
-                <label htmlFor="signin-password">
-                  <KeyRound size={18} />
-                  <span>Password</span>
-                </label>
-                <input
-                  id="signin-password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter your password"
-                  autoComplete="new-password"
-                  maxLength={64}
-                />
                 <label htmlFor="signin-code">
                   <Ticket size={18} />
                   <span>Invite code</span>
@@ -295,6 +269,32 @@ export default function AuthScreen({
                 />
               </>
             ) : null}
+            <label htmlFor="signin-email">
+              <UserRound size={18} />
+              <span>Email</span>
+            </label>
+            <input
+              id="signin-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              maxLength={120}
+            />
+            <label htmlFor="signin-password">
+              <KeyRound size={18} />
+              <span>Password</span>
+            </label>
+            <input
+              id="signin-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter your password"
+              autoComplete={authView === "signup" ? "new-password" : "current-password"}
+              maxLength={64}
+            />
             {error ? <div className="error-banner inline-error" role="alert">{error}</div> : null}
             {authView === "signup" ? (
               <TurnstileWidget siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onToken={setSignupTurnstileToken} refreshKey={captchaRefreshKey} />

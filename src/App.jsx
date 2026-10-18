@@ -98,6 +98,7 @@ import useConfirmDialog from "./hooks/useConfirmDialog.js";
 
 import AuthScreen from "./components/AuthScreen.jsx";
 import CallsSidebar from "./components/CallsSidebar.jsx";
+import CallStage from "./components/CallStage.jsx";
 import ChannelSidebar from "./components/ChannelSidebar.jsx";
 import ChatHeader from "./components/ChatHeader.jsx";
 import MessageList from "./components/MessageList.jsx";
@@ -485,8 +486,11 @@ export default function App() {
     callPartnerName,
     callMuted,
     remoteMuted,
+    remoteCameraStream,
+    localCameraStream,
     incomingCall,
     isSharingScreen,
+    localScreenStream,
     remoteScreenStream,
     viewingScreen,
     setViewingScreen,
@@ -497,6 +501,7 @@ export default function App() {
     screenVideoRef,
     groupCallStatus,
     groupCallParticipants,
+    groupCallVideoStreams,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
     groupCallMutes,
@@ -510,6 +515,7 @@ export default function App() {
     rejectCall,
     hangUp,
     toggleCallMute,
+    toggleCamera,
     toggleScreenShare,
     dismissScreenShareRequest,
     toggleGroupCallMute,
@@ -3646,6 +3652,8 @@ export default function App() {
                 hangUp={hangUp}
                 remoteAudioRef={remoteAudioRef}
                 screenAudioRef={screenAudioRef}
+                cameraEnabled={Boolean(localCameraStream)}
+                toggleCamera={toggleCamera}
                 noiseMode={noiseMode}
                 onCycleNoiseMode={cycleNoiseMode}
               />
@@ -3667,6 +3675,8 @@ export default function App() {
                 mutes={groupCallMutes}
                 canMute={canMuteGroupParticipants}
                 onMuteParticipant={handleGroupCallParticipantMute}
+                cameraEnabled={Boolean(localCameraStream)}
+                toggleCamera={toggleCamera}
                 noiseMode={noiseMode}
                 onCycleNoiseMode={cycleNoiseMode}
               />
@@ -3684,13 +3694,30 @@ export default function App() {
                 toggleMute={toggleP2PGroupCallMute}
                 toggleScreenShare={toggleScreenShare}
                 onLeave={leaveP2PGroupCall}
+                cameraEnabled={Boolean(localCameraStream)}
+                toggleCamera={toggleCamera}
                 noiseMode={noiseMode}
                 onCycleNoiseMode={cycleNoiseMode}
               />
             ) : null}
 
             <div className="chat-body">
-              {viewingScreen && remoteScreenStream ? (
+              {callsView ? (
+                <CallStage
+                  active={callStatus === "connected" || callStatus === "calling" || groupCallStatus === "connected" || p2pGroupCallStatus === "connected"}
+                  activeName={activeName}
+                  callMuted={callMuted || groupCallLocalMuted || p2pGroupCallLocalMuted}
+                  callPartnerName={callStatus === "connected" || callStatus === "calling" ? callPartnerName : ""}
+                  groupParticipants={groupCallStatus === "connected" ? groupCallParticipants : p2pGroupCallParticipants}
+                  groupVideoStreams={groupCallVideoStreams}
+                  localCameraStream={localCameraStream}
+                  localScreenStream={localScreenStream}
+                  remoteCameraStream={remoteCameraStream}
+                  remoteMuted={remoteMuted}
+                  remoteScreenStream={remoteScreenStream}
+                  screenSharedByName={screenSharedByName}
+                />
+              ) : viewingScreen && remoteScreenStream ? (
                 <ScreenViewer
                   screenSharedByName={screenSharedByName}
                   onBack={() => setViewingScreen(false)}
@@ -3737,28 +3764,30 @@ export default function App() {
                   <div ref={endRef} />
                 </div>
               )}
-              <UsersSidebar
-                profiles={profiles}
-                sessionUserId={sessionUserId}
-                onlineUsers={onlineUsers}
-                openUserAnalytics={openUserAnalytics}
-                openDm={openDm}
-                startCall={startCall}
-                callStatus={callStatus}
-                toggleUserMute={toggleUserMute}
-                toggleVoiceMute={toggleVoiceMute}
-                isCurrentUserAdmin={isCurrentUserAdmin}
-                groupCallStatus={groupCallStatus}
-                groupCallParticipants={groupCallParticipants}
-                p2pGroupCallStatus={p2pGroupCallStatus}
-                p2pGroupCallParticipants={p2pGroupCallParticipants}
-                showSidebarClock={showSidebarClock}
-                showSidebarSeconds={showSidebarSeconds}
-                previewAvatar={setAvatarPreview}
-              />
+              {!callsView ? (
+                <UsersSidebar
+                  profiles={profiles}
+                  sessionUserId={sessionUserId}
+                  onlineUsers={onlineUsers}
+                  openUserAnalytics={openUserAnalytics}
+                  openDm={openDm}
+                  startCall={startCall}
+                  callStatus={callStatus}
+                  toggleUserMute={toggleUserMute}
+                  toggleVoiceMute={toggleVoiceMute}
+                  isCurrentUserAdmin={isCurrentUserAdmin}
+                  groupCallStatus={groupCallStatus}
+                  groupCallParticipants={groupCallParticipants}
+                  p2pGroupCallStatus={p2pGroupCallStatus}
+                  p2pGroupCallParticipants={p2pGroupCallParticipants}
+                  showSidebarClock={showSidebarClock}
+                  showSidebarSeconds={showSidebarSeconds}
+                  previewAvatar={setAvatarPreview}
+                />
+              ) : null}
             </div>
 
-            <Composer
+            {!callsView ? <Composer
               editingMessage={editingMessage}
               onCancelEdit={() => { setEditingMessage(null); setMessage(""); }}
               replyTo={replyTo}
@@ -3796,7 +3825,7 @@ export default function App() {
               sessionUserId={sessionUserId}
               profiles={profiles}
               isDarkTheme={isDarkTheme}
-            />
+            /> : null}
           </div>
         </section>
       )}

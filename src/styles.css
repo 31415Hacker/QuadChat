@@ -2804,6 +2804,125 @@ button.message-document-preview {
   position: relative;
 }
 
+.calls-stage-empty,
+.call-stage {
+  background: #0c1213;
+  flex: 1;
+  min-width: 0;
+}
+
+.calls-stage-empty {
+  align-items: center;
+  color: var(--text-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  text-align: center;
+}
+
+.calls-stage-empty svg {
+  color: var(--accent-teal);
+}
+
+.calls-stage-empty h2 {
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.calls-stage-empty p {
+  font-size: 0.85rem;
+  margin: 0;
+  max-width: 260px;
+}
+
+.call-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 16px;
+}
+
+.call-stage-screen-wrap {
+  min-height: min(56vh, 560px);
+  position: relative;
+}
+
+.call-stage-screen-icon {
+  background: rgba(9, 16, 18, 0.78);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 6px;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+
+.call-stage-grid {
+  display: grid;
+  flex: 1;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-auto-rows: minmax(180px, 1fr);
+  min-height: 0;
+}
+
+.call-stage-grid--with-screen {
+  flex: 0 0 auto;
+  grid-auto-rows: minmax(130px, 180px);
+}
+
+.call-stage-tile {
+  background: #1a2928;
+  border: 1px solid #2a4140;
+  border-radius: 14px;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.call-stage-tile--screen {
+  height: 100%;
+}
+
+.call-stage-tile video {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.call-stage-tile--screen video {
+  background: #000;
+  object-fit: contain;
+}
+
+.call-stage-placeholder {
+  align-items: center;
+  color: var(--text-tertiary);
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  min-height: 150px;
+}
+
+.call-stage-label {
+  background: rgba(7, 12, 13, 0.76);
+  border-radius: 7px;
+  bottom: 10px;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  left: 10px;
+  max-width: calc(100% - 20px);
+  overflow: hidden;
+  padding: 5px 8px;
+  position: absolute;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .screen-view-container {
   display: flex;
   flex-direction: column;
