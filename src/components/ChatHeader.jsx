@@ -62,7 +62,7 @@ export default function ChatHeader({
     <header className="chat-header">
       <div className="chat-title">
         <div className="brand-mark" aria-hidden="true">
-          <MessageCircle size={26} strokeWidth={2.3} />
+          <img src="/logo.png" alt="" />
         </div>
         <div>
            <h1>{`QuadChat v${showVersionInHeader ? APP_VERSION : APP_VERSION.split(".")[0]}`}</h1>

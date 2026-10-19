@@ -286,13 +286,16 @@ input {
 
 .brand-mark {
   align-items: center;
-  background: var(--accent-brand);
-  border-radius: 8px;
-  color: #3d3520;
   display: flex;
   flex: 0 0 52px;
   height: 52px;
   justify-content: center;
+}
+
+.brand-mark img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .brand-logo {
