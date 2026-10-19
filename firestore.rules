@@ -35,9 +35,7 @@ service cloud.firestore {
     }
 
     function isAdminEmail() {
-      return signedIn() && 'email' in request.auth.token &&
-        request.auth.token.email_verified == true &&
-        request.auth.token.email.lower() in ['ariqipraditya@gmail.com'];
+      return signedIn() && request.auth.token.admin == true;
     }
 
     function isNotMuted() {
@@ -199,6 +197,18 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["names", "lastMessage", "lastSenderId", "updatedAt"]);
     }
 
+    // Firestore can authorize typing against the actual DM membership.
+    match /dms/{dmId}/typing/{userId} {
+      allow read: if isActiveUser() && isDmParticipant(dmId);
+      allow create, update: if isActiveUser() && isDmParticipant(dmId)
+        && userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(["name", "timestamp"])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.timestamp == request.time;
+      allow delete: if signedIn() && userId == request.auth.uid && isDmParticipant(dmId);
+    }
+
     // User Profiles
     match /users/{userId} {
       allow read: if signedIn();
@@ -211,15 +221,13 @@ service cloud.firestore {
             (request.resource.data.bio is string && request.resource.data.bio.size() <= 280))
         && (!("schedule" in request.resource.data) || request.resource.data.schedule is map)
         && (
-        (isAdmin() || isDeveloper()) || (
-          (isApprovedSignup() || isAdminEmail()) &&
-          userId == request.auth.uid &&
-          (isAdminEmail() ||
-            (
-              !request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "voiceMutedTemporary", "voiceMutedTemporaryUntil", "voiceMutedTemporaryBy", "voiceMutedTemporaryUpdatedAt"])
-              && (!("isAdmin" in request.resource.data) || request.resource.data.isAdmin == false)
-              && (!("isDeveloper" in request.resource.data) || request.resource.data.isDeveloper == false)
-            ))
+          (isAdmin() || isDeveloper()) || (
+            isApprovedSignup() &&
+            userId == request.auth.uid &&
+            !request.resource.data.keys().hasAny(["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt", "voiceMuted", "voiceMutedUntil", "voiceMutedBy", "voiceMutedUpdatedAt", "voiceMutedTemporary", "voiceMutedTemporaryUntil", "voiceMutedTemporaryBy", "voiceMutedTemporaryUpdatedAt"])
+            && (!("isAdmin" in request.resource.data) || request.resource.data.isAdmin == false)
+            && (!("isDeveloper" in request.resource.data) || request.resource.data.isDeveloper == false)
+          )
         )
       );
 
@@ -292,6 +300,11 @@ service cloud.firestore {
     match /signup-codes/{code} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+
+    // Signup rate limits — server-only.
+    match /signup-rate-limits/{email} {
+      allow read, write: if false;
     }
 
     // Blocked-by-the-swear-filter messages. Written only by the Cloudflare

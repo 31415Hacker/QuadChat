@@ -27,7 +27,7 @@ async function requireAdmin(req) {
     error.status = 401;
     throw error;
   }
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
   const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || callerDoc.data().isAdmin !== true) {
     const error = new Error("Only admins can approve requests.");
@@ -137,6 +137,13 @@ export default async function handler(req, res) {
     if (request.provider === "google") {
       if (typeof request.uid !== "string" || !request.uid) {
         return res.status(400).json({ error: "They must sign in with Google first so this approval can be bound to their account." });
+      }
+      const verifiedGoogleUser = await admin.auth().getUser(request.uid).catch(() => null);
+      if (!verifiedGoogleUser || String(verifiedGoogleUser.email || "").toLowerCase() !== email) {
+        return res.status(400).json({ error: "The Google account ID doesn't match the email on this request." });
+      }
+      if (!(verifiedGoogleUser.providerData || []).some((provider) => provider.providerId === "google.com")) {
+        return res.status(400).json({ error: "That's not a Google account." });
       }
       await Promise.all([
         db.doc(`approved-users/${email}`).set({

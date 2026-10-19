@@ -35,8 +35,10 @@ export function usePresence(user) {
       if (closed) return;
       try {
         const token = await user.getIdToken();
-        const wsUrl = `${presenceUrl}?token=${encodeURIComponent(token)}`;
-        ws = new WebSocket(wsUrl);
+        ws = new WebSocket(presenceUrl);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: "auth", token }));
+        };
       } catch (e) {
         if (!closed) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), maxReconnectDelay);
@@ -46,26 +48,27 @@ export function usePresence(user) {
         return;
       }
 
-      ws.onopen = () => {
-        reconnectAttempt = 0;
-        clearPingInterval();
-        pingInterval = setInterval(() => {
-          if (ws?.readyState !== WebSocket.OPEN) {
-            clearPingInterval();
-            return;
-          }
-          ws.send(JSON.stringify({ type: "ping" }));
-        }, 10000);
-      };
+      let authenticated = false;
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
 
           if (data.type === "sync") {
+            authenticated = true;
+            reconnectAttempt = 0;
+            clearPingInterval();
             setOnlineUsers(new Set(data.onlineUsers));
             setPresenceReady(true);
+            pingInterval = setInterval(() => {
+              if (ws?.readyState !== WebSocket.OPEN || !authenticated) {
+                clearPingInterval();
+                return;
+              }
+              ws.send(JSON.stringify({ type: "ping" }));
+            }, 10000);
           } else if (data.type === "presence") {
+            if (!authenticated) return;
             setOnlineUsers((prev) => {
               const next = new Set(prev);
               if (data.status === "online") {

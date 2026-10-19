@@ -1,26 +1,7 @@
-import { useEffect, useState } from "react";
-import { off, onValue, ref as rtdbRef } from "firebase/database";
 import { Globe, Lock, Phone, Plus, Trash2 } from "lucide-react";
-import { rtdb } from "../../firebase.js";
-
-function useCallMemberCount(callKey) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    const membersRef = rtdbRef(rtdb, `group-calls/${callKey}/participants`);
-    const unsub = onValue(membersRef, (snap) => {
-      const val = snap.val();
-      setCount(val ? Object.keys(val).length : 0);
-    });
-    return () => {
-      off(membersRef);
-      unsub();
-    };
-  }, [callKey]);
-  return count;
-}
 
 function CallRow({ call, isCurrent, sessionUserId, onJoinCall, onDeleteCall }) {
-  const count = useCallMemberCount(call.callKey);
+  const count = call.participantCount || 0;
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +11,10 @@ function CallRow({ call, isCurrent, sessionUserId, onJoinCall, onDeleteCall }) {
 
   function handleJoin() {
     if (busy) return;
+    if (call.needsRecreation) {
+      setError("This older call must be recreated by its owner with a new password if private.");
+      return;
+    }
     if (call.isProtected && !showPassword) {
       setShowPassword(true);
       return;

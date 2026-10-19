@@ -5,12 +5,12 @@
     // -----------------------------------------------------------------
     "typing": {
       "$channel": {
-        // Anyone logged in can read who is typing in a channel
-        ".read": "auth != null",
+        // DM typing lives in Firestore, where DM membership can be checked.
+        ".read": "auth != null && !$channel.beginsWith('dm_')",
         ".indexOn": ["timestamp"],
         "$uid": {
           // Users can only update/remove their own typing status
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid && !$channel.beginsWith('dm_')",
           ".validate": "!newData.exists() || newData.hasChildren(['isTyping', 'timestamp'])",
           "isTyping": {
             ".validate": "newData.isBoolean()"
@@ -151,104 +151,43 @@
     },
 
     // -----------------------------------------------------------------
-    // DIR group call directory
-    // A public listing of creatable/joinable group calls. The directory
-    // entry only records metadata + password hash; live participants live
-    // under group-calls/<key>/participants. Token issuance is the password
-    // gate (server verifies before issuing a LiveKit token for the room).
+    // Server-only credentials. /api/list-calls returns sanitized listings.
     // -----------------------------------------------------------------
     "call-directory": {
-      ".read": "auth != null",
-      // Anyone may create a call (validated below); an entry may only be
-      // removed/rewritten by its owner. `!data.exists()` permits the initial
-      // create (ownerId must equal auth.uid below); `!newData.exists()` on a
-      // delete is gated by the owner match on the existing data.
-      ".write": "auth != null && (
-        !data.exists()
-        || data.child('ownerId').val() == auth.uid
-        || newData.child('ownerId').val() == auth.uid
-      )",
-      "$callKey": {
-        ".validate": "(
-          newData.child('callKey').val() === $callKey
-          && newData.child('callKey').isString()
-          && newData.child('title').isString()
-          && newData.child('title').val().length <= 50
-          && newData.child('ownerId').isString()
-          && newData.child('ownerName').isString()
-          && newData.child('createdAt').isNumber()
-          && (!newData.hasChild('passwordHash') || (
-            newData.child('passwordHash').isString()
-            && newData.child('passwordHash').val().length === 64
-            && newData.hasChild('passwordSalt')
-            && newData.child('passwordSalt').isString()
-          ))
-        )"
-      }
+      ".read": false,
+      ".write": false
     },
+    "call-access": { ".read": false, ".write": false },
+    "call-issued": { ".read": false, ".write": false },
+    "call-locks": { ".read": false, ".write": false },
+    "call-rate-limits": { ".read": false, ".write": false },
 
     // -----------------------------------------------------------------
-    // P2P / GROUP CALL SIGNALING
+    // Only server-authorized room members may read rosters/mutes.
+    // Legacy P2P signaling is disabled.
     // -----------------------------------------------------------------
     "group-calls": {
       "$groupCallId": {
-        ".read": "auth != null",
-        // The first joiner creates the call (createdAt + participants) before
-        // any participant entries exist, so the parent write stays open to all
-        // signed-in users. Shape is validated and per-node rules below lock
-        // participants and connections down.
-        ".write": "auth != null",
-
-        "createdAt": {
-          ".validate": "newData.isNumber()"
-        },
-        "screenShareActive": {
-          ".validate": "newData.isBoolean() || (newData.hasChildren(['name']) && newData.child('name').isString())"
-        },
-        "screenShareRequest": {
-          ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name']) && newData.child('uid').isString() && newData.child('name').isString())"
-        },
-
+        ".read": false,
+        ".write": false,
         "participants": {
-          // Whole-map writes denied; users can only touch their own entry below
-          ".write": false,
+          ".read": "auth != null && root.child('call-access').child($groupCallId).child(auth.uid).child('expiresAt').val() > now && root.child('call-directory').child($groupCallId).exists() && root.child('call-directory').child($groupCallId).child('deleting').val() !== true",
           "$uid": {
-            // Users can only add, modify, or remove their own participant entry
-            ".write": "auth != null && auth.uid === $uid",
-            ".validate": "newData.hasChildren(['name', 'joinedAt']) && newData.child('name').isString() && newData.child('joinedAt').isNumber()"
+            // Removal stays allowed after lease expiry, for onDisconnect.
+            ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (root.child('call-access').child($groupCallId).child(auth.uid).child('expiresAt').val() > now && root.child('call-directory').child($groupCallId).exists() && root.child('call-directory').child($groupCallId).child('deleting').val() !== true))",
+            ".validate": "newData.hasChildren(['name', 'joinedAt']) && newData.child('name').isString() && newData.child('joinedAt').isNumber()",
+            "name": {},
+            "joinedAt": {},
+            "$other": { ".validate": false }
           }
         },
         "mutes": {
-          // Per-call mutes are written ONLY by the serverless /api/group-mute
-          // endpoint (admin SDK, which bypasses rules) after confirming the
-          // caller is the call owner or an admin. Clients may read all mutes
-          // (each client enforces its own mute locally) but can never write.
-          ".read": "auth != null",
-          ".write": false,
-          "$uid": {
-            ".validate": "(
-              newData.hasChildren(['muted', 'mutedBy', 'mutedByName', 'targetName', 'updatedAt'])
-              && newData.child('muted').isBoolean()
-              && newData.child('mutedBy').isString()
-              && newData.child('mutedByName').isString()
-              && newData.child('targetName').isString()
-              && newData.child('updatedAt').isNumber()
-            )"
-          }
+          ".read": "auth != null && root.child('call-access').child($groupCallId).child(auth.uid).child('expiresAt').val() > now && root.child('call-directory').child($groupCallId).exists() && root.child('call-directory').child($groupCallId).child('deleting').val() !== true",
+          ".write": false
         },
         "connections": {
-          // Only the per-pair node below grants access
           ".read": false,
-          ".write": false,
-          "$connId": {
-            // Peer connection keys follow the 'uidA_uidB' pattern (uids sorted).
-            // Only the two participants in that pair can read/write signaling.
-            // Firebase rules has no startsWith() method. Firebase UIDs are
-            // alphanumeric, and the connection key contains exactly two UIDs
-            // separated by '_', so these delimiter checks identify a pair.
-            ".read": "auth != null && ($connId.contains(auth.uid + '_') || $connId.endsWith('_' + auth.uid))",
-            ".write": "auth != null && ($connId.contains(auth.uid + '_') || $connId.endsWith('_' + auth.uid))"
-          }
+          ".write": false
         }
       }
     }

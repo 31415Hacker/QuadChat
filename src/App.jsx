@@ -483,7 +483,9 @@ export default function App() {
 
   const {
     callStatus,
+    callPartnerId,
     callPartnerName,
+    callSpeaking,
     callMuted,
     remoteMuted,
     remoteCameraStream,
@@ -502,6 +504,7 @@ export default function App() {
     groupCallStatus,
     groupCallParticipants,
     groupCallVideoStreams,
+    groupCallSpeaking,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
     groupCallMutes,
@@ -1322,19 +1325,19 @@ export default function App() {
   }, [user, activeChannel, channelReloadKey]);
 
   useEffect(() => {
-    if (!user || !activeChannel) {
+    if (!user || !activeChannel || !isDmChannelId(activeChannel)) {
       setTypingUsers({});
       return;
     }
 
-    const typingRef = rtdbRef(rtdb, `typing/${activeChannel}`);
+    const typingRef = doc(db, "dms", activeChannel, "typing", sessionUserId);
+    const collectionRef = collection(db, "dms", activeChannel, "typing");
 
-    const unsub = onValue(typingRef, (snap) => {
-      const val = snap.val() || {};
+    const unsub = onSnapshot(collectionRef, (snap) => {
       const others = {};
-      Object.entries(val).forEach(([uid, data]) => {
-        if (uid !== sessionUserId && data?.name) {
-          others[uid] = data.name;
+      snap.docs.forEach((d) => {
+        if (d.id !== sessionUserId && d.data()?.name) {
+          others[d.id] = d.data().name;
         }
       });
       setTypingUsers(others);
@@ -1342,9 +1345,7 @@ export default function App() {
 
     return () => {
       unsub();
-      if (sessionUserId) {
-        remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
-      }
+      deleteDoc(typingRef).catch(() => {});
       setTypingUsers({});
     };
   }, [user, activeChannel, sessionUserId]);
@@ -3304,7 +3305,11 @@ export default function App() {
       setMessage("");
       clearTimeout(typingTimeoutRef.current);
       if (sessionUserId && activeChannel) {
-        remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
+        if (isDmChannelId(activeChannel)) {
+          deleteDoc(doc(db, "dms", activeChannel, "typing", sessionUserId)).catch(() => {});
+        } else {
+          remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
+        }
       }
       setReplyTo(null);
       setPendingFiles((currentFiles) => {
@@ -3344,11 +3349,19 @@ export default function App() {
     const now = Date.now();
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
+      if (isDmChannelId(activeChannel)) {
+        deleteDoc(doc(db, "dms", activeChannel, "typing", sessionUserId)).catch(() => {});
+      } else {
+        remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
+      }
     }, 3000);
     if (now - typingLastWriteRef.current < 2000) return;
     typingLastWriteRef.current = now;
-    set(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`), { isTyping: true, name: activeName, timestamp: now }).catch(() => {});
+    if (isDmChannelId(activeChannel)) {
+      setDoc(doc(db, "dms", activeChannel, "typing", sessionUserId), { name: activeName, timestamp: serverTimestamp() }, { merge: true }).catch(() => {});
+    } else {
+      set(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`), { isTyping: true, name: activeName, timestamp: now }).catch(() => {});
+    }
   }
 
   async function toggleUserMute(profile) {
@@ -3708,6 +3721,13 @@ export default function App() {
                   activeName={activeName}
                   callMuted={callMuted || groupCallLocalMuted || p2pGroupCallLocalMuted}
                   callPartnerName={callStatus === "connected" || callStatus === "calling" ? callPartnerName : ""}
+                  callPartnerId={callStatus === "connected" || callStatus === "calling" ? callPartnerId : null}
+                  profiles={profiles}
+                  localId={sessionUserId}
+                  speakingMap={{
+                    ...groupCallSpeaking,
+                    ...(callStatus === "connected" ? { private: callSpeaking.remote, [sessionUserId]: callSpeaking.local } : {})
+                  }}
                   groupParticipants={groupCallStatus === "connected" ? groupCallParticipants : p2pGroupCallParticipants}
                   groupVideoStreams={groupCallVideoStreams}
                   localCameraStream={localCameraStream}

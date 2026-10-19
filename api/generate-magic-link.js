@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
   try {
     const idToken = authHeader.split("Bearer ")[1];
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const decodedToken = await admin.auth().verifyIdToken(idToken, true);
 
     const callerDoc = await admin
       .firestore()
@@ -42,6 +42,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ url: link });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: "Could not generate link. Please try again." });
   }
 }

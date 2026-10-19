@@ -15,26 +15,12 @@ import {
 import { rtdb } from "../../firebase.js";
 import { notificationIcon, OPUS_BITRATE, rtcConfig } from "../constants.js";
 import { applyOpusBitrate, computeCapability } from "../utils/media.js";
+import { callApi } from "../utils/callApi.js";
 import {
   captureConstraintsForMode,
   createNoiseController,
   normalizeNoiseMode
 } from "../utils/noiseSuppression.js";
-
-function bytesToHex(bytes) {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function hashCallPassword(password) {
-  const salt = new Uint8Array(16);
-  crypto.getRandomValues(salt);
-  const saltHex = bytesToHex(salt);
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(`${saltHex}:${password}`)
-  );
-  return { salt: saltHex, hash: bytesToHex(new Uint8Array(digest)) };
-}
 
 export function useCalls({
   sessionUserId,
@@ -79,6 +65,7 @@ export function useCalls({
   const [localCameraStream, setLocalCameraStream] = useState(null);
   const [remoteCameraStream, setRemoteCameraStream] = useState(null);
   const [groupCallVideoStreams, setGroupCallVideoStreams] = useState({});
+  const [groupCallSpeaking, setGroupCallSpeaking] = useState({});
   const [localScreenStream, setLocalScreenStream] = useState(null);
   const groupCallCameraTrackRef = useRef(null);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -102,6 +89,8 @@ export function useCalls({
   const groupCallCleaningRef = useRef(false);
   const [activeGroupCallKey, setActiveGroupCallKey] = useState(null);
   const groupCallPresenceRef = useRef(null);
+  const groupCallLeaseRef = useRef(null);
+  const refreshCallsRef = useRef(null);
 
   const [activeCalls, setActiveCalls] = useState([]);
 
@@ -125,12 +114,113 @@ export function useCalls({
     }
   }, [callStatus]);
 
+  const [callSpeaking, setCallSpeaking] = useState({ local: false, remote: false });
+
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
       console.log("[CALL] setting audio element srcObject");
       remoteAudioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream, callStatus]);
+
+  useEffect(() => {
+    if (callStatus !== "connected") {
+      setCallSpeaking({ local: false, remote: false });
+      return undefined;
+    }
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return undefined;
+
+    const ctx = new AudioContextCtor();
+    const remoteAnalyser = ctx.createAnalyser();
+    const localAnalyser = ctx.createAnalyser();
+    for (const analyser of [remoteAnalyser, localAnalyser]) {
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.55;
+    }
+
+    const attach = (stream, analyser) => {
+      try {
+        const source = ctx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        return source;
+      } catch (_e) { return null; }
+    };
+
+    const remoteSource = attach(remoteStream, remoteAnalyser);
+    const localSource = attach(localStreamRef.current, localAnalyser);
+
+    const floatData = new Float32Array(remoteAnalyser.fftSize);
+    const byteData = new Uint8Array(remoteAnalyser.fftSize);
+    const supportsFloat = typeof remoteAnalyser.getFloatTimeDomainData === "function";
+    const THRESHOLD_ON = 0.025;
+    const THRESHOLD_OFF = 0.012;
+    const HOLD_MS = 250;
+    let remoteOn = false;
+    let localOn = false;
+    let remoteSpeechAt = 0;
+    let localSpeechAt = 0;
+
+    const measure = (analyser) => {
+      try {
+        if (supportsFloat) {
+          analyser.getFloatTimeDomainData(floatData);
+          let sum = 0;
+          for (let i = 0; i < floatData.length; i += 1) sum += floatData[i] * floatData[i];
+          return Math.sqrt(sum / floatData.length);
+        }
+        analyser.getByteTimeDomainData(byteData);
+        let sum = 0;
+        for (let i = 0; i < byteData.length; i += 1) {
+          const centered = (byteData[i] - 128) / 128;
+          sum += centered * centered;
+        }
+        return Math.sqrt(sum / byteData.length);
+      } catch (_e) { return 0; }
+    };
+
+    const tick = () => {
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+      const remoteRms = remoteSource ? measure(remoteAnalyser) : 0;
+      if (!remoteOn && remoteRms >= THRESHOLD_ON) {
+        remoteOn = true;
+        remoteSpeechAt = Date.now();
+      } else if (remoteOn && remoteRms >= THRESHOLD_OFF) {
+        remoteSpeechAt = Date.now();
+      } else if (remoteOn && remoteRms < THRESHOLD_OFF) {
+        remoteOn = false;
+      }
+      const remoteSpeaking = remoteOn || Date.now() - remoteSpeechAt < HOLD_MS;
+
+      const localRms = localSource ? measure(localAnalyser) : 0;
+      if (!localOn && localRms >= THRESHOLD_ON) {
+        localOn = true;
+        localSpeechAt = Date.now();
+      } else if (localOn && localRms >= THRESHOLD_OFF) {
+        localSpeechAt = Date.now();
+      } else if (localOn && localRms < THRESHOLD_OFF) {
+        localOn = false;
+      }
+      const localSpeaking = localOn || Date.now() - localSpeechAt < HOLD_MS;
+
+      setCallSpeaking((prev) =>
+        prev.local === localSpeaking && prev.remote === remoteSpeaking
+          ? prev
+          : { local: localSpeaking, remote: remoteSpeaking }
+      );
+    };
+
+    const timer = setInterval(tick, 120);
+    return () => {
+      clearInterval(timer);
+      try { remoteSource?.disconnect(); localSource?.disconnect(); } catch (_e) { /* already detached */ }
+      remoteAnalyser.disconnect();
+      localAnalyser.disconnect();
+      ctx.close().catch(() => {});
+    };
+  }, [callStatus, remoteStream]);
 
   useEffect(() => {
     if (screenAudioRef.current) {
@@ -532,6 +622,7 @@ export function useCalls({
           console.log("[CALL] ontrack — camera video received");
           setRemoteCameraStream(stream);
           e.track.onmute = () => setRemoteCameraStream(null);
+          e.track.onunmute = () => setRemoteCameraStream(stream);
           e.track.onended = () => setRemoteCameraStream(null);
         }
       } else if (stream?.getVideoTracks().length) {
@@ -1078,6 +1169,10 @@ export function useCalls({
     groupCallCleaningRef.current = true;
     clearTimeout(groupCallSoloTimeoutRef.current);
     groupCallSoloTimeoutRef.current = null;
+    if (groupCallLeaseRef.current) {
+      clearInterval(groupCallLeaseRef.current.timer);
+      groupCallLeaseRef.current = null;
+    }
     if (groupCallPresenceRef.current) {
       remove(groupCallPresenceRef.current).catch(() => {});
       groupCallPresenceRef.current = null;
@@ -1111,6 +1206,7 @@ export function useCalls({
     setGroupCallForcedMuted(false);
     setGroupCallMutes({});
     setGroupCallVideoStreams({});
+    setGroupCallSpeaking({});
     setGroupCallParticipants({});
     setGroupCallLocalMuted(false);
     setActiveGroupCallKey(null);
@@ -1550,44 +1646,31 @@ export function useCalls({
 
   useEffect(() => {
     if (!user || !sessionUserId) return;
-    const dirRef = rtdbRef(rtdb, "call-directory");
-    const unsub = onValue(dirRef, (snap) => {
-      const val = snap.val();
-      if (!val) {
-        setActiveCalls([]);
-        return;
-      }
-      const list = Object.entries(val)
-        .map(([key, data]) => ({
-          callKey: key,
-          title: typeof data?.title === "string" ? data.title : "Group call",
-          ownerId: data?.ownerId || "",
-          ownerName: typeof data?.ownerName === "string" ? data.ownerName : "Unknown",
-          createdAt: typeof data?.createdAt === "number" ? data.createdAt : 0,
-          isProtected: Boolean(data?.passwordHash),
-        }))
-        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setActiveCalls(list);
-    });
-    return () => unsub();
+    let cancelled = false;
+    let loading = false;
+    const refresh = async () => {
+      if (loading) return;
+      loading = true;
+      try {
+        const { calls } = await callApi(user, "list-calls");
+        if (!cancelled) setActiveCalls(calls);
+      } catch (error) {
+        if (!cancelled && (error.status === 401 || error.status === 403)) setActiveCalls([]);
+      } finally { loading = false; }
+    };
+    refreshCallsRef.current = refresh;
+    refresh();
+    const timer = setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      refreshCallsRef.current = null;
+    };
   }, [user, sessionUserId]);
 
   async function createGroupCall({ title = "", password = "" } = {}) {
-    const callKey = push(rtdbRef(rtdb, "call-directory")).key;
-    const now = Date.now();
-    const entry = {
-      callKey,
-      title: (title.trim() || "Group call").slice(0, 50),
-      ownerId: sessionUserId,
-      ownerName: activeName,
-      createdAt: now,
-    };
-    if (password.trim()) {
-      const { salt, hash } = await hashCallPassword(password);
-      entry.passwordSalt = salt;
-      entry.passwordHash = hash;
-    }
-    await set(rtdbRef(rtdb, `call-directory/${callKey}`), entry);
+    const { callKey } = await callApi(user, "create-call", { title: title.trim() || "Group call", password });
+    refreshCallsRef.current?.();
     return callKey;
   }
 
@@ -1595,31 +1678,15 @@ export function useCalls({
     if (groupCallStatus === "connected" && activeGroupCallKey === callKey) {
       cleanupGroupCall();
     }
-    try {
-      await remove(rtdbRef(rtdb, `call-directory/${callKey}`));
-      await remove(rtdbRef(rtdb, `group-calls/${callKey}`)).catch(() => {});
-    } catch (e) {
-      const idToken = await user.getIdToken();
-      const res = await fetch("/api/delete-call", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ callKey }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Delete failed");
-      }
-    }
+    await callApi(user, "delete-call", { callKey });
+    refreshCallsRef.current?.();
   }
 
   async function joinSessionGroupCall(sessionTitle = "") {
     const now = Date.now();
     const existing = activeCalls.find(
       (call) =>
-        !call.isProtected &&
+        !call.isProtected && !call.needsRecreation &&
         call.ownerId === sessionUserId &&
         call.title.toLowerCase() === (sessionTitle.trim().toLowerCase() || "group call") &&
         now - call.createdAt < 10 * 60 * 1000
@@ -1642,23 +1709,9 @@ export function useCalls({
       }
 
       const { Room, RoomEvent } = await import("livekit-client");
-      const idToken = await user.getIdToken();
-      const res = await fetch("/api/livekit-token", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          room: callKey,
-          ...(password ? { password } : {}),
-        }),
+      const { token, url, session, accessExpiresAt } = await callApi(user, "livekit-token", {
+        room: callKey, ...(password ? { password } : {})
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to get token");
-      }
-      const { token, url } = await res.json();
 
       const stream = await acquireMicStream();
       groupCallLocalStreamRef.current = stream;
@@ -1668,6 +1721,30 @@ export function useCalls({
       }
 
       const room = new Room({ adaptiveStream: true, dynacast: true });
+      async function publishAudio() {
+        if (!room.localParticipant.permissions?.canPublish || groupCallRoomRef.current !== room) return;
+        if (groupCallPublishedTrackRef.current) return;
+        for (const track of stream.getAudioTracks()) {
+          const pub = await room.localParticipant.publishTrack(track, { dtx: true });
+          if (pub.track) groupCallPublishedTrackRef.current = pub.track;
+          try {
+            const sender = pub.track?.sender;
+            if (sender) {
+              const params = sender.getParameters();
+              params.encodings = [{ maxBitrate: OPUS_BITRATE }];
+              await sender.setParameters(params);
+            }
+          } catch (_e) { /* some LiveKit versions ignore setParameters for audio */ }
+        }
+      }
+      room.on(RoomEvent.ParticipantPermissionsChanged, (_previous, participant) => {
+        if (participant !== room.localParticipant) return;
+        if (!participant.permissions?.canPublish) {
+          groupCallPublishedTrackRef.current = null;
+        } else {
+          publishAudio().catch((error) => onCallError?.(error.message));
+        }
+      });
 
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === "video") {
@@ -1687,6 +1764,13 @@ export function useCalls({
               const next = { ...prev };
               delete next[participant.identity];
               return next;
+            });
+            track.onunmuted = () => setGroupCallVideoStreams((prev) => {
+              if (prev[participant.identity]) return prev;
+              return {
+                ...prev,
+                [participant.identity]: { name: participant.name || participant.identity, stream }
+              };
             });
           }
         } else {
@@ -1786,6 +1870,18 @@ export function useCalls({
         });
       });
 
+      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+        const speaking = {};
+        speaking[room.localParticipant.identity] = false;
+        (room.remoteParticipants || new Map()).forEach((p) => {
+          speaking[p.identity] = false;
+        });
+        speakers.forEach((participant) => {
+          speaking[participant.identity] = true;
+        });
+        setGroupCallSpeaking(speaking);
+      });
+
       room.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (state === "disconnected") {
           cleanupGroupCall();
@@ -1795,13 +1891,28 @@ export function useCalls({
       await room.connect(url, token);
       groupCallRoomRef.current = room;
       setActiveGroupCallKey(callKey);
+      const lease = { session, expiresAt: accessExpiresAt, timer: null, pending: false };
+      groupCallLeaseRef.current = lease;
+      lease.timer = setInterval(async () => {
+        if (lease.pending || groupCallLeaseRef.current !== lease) return;
+        lease.pending = true;
+        try {
+          const result = await callApi(user, "renew-call", { room: callKey, session });
+          lease.expiresAt = result.accessExpiresAt;
+        } catch (error) {
+          if (groupCallLeaseRef.current === lease && ([401, 403, 404].includes(error.status) || Date.now() >= lease.expiresAt)) {
+            cleanupGroupCall();
+            onCallError?.(error.message);
+          }
+        } finally { lease.pending = false; }
+      }, 25_000);
 
       const presenceRef = rtdbRef(
         rtdb,
         `group-calls/${callKey}/participants/${sessionUserId}`
       );
-      await set(presenceRef, { name: activeName, joinedAt: Date.now() }).catch(() => {});
-      onDisconnect(presenceRef).remove().catch(() => {});
+      await onDisconnect(presenceRef).remove();
+      await set(presenceRef, { name: activeName, joinedAt: Date.now() });
       groupCallPresenceRef.current = presenceRef;
 
       const mutesRef = rtdbRef(rtdb, `group-calls/${callKey}/mutes`);
@@ -1823,23 +1934,13 @@ export function useCalls({
             }
             resolve();
           },
-          () => resolve()
+          () => { cleanupGroupCall(); resolve(); }
         );
       });
 
       groupCallPublishedTrackRef.current = null;
-      for (const track of stream.getAudioTracks()) {
-        const pub = await room.localParticipant.publishTrack(track, { dtx: true });
-        if (pub.track) groupCallPublishedTrackRef.current = pub.track;
-        try {
-          const sender = pub.track?.sender;
-          if (sender) {
-            const params = sender.getParameters();
-            params.encodings = [{ maxBitrate: OPUS_BITRATE }];
-            sender.setParameters(params);
-          }
-        } catch (_e) { /* some LiveKit versions ignore setParameters for audio */ }
-      }
+      if (groupCallRoomRef.current !== room) throw new Error("Call access was revoked");
+      await publishAudio();
 
       // The AI pipeline may have finished building while we were publishing;
       // make sure the published track matches the current outgoing track.
@@ -1882,29 +1983,12 @@ export function useCalls({
   }
 
   async function setGroupCallParticipantMute(callKeyVal, targetUid, targetName, muted) {
-    try {
-      const idToken = await user.getIdToken();
-      const res = await fetch("/api/group-mute", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          callKey: callKeyVal,
-          targetUid,
-          targetName,
-          muted,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Mute failed");
-      }
-    } catch (e) {
-      console.error("[GROUP-MUTE] failed:", e);
-      throw e;
-    }
+    await callApi(user, "group-mute", {
+      callKey: callKeyVal,
+      targetUid,
+      targetName,
+      muted,
+    });
   }
 
   function toggleCallMute() {
@@ -1931,6 +2015,7 @@ export function useCalls({
     callStatus,
     callPartnerId,
     callPartnerName,
+    callSpeaking,
     callMuted,
     remoteMuted,
     incomingCall,
@@ -1950,6 +2035,7 @@ export function useCalls({
     groupCallStatus,
     groupCallParticipants,
     groupCallVideoStreams,
+    groupCallSpeaking,
     groupCallLocalMuted,
     groupCallAudioContainerRef,
     groupCallMutes,

@@ -28,7 +28,7 @@ async function requireAdmin(req) {
     throw error;
   }
 
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
   const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || callerDoc.data().isAdmin !== true) {
     const error = new Error("Only admins can manage accounts.");
@@ -196,6 +196,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Unknown account action." });
   } catch (error) {
     const status = error.status || (error.code === "auth/user-not-found" ? 404 : 500);
-    return res.status(status).json({ error: error.message || "Account management failed." });
+    return res.status(status).json({
+      error: status >= 500 ? "Account management failed. Please try again." : error.message || "Account management failed."
+    });
   }
 }

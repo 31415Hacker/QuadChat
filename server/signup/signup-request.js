@@ -6,14 +6,20 @@ if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  const { email, displayName, password, provider, turnstileToken, website, headless, uid } = req.body || {};
+  const { email, displayName, password, provider, turnstileToken, website, headless } = req.body || {};
   if (website || headless) return res.status(400).json({ error: "Unable to submit request." });
   if (!email || !displayName) return res.status(400).json({ error: "Complete the form." });
 
   try {
     const kind = provider === "google" ? "google" : "password";
-    if (kind === "google" && !uid) {
-      return res.status(400).json({ error: "Sign in with Google first so the request can be bound to your account." });
+    let uid;
+    if (kind === "google") {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Sign in with Google first so the request can be bound to your account." });
+      }
+      const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
+      uid = decodedToken.uid;
     }
     if (kind === "google") {
       if (!process.env.TURNSTILE_SECRET_KEY) {
@@ -41,6 +47,20 @@ export default async function handler(req, res) {
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanName = String(displayName).trim();
 
+    const attemptsRef = db.collection("signup-rate-limits").doc(cleanEmail);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(attemptsRef);
+      const now = Date.now();
+      const data = snap.exists ? snap.data() : { count: 0, resetAt: now + 3600_000 };
+      if (data.resetAt <= now) {
+        tx.set(attemptsRef, { count: 1, resetAt: now + 3600_000 });
+      } else if (data.count >= 5) {
+        throw Object.assign(new Error("Too many requests. Try again later."), { status: 429 });
+      } else {
+        tx.update(attemptsRef, { count: data.count + 1 });
+      }
+    });
+
     const existing = await admin.auth().getUserByEmail(cleanEmail).catch((error) => {
       if (error.code === "auth/user-not-found") return null;
       throw error;
@@ -64,8 +84,6 @@ export default async function handler(req, res) {
     };
     if (kind === "google") {
       requestData.uid = uid;
-    } else if (password) {
-      requestData.password = password;
     }
     await db.collection("signup-requests").add(requestData);
 

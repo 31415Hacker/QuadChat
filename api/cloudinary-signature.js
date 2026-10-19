@@ -94,7 +94,7 @@ export default async function handler(req, res) {
 
   try {
     const idToken = authHeader.split("Bearer ")[1];
-    await admin.auth().verifyIdToken(idToken);
+    await admin.auth().verifyIdToken(idToken, true);
 
     const validationError = validateUpload(parseBody(req));
     if (validationError) {
@@ -123,6 +123,6 @@ export default async function handler(req, res) {
       .status(200)
       .json({ signature, timestamp, apiKey, cloudName, uploadPreset });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: "Upload signature failed. Please try again." });
   }
 }

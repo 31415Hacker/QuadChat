@@ -2907,6 +2907,27 @@ button.message-document-preview {
   min-height: 150px;
 }
 
+.call-stage-avatar {
+  align-items: center;
+  background: #101d1b;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  min-height: 150px;
+}
+
+.call-stage-avatar img {
+  border-radius: 9999px;
+  height: clamp(64px, 30%, 110px);
+  object-fit: cover;
+  width: clamp(64px, 30%, 110px);
+}
+
+.call-stage-tile--speaking {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 22px rgba(59, 130, 246, 0.45);
+}
+
 .call-stage-label {
   background: rgba(7, 12, 13, 0.76);
   border-radius: 7px;

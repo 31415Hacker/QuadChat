@@ -11,8 +11,9 @@ const PROFANITY_FILL = "*";
 const AUTO_MUTE_DURATION_MS = 24 * 60 * 60 * 1000;
 const AUTO_MUTE_BY = "__auto-mod__";
 
+const CORS_ORIGIN = "https://quadchat-cf697.web.app";
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": CORS_ORIGIN,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
@@ -464,69 +465,107 @@ export class PresenceServer extends DurableObject {
 
   async fetch(request) {
     const url = new URL(request.url);
-    const token = url.searchParams.get("token");
-    if (!token) {
-      return new Response("Missing token query parameter", { status: 400 });
-    }
 
-    let userId;
-    try {
-      userId = await verifyFirebaseIdToken(token);
-    } catch (err) {
-      return new Response(`Unauthorized: ${err.message}`, { status: 401 });
+    if (url.searchParams.get("token")) {
+      return new Response("Token must be sent via WebSocket message, not URL", { status: 400 });
     }
-
-    const now = Date.now();
-    const attempts = (this.connectionAttempts.get(userId) || []).filter(
-      (timestamp) => now - timestamp < 60000
-    );
-    const activeSessions = Array.from(this.sessions.values()).filter(
-      (session) => session.userId === userId
-    ).length;
-    if (
-      activeSessions >= MAX_SESSIONS_PER_USER ||
-      attempts.length >= MAX_CONNECTION_ATTEMPTS_PER_MINUTE
-    ) {
-      return new Response("Presence connection rate limit exceeded", { status: 429 });
-    }
-    attempts.push(now);
-    this.connectionAttempts.set(userId, attempts);
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    this.handleSession(server, userId);
+    this.handleConnection(server);
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  async handleSession(webSocket, userId) {
+  async handleConnection(webSocket) {
     webSocket.accept();
-    this.sessions.set(webSocket, { userId, lastPing: Date.now() });
-    await this.cancelPendingOffline(userId);
-    this.broadcast({ type: "presence", userId, status: "online" });
-    const onlineUsers = Array.from(
-      new Set(Array.from(this.sessions.values()).map((session) => session.userId))
-    );
-    webSocket.send(JSON.stringify({ type: "sync", onlineUsers }));
+    let authenticated = false;
+    let userId = null;
 
-    webSocket.addEventListener("message", () => {
-      const session = this.sessions.get(webSocket);
-      if (!session) return;
+    const timeout = setTimeout(() => {
+      if (!authenticated) {
+        try { webSocket.close(1008, "Authentication timeout"); } catch {}
+      }
+    }, 15000);
 
-      const now = Date.now();
-      const recentMessages = (this.messageWindows.get(webSocket) || []).filter(
-        (timestamp) => now - timestamp < 60000
-      );
-      if (recentMessages.length >= MAX_MESSAGES_PER_MINUTE) {
-        webSocket.close(1008, "Presence message rate limit exceeded");
-        this.handleDisconnect(webSocket);
+    webSocket.addEventListener("message", async (event) => {
+      if (authenticated) {
+        const session = this.sessions.get(webSocket);
+        if (!session) return;
+        const now = Date.now();
+        const recentMessages = (this.messageWindows.get(webSocket) || []).filter(
+          (timestamp) => now - timestamp < 60000
+        );
+        if (recentMessages.length >= MAX_MESSAGES_PER_MINUTE) {
+          webSocket.close(1008, "Presence message rate limit exceeded");
+          this.handleDisconnect(webSocket);
+          return;
+        }
+        recentMessages.push(now);
+        this.messageWindows.set(webSocket, recentMessages);
+        session.lastPing = now;
         return;
       }
-      recentMessages.push(now);
-      this.messageWindows.set(webSocket, recentMessages);
-      session.lastPing = now;
+
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type !== "auth" || !data.token) {
+          webSocket.close(1008, "Expected auth message");
+          return;
+        }
+
+        userId = await verifyFirebaseIdToken(data.token);
+
+        const account = parseServiceAccount(this.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        const callerDoc = await readFirestoreDoc(account, "users", userId);
+        if (!callerDoc) {
+          webSocket.close(1008, "User not found");
+          return;
+        }
+        const callerData = callerDoc.fields || {};
+        if (callerData.banned?.booleanValue === true) {
+          webSocket.close(1008, "Account banned");
+          return;
+        }
+
+        const now = Date.now();
+        const attempts = (this.connectionAttempts.get(userId) || []).filter(
+          (timestamp) => now - timestamp < 60000
+        );
+        const activeSessions = Array.from(this.sessions.values()).filter(
+          (session) => session.userId === userId
+        ).length;
+        if (
+          activeSessions >= MAX_SESSIONS_PER_USER ||
+          attempts.length >= MAX_CONNECTION_ATTEMPTS_PER_MINUTE
+        ) {
+          webSocket.close(1008, "Presence connection rate limit exceeded");
+          return;
+        }
+        attempts.push(now);
+        this.connectionAttempts.set(userId, attempts);
+
+        authenticated = true;
+        clearTimeout(timeout);
+        this.sessions.set(webSocket, { userId, lastPing: Date.now() });
+        await this.cancelPendingOffline(userId);
+        this.broadcast({ type: "presence", userId, status: "online" });
+        const onlineUsers = Array.from(
+          new Set(Array.from(this.sessions.values()).map((session) => session.userId))
+        );
+        webSocket.send(JSON.stringify({ type: "sync", onlineUsers }));
+      } catch (err) {
+        try { webSocket.close(1008, "Authentication failed"); } catch {}
+      }
     });
-    webSocket.addEventListener("close", () => this.handleDisconnect(webSocket));
-    webSocket.addEventListener("error", () => this.handleDisconnect(webSocket));
+
+    webSocket.addEventListener("close", () => {
+      clearTimeout(timeout);
+      if (authenticated) this.handleDisconnect(webSocket);
+    });
+    webSocket.addEventListener("error", () => {
+      clearTimeout(timeout);
+      if (authenticated) this.handleDisconnect(webSocket);
+    });
   }
 
   handleDisconnect(webSocket) {

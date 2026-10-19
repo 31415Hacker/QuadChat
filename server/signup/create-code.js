@@ -27,7 +27,7 @@ async function requireAdmin(req) {
     error.status = 401;
     throw error;
   }
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
   const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || callerDoc.data().isAdmin !== true) {
     const error = new Error("Only admins can create invite codes.");

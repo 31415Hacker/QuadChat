@@ -29,27 +29,33 @@ export default async function handler(req, res) {
     const cleanEmail = String(email).trim().toLowerCase();
 
     const codeRef = db.doc(`signup-codes/${code}`);
-    const codeSnap = await codeRef.get();
-    if (!codeSnap.exists) return res.status(400).json({ error: "That invite code is invalid." });
-    const codeData = codeSnap.data();
-    if (codeData.used === true) return res.status(400).json({ error: "That invite code has already been used." });
-    if (codeData.email && String(codeData.email).toLowerCase() !== cleanEmail) {
-      return res.status(400).json({ error: "That invite code is not valid for this email." });
+    let codeData;
+    try {
+      codeData = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(codeRef);
+        if (!snap.exists) throw Object.assign(new Error("That invite code is invalid."), { status: 400 });
+        const data = snap.data();
+        if (data.used === true) throw Object.assign(new Error("That invite code has already been used."), { status: 400 });
+        if (data.email && String(data.email).toLowerCase() !== cleanEmail) {
+          throw Object.assign(new Error("That invite code is not valid for this email."), { status: 400 });
+        }
+        tx.update(codeRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail });
+        return data;
+      });
+    } catch (txError) {
+      return res.status(txError.status || 400).json({ error: txError.message || "Invite code validation failed." });
     }
 
     const created = await admin.auth().createUser({ email: cleanEmail, password: String(password), displayName: String(displayName).trim() });
 
-    await Promise.all([
-      codeRef.update({ used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail }),
-      db.doc(`approved-users/${cleanEmail}`).set({
-        email: cleanEmail,
-        displayName: String(displayName).trim(),
-        uid: created.uid,
-        provider: "password",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        source: "invite-code"
-      })
-    ]);
+    await db.doc(`approved-users/${cleanEmail}`).set({
+      email: cleanEmail,
+      displayName: String(displayName).trim(),
+      uid: created.uid,
+      provider: "password",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      source: "invite-code"
+    });
 
     return res.status(201).json({ ok: true });
   } catch (error) {

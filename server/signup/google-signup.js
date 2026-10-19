@@ -25,23 +25,24 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { code, email, uid } = parseBody(req);
-    if (!code || !email || !uid) {
-      return res.status(400).json({ error: "Missing invite code, email, or account ID." });
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
+    const { code } = parseBody(req);
+    if (!code) {
+      return res.status(400).json({ error: "Invite code is required." });
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
+    const uid = decodedToken.uid;
+    const cleanEmail = String(decodedToken.email || "").toLowerCase();
     if (!cleanEmail) {
       return res.status(400).json({ error: "Email is required." });
     }
 
-    let verifiedUser;
-    try {
-      verifiedUser = await admin.auth().getUser(uid);
-    } catch (error) {
-      return res.status(400).json({ error: "Could not verify your Google account. Sign in with Google again and retry." });
-    }
-    if (String(verifiedUser.email || "").toLowerCase() !== cleanEmail) {
+    const verifiedUser = await admin.auth().getUser(uid).catch(() => null);
+    if (!verifiedUser || String(verifiedUser.email || "").toLowerCase() !== cleanEmail) {
       return res.status(400).json({ error: "That account doesn't match the Google email you signed in with." });
     }
     if (!(verifiedUser.providerData || []).some((provider) => provider.providerId === "google.com")) {
@@ -55,25 +56,43 @@ export default async function handler(req, res) {
 
     const db = admin.firestore();
 
+    const attemptsRef = db.collection("signup-rate-limits").doc(cleanEmail);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(attemptsRef);
+      const now = Date.now();
+      const data = snap.exists ? snap.data() : { count: 0, resetAt: now + 3600_000 };
+      if (data.resetAt <= now) {
+        tx.set(attemptsRef, { count: 1, resetAt: now + 3600_000 });
+      } else if (data.count >= 5) {
+        throw Object.assign(new Error("Too many requests. Try again later."), { status: 429 });
+      } else {
+        tx.update(attemptsRef, { count: data.count + 1 });
+      }
+    });
+
     const codeRef = db.doc(`signup-codes/${code}`);
-    const codeSnap = await codeRef.get();
-    if (!codeSnap.exists) return res.status(400).json({ error: "That invite code is invalid." });
-    const codeData = codeSnap.data();
-    if (codeData.used === true) return res.status(400).json({ error: "That invite code has already been used." });
-    if (codeData.email && String(codeData.email).toLowerCase() !== cleanEmail) {
-      return res.status(400).json({ error: "That invite code is not valid for this email." });
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(codeRef);
+        if (!snap.exists) throw Object.assign(new Error("That invite code is invalid."), { status: 400 });
+        const data = snap.data();
+        if (data.used === true) throw Object.assign(new Error("That invite code has already been used."), { status: 400 });
+        if (data.email && String(data.email).toLowerCase() !== cleanEmail) {
+          throw Object.assign(new Error("That invite code is not valid for this email."), { status: 400 });
+        }
+        tx.update(codeRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail });
+      });
+    } catch (txError) {
+      return res.status(txError.status || 400).json({ error: txError.message || "Invite code validation failed." });
     }
 
-    await Promise.all([
-      codeRef.update({ used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail }),
-      db.doc(`approved-users/${cleanEmail}`).set({
-        email: cleanEmail,
-        uid,
-        provider: "google",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        source: "invite-code"
-      })
-    ]);
+    await db.doc(`approved-users/${cleanEmail}`).set({
+      email: cleanEmail,
+      uid,
+      provider: "google",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      source: "invite-code"
+    });
 
     return res.status(200).json({ ok: true });
   } catch (error) {
