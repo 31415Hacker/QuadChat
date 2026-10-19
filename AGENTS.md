@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.20
+Current: 2.2.22
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -99,6 +99,16 @@ Rules:
 - The mute is durable for the room: it lives in the call node keyed by target uid, so a reloading victim re-applies it on rejoin until the owner/admin unmutes. Stale mutes persist per call (owner must unmute manually).
 - UI: `GroupCallBar` (`src/components/CallUI.jsx`) renders per-participant chips with a mic button when `canMute` (owner or admin). `App.jsx` computes `canMuteGroupParticipants` from `isCurrentUserAdmin || call.ownerId === sessionUserId` and passes `mutes`, `canMute`, `onMuteParticipant` (wraps `setGroupCallParticipantMute` with a toast on error). P2P group calls (unreachable legacy) don't get the buttons.
 - If you shrink access later, change `api/group-mute.js` (the only write path) + the `canMute` computation in `App.jsx`.
+
+## Calls View Crash — useState Not Imported
+- Symptom: clicking "Switch to calls" showed "QuadChat hit a problem. useState is not defined" and the calls view never rendered.
+- Root cause: `CallsSidebar.jsx` called `useState` (password form, create form, busy state) but only imported the lucide icons — no React import.
+- Fix: added `import { useState } from "react";`. Audited every `src/components`/`src/hooks`/`src/utils` file for hooks used without a React import — this was the only one.
+
+## Admins Can Edit Any Message
+- The message menu's "Edit" button now shows for `isMine || isCurrentUserAdmin` (`MessageList.jsx`), and `firestore.rules` adds an admin OR-branch to the `messages` update path: `(isAdmin() || isDeveloper())` may change only `text` / `edited` / `editedAt` on any message.
+- The existing edit write path (`App.jsx` `sendMessage`) already writes exactly those three fields and skips the profanity check for admins, so no client write change was needed.
+- Like the mute powers, this uses the combined `isAdmin() || isDeveloper()` on the rules side and `isCurrentUserAdmin` (which includes developers) on the client side — keep the two in sync if you ever restrict it.
 
 ## Calls View Stage — Avatars & Speaking Ring
 - The calls view stage (`src/components/CallStage.jsx`) shows a circular profile-picture avatar (`.call-stage-avatar`) in place of the old `CameraOff` placeholder whenever a tile has no video stream — local tile (own `profiles[sessionUserId].photoURL`), 1:1 remote tile (`profiles[callPartnerId].photoURL`), and group tiles (`profiles[participantId].photoURL`). The CameraOff placeholder remains only as a fallback for users with no photo.

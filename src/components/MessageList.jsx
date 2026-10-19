@@ -168,10 +168,10 @@ const MessageItem = memo(function MessageItem({
                 <span>Message info</span>
               </button>
             ) : null}
-            {isMine &&
-            typeof item.text === "string" &&
-            !item.isFile &&
-            item.type !== "game_session_card" ? (
+            {(isMine || isCurrentUserAdmin) &&
+             typeof item.text === "string" &&
+             !item.isFile &&
+             item.type !== "game_session_card" ? (
               <button
                 onClick={() => startEditMessage(item)}
                 type="button"

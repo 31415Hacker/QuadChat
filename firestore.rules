@@ -156,6 +156,13 @@ service cloud.firestore {
              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited", "editedAt"])
              && (!("text" in request.resource.data) || request.resource.data.text is string)
              && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2500)
+             && (!("edited" in request.resource.data) || request.resource.data.edited is bool)
+          )
+          || (
+            (isAdmin() || isDeveloper())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited", "editedAt"])
+            && (!("text" in request.resource.data) || request.resource.data.text is string)
+            && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2500)
             && (!("edited" in request.resource.data) || request.resource.data.edited is bool)
           )
           || (
