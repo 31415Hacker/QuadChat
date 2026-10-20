@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.22
+Current: 2.2.25
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -99,6 +99,16 @@ Rules:
 - The mute is durable for the room: it lives in the call node keyed by target uid, so a reloading victim re-applies it on rejoin until the owner/admin unmutes. Stale mutes persist per call (owner must unmute manually).
 - UI: `GroupCallBar` (`src/components/CallUI.jsx`) renders per-participant chips with a mic button when `canMute` (owner or admin). `App.jsx` computes `canMuteGroupParticipants` from `isCurrentUserAdmin || call.ownerId === sessionUserId` and passes `mutes`, `canMute`, `onMuteParticipant` (wraps `setGroupCallParticipantMute` with a toast on error). P2P group calls (unreachable legacy) don't get the buttons.
 - If you shrink access later, change `api/group-mute.js` (the only write path) + the `canMute` computation in `App.jsx`.
+
+## 1:1 Call — Renegotiation Offer Races Initial Offer
+- Symptom: `[CALL-RENEGO] createOffer failed: InvalidAccessError: ... The order of m-lines in subsequent offer doesn't match order from previous offer/answer.` logged right after the initial offer (call still connects, but any later real renegotiation — camera on, screen share — can fail the same way).
+- Root cause: `pc.addTrack()` inside `createPeerConnection()` fires `onnegotiationneeded` asynchronously **before** the initial offer/answer exists. The renegotiation handler's `createOffer` + `setLocalDescription` then races the initial `setLocalDescription` from `startCall`/`answerCall`, and Chrome rejects the second local description. Same race exists on the callee side against the incoming offer.
+- Fix: a per-connection `initialDescriptionPending` flag (exposed as `pc.__initialDescriptionSet()`) makes `onnegotiationneeded` bail until the first `setLocalDescription` completes. The tracks are already in the initial description, so no negotiation is skipped. Set in `startCall` (after the offer) and `answerCall` (after the answer).
+
+## 1:1 Call — Renegotiation Offer Races Initial Offer
+- Symptom: `[CALL-RENEGO] createOffer failed: InvalidAccessError: ... The order of m-lines in subsequent offer doesn't match order from previous offer/answer.` logged right after the initial offer (call still connects, but any later real renegotiation — camera on, screen share — can fail the same way).
+- Root cause: `pc.addTrack()` inside `createPeerConnection()` fires `onnegotiationneeded` asynchronously **before** the initial offer/answer exists. The renegotiation handler's `createOffer` + `setLocalDescription` then races the initial `setLocalDescription` from `startCall`/`answerCall`, and Chrome rejects the second local description. Same race exists on the callee side against the incoming offer.
+- Fix: a per-connection `initialDescriptionPending` flag (exposed as `pc.__initialDescriptionSet()`) makes `onnegotiationneeded` bail until the first `setLocalDescription` completes. The tracks are already in the initial description, so no negotiation is skipped. Set in `startCall` (after the offer) and `answerCall` (after the answer).
 
 ## Calls View Crash — useState Not Imported
 - Symptom: clicking "Switch to calls" showed "QuadChat hit a problem. useState is not defined" and the calls view never rendered.

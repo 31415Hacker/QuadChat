@@ -599,6 +599,11 @@ export function useCalls({
     const pc = new RTCPeerConnection(rtcConfig);
     peerRef.current = pc;
     let renegotiating = false;
+    // addTrack() below fires onnegotiationneeded before the initial offer/answer
+    // exists; a renegotiation offer racing that initial setLocalDescription makes
+    // Chrome reject it ("order of m-lines doesn't match"). Suppress until set.
+    let initialDescriptionPending = true;
+    pc.__initialDescriptionSet = () => { initialDescriptionPending = false; };
 
     pc.onicecandidate = (e) => {
       if (e.candidate && callNodeRefVal) {
@@ -694,6 +699,7 @@ export function useCalls({
 
       const offer = applyOpusBitrate(await pc.createOffer(), OPUS_BITRATE);
       await pc.setLocalDescription(offer);
+      pc.__initialDescriptionSet?.();
       console.log("[CALL-START] created and set local offer");
 
       await set(callRef, {
@@ -910,6 +916,7 @@ export function useCalls({
 
       const answer = applyOpusBitrate(await pc.createAnswer(), OPUS_BITRATE);
       await pc.setLocalDescription(answer);
+      pc.__initialDescriptionSet?.();
       console.log("[CALL-ANSWER] local description set (answer)");
 
       await update(callRef, { answer: { type: answer.type, sdp: answer.sdp }, status: "connected" });
