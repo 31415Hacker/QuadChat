@@ -1,17 +1,20 @@
 import admin from "firebase-admin";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
-import { createCallService } from "./service.js";
+import { createCallService, failure } from "./service.js";
 
 let service;
 function getService() {
-  const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+  const accountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (!accountJson) throw failure(503, "Call service is not configured: FIREBASE_SERVICE_ACCOUNT_KEY is missing");
+  const account = JSON.parse(accountJson);
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(account) });
   if (!service) {
     const url = process.env.LIVEKIT_URL;
+    if (!url) throw failure(503, "Call service is not configured: LIVEKIT_URL is missing");
     // Self-hosted LiveKit does not enforce token revocation. Fail closed rather
     // than silently permit replay of pre-mute/deleted-room credentials.
     if (!new URL(url).hostname.endsWith(".livekit.cloud")) {
-      throw new Error("Secure calls require LiveKit Cloud token revocation");
+      throw failure(503, "Call service is not configured: LIVEKIT_URL must be a LiveKit Cloud URL");
     }
     service = createCallService({
       auth: admin.auth(), store: admin.firestore(),
