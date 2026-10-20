@@ -1,6 +1,6 @@
 # Versioning
 
-Current: 2.2.25
+Current: 2.2.29
 Rules:
 - Bump patch (last number) by 1 on every non-testing/developing commit
 - Patch can go to any number (1.4.10, 1.4.19, etc.)
@@ -99,6 +99,11 @@ Rules:
 - The mute is durable for the room: it lives in the call node keyed by target uid, so a reloading victim re-applies it on rejoin until the owner/admin unmutes. Stale mutes persist per call (owner must unmute manually).
 - UI: `GroupCallBar` (`src/components/CallUI.jsx`) renders per-participant chips with a mic button when `canMute` (owner or admin). `App.jsx` computes `canMuteGroupParticipants` from `isCurrentUserAdmin || call.ownerId === sessionUserId` and passes `mutes`, `canMute`, `onMuteParticipant` (wraps `setGroupCallParticipantMute` with a toast on error). P2P group calls (unreachable legacy) don't get the buttons.
 - If you shrink access later, change `api/group-mute.js` (the only write path) + the `canMute` computation in `App.jsx`.
+
+## Group Call Delete Felt Like It Needed Spam-Clicking
+- Symptom: clicking the call row's delete button did nothing visible for several seconds, so users clicked repeatedly.
+- Root causes: (1) the delete request runs under a per-call server lock and does sequential LiveKit revocation, so it can take seconds while the list only updates after the request resolves; (2) the delete button had no disabled/busy state, so repeated clicks hit the lock (409) and showed error toasts; (3) the server revoked participants sequentially.
+- Fixes: `CallsSidebar.jsx` removes the row optimistically while its key is in `deletingKey` (and re-adds it if the delete fails); `App.jsx` `handleDeleteCall` retries on 409 (3 attempts, backoff) and logs the underlying error; `server/calls/service.js` revokes all issued participants with `Promise.all` instead of a sequential loop.
 
 ## 1:1 Call — Renegotiation Offer Races Initial Offer
 - Symptom: `[CALL-RENEGO] createOffer failed: InvalidAccessError: ... The order of m-lines in subsequent offer doesn't match order from previous offer/answer.` logged right after the initial offer (call still connects, but any later real renegotiation — camera on, screen share — can fail the same way).

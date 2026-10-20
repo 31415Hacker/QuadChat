@@ -96,6 +96,7 @@ export default function CallsSidebar({
   onLeaveCall
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [deletingKey, setDeletingKey] = useState(null);
   const [title, setTitle] = useState("");
   const [isProtected, setIsProtected] = useState(false);
   const [password, setPassword] = useState("");
@@ -199,16 +200,22 @@ export default function CallsSidebar({
           <div className="calls-empty">No active calls. Create one to get started.</div>
         ) : (
           <div className="calls-list">
-            {calls.map((call) => (
-              <CallRow
-                call={call}
-                isCurrent={call.callKey === currentCallKey}
-                key={call.callKey}
-                onDeleteCall={onDeleteCall}
-                onJoinCall={onJoinCall}
-                sessionUserId={sessionUserId}
-              />
-            ))}
+            {calls
+              .filter((call) => call.callKey !== deletingKey)
+              .map((call) => (
+                <CallRow
+                  call={call}
+                  isCurrent={call.callKey === currentCallKey}
+                  key={call.callKey}
+                  onDeleteCall={(callKey) => {
+                    if (deletingKey) return;
+                    setDeletingKey(callKey);
+                    onDeleteCall(callKey).finally(() => setDeletingKey(null));
+                  }}
+                  onJoinCall={onJoinCall}
+                  sessionUserId={sessionUserId}
+                />
+              ))}
           </div>
         )}
       </div>

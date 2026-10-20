@@ -180,9 +180,9 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
         await database.ref(`call-access/${room}`).remove();
         const issued = (await database.ref(`call-issued/${room}`).get()).val() || {};
         const cutoff = BigInt(Math.floor(now() / 1000) + 1);
-        for (const uid of Object.keys(issued)) {
-          await ignoreNotFound(() => rooms.removeParticipant(data.livekitRoom || room, uid, { revokeTokenTs: cutoff }));
-        }
+        await Promise.all(Object.keys(issued).map((uid) =>
+          ignoreNotFound(() => rooms.removeParticipant(data.livekitRoom || room, uid, { revokeTokenTs: cutoff }))
+        ));
         await ignoreNotFound(() => rooms.deleteRoom(data.livekitRoom || room));
         await database.ref(`group-calls/${room}`).remove();
         await database.ref(`call-issued/${room}`).remove();

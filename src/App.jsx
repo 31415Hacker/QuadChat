@@ -604,18 +604,32 @@ export default function App() {
   const deleteGroupCallRef = useRef(deleteGroupCall);
   deleteGroupCallRef.current = deleteGroupCall;
   const handleDeleteCall = useCallback(async (callKey) => {
-    try {
-      await deleteGroupCallRef.current?.(callKey);
-    } catch (e) {
-      pushInAppNotification({
-        type: "call",
-        channelId: null,
-        channelLabel: null,
-        senderName: "Group call",
-        body: e?.message || "Could not delete that call.",
-        id: `call-delete-error-${Date.now()}`
-      });
+    // The delete runs under a per-call server lock, so a renewal or another
+    // operation can briefly hold it (409). Retry a few times before giving up
+    // instead of making the user click again.
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await deleteGroupCallRef.current?.(callKey);
+        return;
+      } catch (e) {
+        lastError = e;
+        console.error("[CALL] delete attempt failed:", e?.message);
+        if (e?.status === 409 && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+          continue;
+        }
+        break;
+      }
     }
+    pushInAppNotification({
+      type: "call",
+      channelId: null,
+      channelLabel: null,
+      senderName: "Group call",
+      body: lastError?.message || "Could not delete that call.",
+      id: `call-delete-error-${Date.now()}`
+    });
   }, []);
   const handleGroupCallParticipantMute = useCallback(async (targetUid, targetName, muted) => {
     const callKey = activeGroupCallKeyRef.current;
