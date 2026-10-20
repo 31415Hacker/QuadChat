@@ -7,7 +7,12 @@ function getService() {
   const accountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!accountJson) throw failure(503, "Call service is not configured: FIREBASE_SERVICE_ACCOUNT_KEY is missing");
   const account = JSON.parse(accountJson);
-  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(account) });
+  // databaseURL must be set on the app: admin.database(app) ignores a second
+  // url argument, so without it the SDK cannot resolve the RTDB instance.
+  const databaseURL = `https://${account.project_id}-default-rtdb.firebaseio.com`;
+  if (!admin.apps.length) {
+    admin.initializeApp({ credential: admin.credential.cert(account), databaseURL });
+  }
   if (!service) {
     const url = process.env.LIVEKIT_URL;
     if (!url) throw failure(503, "Call service is not configured: LIVEKIT_URL is missing");
@@ -24,7 +29,7 @@ function getService() {
     }
     service = createCallService({
       auth: admin.auth(), store: admin.firestore(),
-      database: admin.database(undefined, `https://${account.project_id}-default-rtdb.firebaseio.com`),
+      database: admin.database(),
       rooms: new RoomServiceClient(url.replace(/^ws/, "http"), process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET),
       makeToken: async ({ identity, name, room, canPublish, ttl }) => {
         const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, ttl });
