@@ -11,9 +11,15 @@ function getService() {
   if (!service) {
     const url = process.env.LIVEKIT_URL;
     if (!url) throw failure(503, "Call service is not configured: LIVEKIT_URL is missing");
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw failure(503, `Call service is not configured: LIVEKIT_URL is not a valid URL ("${url}")`);
+    }
     // Self-hosted LiveKit does not enforce token revocation. Fail closed rather
     // than silently permit replay of pre-mute/deleted-room credentials.
-    if (!new URL(url).hostname.endsWith(".livekit.cloud")) {
+    if (!parsedUrl.hostname.endsWith(".livekit.cloud")) {
       throw failure(503, "Call service is not configured: LIVEKIT_URL must be a LiveKit Cloud URL");
     }
     service = createCallService({
@@ -40,7 +46,9 @@ export function callHandler(action) {
     } catch (error) {
       const status = error.status || (error.code === "not_found" ? 404 : 500);
       if (status >= 500) console.error("Call operation failed", error);
-      return res.status(status).json({ error: status >= 500 ? "Call service unavailable. Please try again." : error.message });
+      // Surface the underlying cause for 5xx so misconfiguration is diagnosable
+      // from the browser without needing to open the Vercel function logs.
+      return res.status(status).json({ error: status >= 500 ? `Call service unavailable: ${error.message}` : error.message });
     }
   };
 }
