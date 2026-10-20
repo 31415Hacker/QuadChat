@@ -1,4 +1,5 @@
-import { Clock, MessageCircle, Phone, PhoneIncoming, PhoneOff, UserRound, X } from "lucide-react";
+import { useState } from "react";
+import { Check, Clock, MessageCircle, Phone, PhoneIncoming, PhoneOff, UserPlus, UserRound, X } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
 import Dialog from "./Dialog.jsx";
 import { getInitials, getProfileName } from "../utils/names.js";
@@ -304,6 +305,152 @@ export function IncomingCallModal({ incomingCall, rejectCall, answerCall }) {
             <span>Answer</span>
           </button>
         </div>
+    </Dialog>
+  );
+}
+
+export function InviteUsersModal({ call, profiles, sessionUserId, onClose, onInvite }) {
+  const [selected, setSelected] = useState(() => new Set());
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  const users = Object.values(profiles || {})
+    .filter((profile) => profile?.id && profile.id !== sessionUserId)
+    .sort((a, b) => getProfileName(a, "").localeCompare(getProfileName(b, "")));
+
+  function toggle(uid) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  }
+
+  async function handleSend() {
+    if (sending || selected.size === 0) return;
+    setSending(true);
+    setError("");
+    try {
+      await onInvite(call, [...selected]);
+      onClose();
+    } catch (e) {
+      setError(e?.message || "Could not send invites.");
+      setSending(false);
+    }
+  }
+
+  return (
+    <Dialog onClose={onClose} ariaLabel="Invite people" className="settings-modal">
+      <header className="settings-header">
+        <div>
+          <h2>Invite people</h2>
+          <p>{call?.title}</p>
+        </div>
+        <button className="settings-close-btn" type="button" onClick={onClose} aria-label="Close">
+          <X size={18} />
+        </button>
+      </header>
+      <div className="invite-user-list">
+        {users.length === 0 ? (
+          <p className="invite-empty">No one else is available to invite.</p>
+        ) : (
+          users.map((profile) => {
+            const name = getProfileName(profile, "Unknown");
+            const isSelected = selected.has(profile.id);
+            return (
+              <button
+                key={profile.id}
+                type="button"
+                className={`invite-user-row${isSelected ? " selected" : ""}`}
+                onClick={() => toggle(profile.id)}
+                aria-pressed={isSelected}
+              >
+                <span className="invite-user-avatar">
+                  {profile.photoURL ? <img src={profile.photoURL} alt="" /> : getInitials(name)}
+                </span>
+                <span className="invite-user-name">{name}</span>
+                {isSelected ? <Check size={16} /> : null}
+              </button>
+            );
+          })
+        )}
+      </div>
+      <div className="invite-user-actions">
+        <button
+          className="save-status-btn"
+          type="button"
+          disabled={sending || selected.size === 0}
+          onClick={handleSend}
+        >
+          <UserPlus size={16} />
+          {sending ? "Sending…" : `Invite${selected.size ? ` ${selected.size}` : ""}`}
+        </button>
+      </div>
+      {error ? <span className="call-row-error">{error}</span> : null}
+    </Dialog>
+  );
+}
+
+export function CallInviteModal({ invite, onJoin, onDismiss }) {
+  const [password, setPassword] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState("");
+  if (!invite) return null;
+
+  async function handleJoin() {
+    if (joining || (invite.isProtected && !password)) return;
+    setJoining(true);
+    setError("");
+    try {
+      await onJoin(password);
+    } catch (e) {
+      setError(e?.message || "Could not join the call.");
+      setJoining(false);
+    }
+  }
+
+  return (
+    <Dialog
+      onClose={onDismiss}
+      ariaLabel="Call invite"
+      className="incoming-call"
+      closeOnBackdrop={false}
+      closeOnEscape={false}
+    >
+      <UserPlus size={36} />
+      <p>
+        <strong>{invite.ownerName || "Someone"}</strong> invited you to{" "}
+        <strong>{invite.title || "a group call"}</strong>
+      </p>
+      {invite.isProtected ? (
+        <input
+          autoFocus
+          className="invite-password"
+          type="password"
+          placeholder="Call password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") handleJoin();
+          }}
+        />
+      ) : null}
+      <div className="incoming-call-actions">
+        <button className="danger-button" type="button" onClick={() => onDismiss()}>
+          Not now
+        </button>
+        <button
+          className="save-status-btn"
+          type="button"
+          disabled={joining || (invite.isProtected && !password)}
+          onClick={handleJoin}
+        >
+          <Phone size={18} />
+          <span>{joining ? "Joining…" : "Join"}</span>
+        </button>
+      </div>
+      {error ? <span className="call-row-error">{error}</span> : null}
     </Dialog>
   );
 }

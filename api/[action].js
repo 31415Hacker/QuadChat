@@ -5,7 +5,7 @@ const handlers = new Map([
   ["reject-request", () => import("../server/signup/reject-request.js")],
   ["signup-request", () => import("../server/signup/signup-request.js")],
   ["google-signup", () => import("../server/signup/google-signup.js")],
-  ...["create-call", "list-calls", "renew-call"].map((action) => [action, async () => {
+  ...["create-call", "list-calls", "renew-call", "invite-call"].map((action) => [action, async () => {
     const { callHandler } = await import("../server/calls/handler.js");
     return { default: callHandler(action) };
   }])

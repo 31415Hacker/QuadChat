@@ -128,6 +128,33 @@
     },
 
     // -----------------------------------------------------------------
+    // GROUP-CALL INVITES
+    // The server writes one invite node per invitee under call-invites/$uid.
+    // Only the invitee can read or delete their own node. The Admin SDK bypasses
+    // these rules after it verifies that the caller owns the group call.
+    // -----------------------------------------------------------------
+    "call-invites": {
+      "$uid": {
+        // Only the invitee can read their own invites.
+        ".read": "auth != null && auth.uid === $uid",
+        "$callKey": {
+          // Recipients may only clear an invite that already exists.
+          ".write": "auth != null && auth.uid === $uid && data.exists() && !newData.exists()",
+          ".validate": "!newData.exists() || (
+            newData.child('callKey').val() === $callKey
+            && newData.child('inviteeId').val() === $uid
+            && newData.child('ownerId').isString()
+            && newData.child('ownerName').isString()
+            && newData.child('title').isString()
+            && newData.child('sentAt').isNumber()
+            && newData.child('expiresAt').isNumber()
+            && newData.child('callKey').isString()
+          )"
+        }
+      }
+    },
+
+    // -----------------------------------------------------------------
     // MISSED-CALL RECORDS
     // When an incoming call ring goes stale (>20 s), the callee's client
     // moves it here instead of dropping it, so an offline user learns who

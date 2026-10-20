@@ -3510,12 +3510,23 @@ button.message-document-preview {
   opacity: 0.55;
 }
 
-.call-row-delete {
+.call-row-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.call-row-delete,
+.call-row-invite {
   background: transparent;
   border: 0;
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 4px;
+}
+
+.call-row-invite:hover {
+  color: var(--accent-primary);
 }
 
 .call-row-delete:hover {
@@ -4340,6 +4351,93 @@ button.user-avatar--clickable:focus-visible {
 
 .incoming-call-actions button {
   flex: 1;
+}
+
+.invite-password {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font: inherit;
+  min-height: 38px;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.invite-password:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.invite-user-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(45vh, 360px);
+  overflow-y: auto;
+}
+
+.invite-user-row {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.invite-user-row:hover,
+.invite-user-row.selected {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.invite-user-avatar {
+  align-items: center;
+  background: var(--bg-accent);
+  border-radius: 50%;
+  color: var(--text-on-accent);
+  display: inline-flex;
+  flex: 0 0 30px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  overflow: hidden;
+  width: 30px;
+}
+
+.invite-user-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.invite-user-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-user-row > svg {
+  color: var(--accent-primary);
+}
+
+.invite-user-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.invite-empty {
+  color: var(--text-secondary);
+  margin: 0;
+  text-align: center;
 }
 
 .active-call-bar {

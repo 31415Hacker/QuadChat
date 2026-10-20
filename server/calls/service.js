@@ -138,6 +138,39 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
       await database.ref(`call-directory/${callKey}`).set(entry);
       return { callKey };
     }
+    if (action === "invite-call") {
+      const room = key(body.callKey);
+      const targetUids = [...new Set(
+        (Array.isArray(body.targetUids) ? body.targetUids : []).filter(
+          (uid) => typeof uid === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(uid)
+        )
+      )].slice(0, 50);
+      if (targetUids.length === 0) throw failure(400, "Choose at least one person to invite");
+      await limit(`invite-${caller.uid}`, 10);
+      const data = await directory(room, false);
+      if (data.ownerId !== caller.uid) throw failure(403, "Only the call owner can invite people");
+      const targetDocs = await Promise.all(targetUids
+        .filter((uid) => uid !== caller.uid)
+        .map(async (uid) => ({ uid, doc: await store.doc(`users/${uid}`).get() })));
+      const invitees = targetDocs
+        .filter(({ doc }) => doc.exists && doc.data().banned !== true)
+        .map(({ uid }) => uid);
+      if (invitees.length === 0) throw failure(400, "Choose at least one active person to invite");
+      const sentAt = now();
+      await Promise.all(invitees.map(async (uid) => {
+        await database.ref(`call-invites/${uid}/${room}`).set({
+          callKey: room,
+          title: data.title,
+          ownerId: caller.uid,
+          ownerName: caller.name,
+          inviteeId: uid,
+          isProtected: Boolean(data.passwordVerifier),
+          sentAt,
+          expiresAt: sentAt + 60 * 60 * 1000
+        });
+      }));
+      return { invited: invitees };
+    }
 
     const room = key(body.room || body.callKey);
     if (action === "livekit-token") {

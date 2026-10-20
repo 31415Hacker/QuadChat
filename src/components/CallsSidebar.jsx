@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Globe, Lock, Phone, Plus, Trash2 } from "lucide-react";
+import { Globe, Lock, Phone, Plus, Trash2, UserPlus } from "lucide-react";
 
-function CallRow({ call, isCurrent, sessionUserId, onJoinCall, onDeleteCall }) {
+function CallRow({ call, isCurrent, sessionUserId, onJoinCall, onDeleteCall, onInviteCall }) {
   const count = call.participantCount || 0;
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
@@ -40,14 +40,24 @@ function CallRow({ call, isCurrent, sessionUserId, onJoinCall, onDeleteCall }) {
           {call.isProtected ? "Private" : "Public"}
         </span>
         {isOwner ? (
-          <button
-            className="call-row-delete"
-            type="button"
-            title="Delete this call"
-            onClick={() => onDeleteCall(call.callKey)}
-          >
-            <Trash2 size={14} />
-          </button>
+          <div className="call-row-actions">
+            <button
+              className="call-row-invite"
+              type="button"
+              title="Invite people to this call"
+              onClick={() => onInviteCall(call)}
+            >
+              <UserPlus size={14} />
+            </button>
+            <button
+              className="call-row-delete"
+              type="button"
+              title="Delete this call"
+              onClick={() => onDeleteCall(call.callKey)}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         ) : null}
       </div>
       <strong className="call-row-title">{call.title}</strong>
@@ -93,6 +103,7 @@ export default function CallsSidebar({
   onCreateCall,
   onJoinCall,
   onDeleteCall,
+  onInviteCall,
   onLeaveCall
 }) {
   const [showCreate, setShowCreate] = useState(false);
@@ -212,6 +223,7 @@ export default function CallsSidebar({
                     setDeletingKey(callKey);
                     onDeleteCall(callKey).finally(() => setDeletingKey(null));
                   }}
+                  onInviteCall={onInviteCall}
                   onJoinCall={onJoinCall}
                   sessionUserId={sessionUserId}
                 />

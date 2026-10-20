@@ -1689,6 +1689,16 @@ export function useCalls({
     refreshCallsRef.current?.();
   }
 
+  async function inviteToGroupCall(call, targetUids) {
+    if (!Array.isArray(targetUids) || targetUids.length === 0) {
+      throw new Error("Choose at least one person to invite");
+    }
+    await callApi(user, "invite-call", {
+      callKey: call.callKey,
+      targetUids
+    });
+  }
+
   async function joinSessionGroupCall(sessionTitle = "") {
     const now = Date.now();
     const existing = activeCalls.find(
@@ -2068,6 +2078,7 @@ export function useCalls({
     toggleGroupCallMute,
     joinGroupCall,
     leaveGroupCall,
+    inviteToGroupCall,
     setGroupCallParticipantMute,
     joinP2PGroupCall,
     leaveP2PGroupCall,

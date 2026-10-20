@@ -111,7 +111,9 @@ import {
   StatusModal,
   NewDmModal,
   AnalyticsModal,
+  CallInviteModal,
   IncomingCallModal,
+  InviteUsersModal,
   GamingPostModal
 } from "./components/Modals.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
@@ -264,6 +266,8 @@ export default function App() {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showGamingPost, setShowGamingPost] = useState(false);
   const [gamingPostCard, setGamingPostCard] = useState(null);
+  const [inviteCall, setInviteCall] = useState(null);
+  const [pendingCallInvites, setPendingCallInvites] = useState([]);
 
   const sentinelRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -529,6 +533,7 @@ export default function App() {
     activeCalls,
     createGroupCall,
     deleteGroupCall,
+    inviteToGroupCall,
     joinSessionGroupCall,
     joinP2PGroupCall,
     leaveP2PGroupCall,
@@ -564,6 +569,20 @@ export default function App() {
     (callKey, password) => joinGroupCallRef.current?.(callKey, password),
     []
   );
+
+  const inviteToGroupCallRef = useRef(inviteToGroupCall);
+  inviteToGroupCallRef.current = inviteToGroupCall;
+  const handleInviteGroupCall = useCallback(async (call, targetUids) => {
+    await inviteToGroupCallRef.current?.(call, targetUids);
+    pushInAppNotification({
+      type: "call",
+      channelId: null,
+      channelLabel: null,
+      senderName: call.title || "Group call",
+      body: `invited ${targetUids.length} ${targetUids.length === 1 ? "person" : "people"}`,
+      id: `call-invites-sent-${call.callKey}-${Date.now()}`
+    });
+  }, []);
 
   const joinSessionGroupCallRef = useRef(joinSessionGroupCall);
   joinSessionGroupCallRef.current = joinSessionGroupCall;
@@ -1388,6 +1407,48 @@ export default function App() {
 
     return () => unsub();
   }, [user, sessionUserId, pushInAppNotification]);
+
+  useEffect(() => {
+    if (!user || !sessionUserId) {
+      setPendingCallInvites([]);
+      return;
+    }
+
+    const invitesRef = rtdbRef(rtdb, `call-invites/${sessionUserId}`);
+    const unsub = onChildAdded(invitesRef, (snap) => {
+      const invite = snap.val();
+      const callKey = snap.key;
+      if (!invite || !callKey) return;
+      if (typeof invite.expiresAt === "number" && invite.expiresAt <= Date.now()) {
+        remove(rtdbRef(rtdb, `call-invites/${sessionUserId}/${callKey}`)).catch(() => {});
+        return;
+      }
+      setPendingCallInvites((prev) => {
+        if (prev.some((item) => item.callKey === callKey)) return prev;
+        return [...prev, { ...invite, callKey }];
+      });
+      pushInAppNotification({
+        type: "call",
+        channelId: null,
+        channelLabel: null,
+        senderName: invite.ownerName || "Someone",
+        body: `invited you to ${invite.title || "a group call"}`,
+        id: `call-invite-${callKey}`
+      });
+    });
+
+    return () => unsub();
+  }, [user, sessionUserId, pushInAppNotification]);
+
+  const dismissCallInvite = useCallback((callKey) => {
+    setPendingCallInvites((prev) => prev.filter((invite) => invite.callKey !== callKey));
+    remove(rtdbRef(rtdb, `call-invites/${sessionUserId}/${callKey}`)).catch(() => {});
+  }, [sessionUserId]);
+
+  const joinCallInvite = useCallback(async (invite, password) => {
+    await joinGroupCallStable(invite.callKey, password);
+    dismissCallInvite(invite.callKey);
+  }, [dismissCallInvite, joinGroupCallStable]);
 
   useEffect(() => {
     if (isNearBottomRef.current && !highlightTargetRef.current) {
@@ -3558,6 +3619,7 @@ export default function App() {
               onCreateCall={createAndJoinCallStable}
               onJoinCall={joinGroupCallStable}
               onDeleteCall={handleDeleteCall}
+              onInviteCall={setInviteCall}
               onLeaveCall={leaveGroupCall}
             />
           ) : (
@@ -3968,6 +4030,21 @@ export default function App() {
       ) : null}
       <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />
       <AvatarPreviewModal profile={avatarPreview} onClose={() => setAvatarPreview(null)} />
+      {inviteCall ? (
+        <InviteUsersModal
+          call={inviteCall}
+          profiles={profiles}
+          sessionUserId={sessionUserId}
+          onClose={() => setInviteCall(null)}
+          onInvite={handleInviteGroupCall}
+        />
+      ) : null}
+      <CallInviteModal
+        key={pendingCallInvites[0]?.callKey || "no-call-invite"}
+        invite={pendingCallInvites[0] || null}
+        onJoin={(password) => joinCallInvite(pendingCallInvites[0], password)}
+        onDismiss={() => pendingCallInvites[0] && dismissCallInvite(pendingCallInvites[0].callKey)}
+      />
       <ConfirmDialog
         state={confirmState}
         onConfirm={() => closeConfirm(true)}
