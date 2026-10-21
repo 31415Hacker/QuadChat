@@ -13,7 +13,19 @@ function getCommitHash() {
 
 export default defineConfig({
   base: "/",
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "quadchat-build-version",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "version.json",
+          source: JSON.stringify({ commit: getCommitHash() })
+        });
+      }
+    }
+  ],
   define: {
     __COMMIT_HASH__: JSON.stringify(getCommitHash())
   },

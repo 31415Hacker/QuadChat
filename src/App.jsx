@@ -196,6 +196,8 @@ export default function App() {
   const [settingsPhotoPreview, setSettingsPhotoPreview] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [appSettings, setAppSettings] = useState({ signupEnabled: true, settingsLoaded: false });
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [deploymentClock, setDeploymentClock] = useState(Date.now());
   const [isDarkTheme, setIsDarkTheme] = useState(() => {
     const stored = localStorage.getItem("quadchat-theme");
     return stored !== null ? stored === "dark" : true;
@@ -563,6 +565,14 @@ export default function App() {
       return NOISE_MODES[(index + 1) % NOISE_MODES.length];
     });
   }, []);
+
+  useEffect(() => {
+    if (appSettings.deploymentStatus !== "deploying" || !appSettings.deploymentStartedAt) return undefined;
+    const remaining = 15 * 60_000 - (Date.now() - appSettings.deploymentStartedAt);
+    if (remaining <= 0) return undefined;
+    const timeout = window.setTimeout(() => setDeploymentClock(Date.now()), remaining);
+    return () => window.clearTimeout(timeout);
+  }, [appSettings.deploymentStatus, appSettings.deploymentStartedAt]);
 
   const joinGroupCallRef = useRef(joinGroupCall);
   joinGroupCallRef.current = joinGroupCall;
@@ -940,6 +950,9 @@ export default function App() {
           signupEnabled: snapshot.exists()
             ? snapshot.data().signupEnabled !== false
             : true,
+          deploymentStatus: snapshot.data()?.deploymentStatus || "",
+          deployingCommit: snapshot.data()?.deployingCommit || "",
+          deploymentStartedAt: snapshot.data()?.deploymentStartedAt || 0,
           settingsLoaded: true
         });
       },
@@ -950,6 +963,36 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkForUpdate = async () => {
+      try {
+        const response = await fetch(`/version.json?at=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const version = await response.json();
+        if (!cancelled && typeof version.commit === "string") {
+          setUpdateAvailable(version.commit !== __COMMIT_HASH__);
+        }
+      } catch {
+        // A missed check must never interrupt chat or calls.
+      }
+    };
+
+    checkForUpdate();
+    const interval = window.setInterval(checkForUpdate, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const deploymentIsRecent =
+    appSettings.deploymentStatus === "deploying" &&
+    appSettings.deployingCommit &&
+    appSettings.deployingCommit !== __COMMIT_HASH__ &&
+    deploymentClock - appSettings.deploymentStartedAt < 15 * 60_000;
+  const deploymentNotice = updateAvailable ? "update" : deploymentIsRecent ? "deploying" : "";
 
   useEffect(() => {
     if (!appSettings.signupEnabled && authView === "signup") {
@@ -3884,10 +3927,12 @@ export default function App() {
                   groupCallParticipants={groupCallParticipants}
                   p2pGroupCallStatus={p2pGroupCallStatus}
                   p2pGroupCallParticipants={p2pGroupCallParticipants}
-                  showSidebarClock={showSidebarClock}
-                  showSidebarSeconds={showSidebarSeconds}
-                  previewAvatar={setAvatarPreview}
-                />
+                   showSidebarClock={showSidebarClock}
+                   showSidebarSeconds={showSidebarSeconds}
+                   previewAvatar={setAvatarPreview}
+                   deploymentNotice={deploymentNotice}
+                   refreshForUpdate={() => window.location.reload()}
+                 />
               ) : null}
             </div>
 

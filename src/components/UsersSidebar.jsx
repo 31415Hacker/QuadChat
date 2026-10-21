@@ -1,4 +1,4 @@
-import { MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
+import { Check, LoaderCircle, MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import RelativeTime from "./RelativeTime.jsx";
 import { getInitials, getProfileName, isAdminEmail, isDeveloperEmail } from "../utils/names.js";
@@ -21,7 +21,9 @@ export default function UsersSidebar({
   p2pGroupCallParticipants,
   showSidebarClock,
   showSidebarSeconds,
-  previewAvatar
+  previewAvatar,
+  deploymentNotice,
+  refreshForUpdate
 }) {
   const [now, setNow] = useState(() => new Date());
 
@@ -61,6 +63,17 @@ export default function UsersSidebar({
         <Users size={16} />
         <span>Users</span>
       </div>
+      {deploymentNotice === "deploying" ? (
+        <div className="deployment-notice" role="status">
+          <LoaderCircle aria-hidden="true" size={15} />
+          <span>Deploying new version...</span>
+        </div>
+      ) : deploymentNotice === "update" ? (
+        <button className="deployment-notice deployment-notice--update" type="button" onClick={refreshForUpdate}>
+          <Check aria-hidden="true" size={15} />
+          <span>Refresh to update QuadChat!</span>
+        </button>
+      ) : null}
       <div className="users-sidebar-list">
         {Object.values(profiles).filter((profile) => !profile.banned).map((profile) => {
           const name = getProfileName(profile, profile.email || "");
