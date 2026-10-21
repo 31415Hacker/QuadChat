@@ -6,6 +6,7 @@ import {
   Gamepad2,
   Image,
   Mic,
+  Paperclip,
   Pause,
   Play,
   Plus,
@@ -223,6 +224,19 @@ export default function Composer({
     });
   }
 
+  function renderReplyPreview(replyTo) {
+    if (replyTo.contentType === "voice") {
+      return <><Mic aria-hidden="true" size={15} />Voice message{Number.isFinite(replyTo.duration) ? ` · ${formatDuration(replyTo.duration)}` : ""}</>;
+    }
+    if (replyTo.contentType === "image") {
+      return <><Image aria-hidden="true" size={15} />Image</>;
+    }
+    if (replyTo.contentType === "attachment") {
+      return <><Paperclip aria-hidden="true" size={15} />Attachment</>;
+    }
+    return replyTo.text;
+  }
+
   return (
     <form className="composer" onSubmit={onSubmit}>
       {editingMessage ? (
@@ -244,7 +258,7 @@ export default function Composer({
         <div className="reply-composer">
           <div className="reply-composer-text">
             <strong>Replying to {replyTo.senderName}</strong>
-            <span>{replyTo.text}</span>
+            <span className="reply-composer-preview">{renderReplyPreview(replyTo)}</span>
           </div>
           <button
             aria-label="Cancel reply"

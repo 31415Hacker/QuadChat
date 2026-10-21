@@ -2347,6 +2347,17 @@ button.message-document-preview {
   white-space: nowrap;
 }
 
+.reply-card-preview,
+.reply-composer-preview {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+}
+
+.reply-card-preview span {
+  min-width: 0;
+}
+
 .mention {
   color: var(--accent-red);
   font-weight: 800;

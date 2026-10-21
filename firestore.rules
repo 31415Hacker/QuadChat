@@ -131,7 +131,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           "text", "userId", "createdAt", "adminCommand", "command",
           "commandTarget", "notificationText", "targetUserId", "replyTo",
-          "attachments", "isFile", "fileName", "fileType", "type",
+          "attachments", "isFile", "fileName", "fileType", "duration", "type",
           "title", "googleMeetLink", "note", "tableData", "name"
         ])
         && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin() || isDeveloper())
@@ -140,6 +140,7 @@ service cloud.firestore {
         && (!("attachments" in request.resource.data) || request.resource.data.attachments is list)
         && (!("fileName" in request.resource.data) || request.resource.data.fileName is string)
         && (!("fileType" in request.resource.data) || request.resource.data.fileType is string)
+        && (!("duration" in request.resource.data) || request.resource.data.duration is number)
         && (!("type" in request.resource.data) || request.resource.data.type is string)
         && (!("title" in request.resource.data) || request.resource.data.title is string)
         && (!("note" in request.resource.data) || request.resource.data.note is string)

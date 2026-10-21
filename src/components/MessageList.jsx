@@ -2,11 +2,14 @@ import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CornerDownLeft,
   FileText,
+  Image,
   Info,
   Lightbulb,
   Megaphone,
   MessageCircle,
+  Mic,
   MoreVertical,
+  Paperclip,
   Pencil,
   Smile,
   Trash2
@@ -20,6 +23,7 @@ import {
   renderMessageText,
   safeUrl
 } from "../utils/messages.jsx";
+import { formatDuration } from "../utils/format.js";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -88,6 +92,35 @@ const MessageItem = memo(function MessageItem({
     handleToggleReaction(item, emoji);
   }
 
+  function getReplyTarget(item) {
+    if (item.isFile && item.fileType?.startsWith("audio/")) {
+      return { contentType: "voice", duration: item.duration };
+    }
+    if (
+      (item.isFile && item.fileType?.startsWith("image/")) ||
+      item.attachments?.some((attachment) => attachment?.type?.startsWith("image/"))
+    ) {
+      return { contentType: "image" };
+    }
+    if (item.isFile || item.attachments?.length) {
+      return { contentType: "attachment" };
+    }
+    return {};
+  }
+
+  function renderReplyPreview(replyTo) {
+    if (replyTo.contentType === "voice") {
+      return <><Mic aria-hidden="true" size={15} /><span>Voice message{Number.isFinite(replyTo.duration) ? ` · ${formatDuration(replyTo.duration)}` : ""}</span></>;
+    }
+    if (replyTo.contentType === "image") {
+      return <><Image aria-hidden="true" size={15} /><span>Image</span></>;
+    }
+    if (replyTo.contentType === "attachment") {
+      return <><Paperclip aria-hidden="true" size={15} /><span>Attachment</span></>;
+    }
+    return <span>{replyTo.text || "Message unavailable"}</span>;
+  }
+
   return (
     <article
       id={`msg-${item.id}`}
@@ -147,7 +180,8 @@ const MessageItem = memo(function MessageItem({
                   id: item.id,
                   text: getReplyPreview(item.text),
                   userId: item.userId,
-                  senderName
+                  senderName,
+                  ...getReplyTarget(item)
                 });
                 setOpenMessageMenuId("");
               }}
@@ -223,7 +257,7 @@ const MessageItem = memo(function MessageItem({
           title={`Jump to ${item.replyTo.senderName || "the original"}'s message`}
         >
           <strong>{item.replyTo.senderName || "Unknown"}</strong>
-          <span>{item.replyTo.text || "Message unavailable"}</span>
+          <span className="reply-card-preview">{renderReplyPreview(item.replyTo)}</span>
         </div>
       ) : null}
       {Array.isArray(item.attachments) && item.attachments.length > 0 ? (

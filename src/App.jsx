@@ -276,6 +276,7 @@ export default function App() {
   const mediaRecorderRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const recordingChunksRef = useRef([]);
+  const recordingDurationRef = useRef(0);
   const shouldSendRef = useRef(false);
   const oldestDocSnapRef = useRef(null);
   const newestDocSnapRef = useRef(null);
@@ -2885,7 +2886,7 @@ export default function App() {
     };
   }
 
-  async function sendAudioRecording(blob) {
+  async function sendAudioRecording(blob, duration) {
     const file = new File([blob], "Voice message.webm", {
       type: "audio/webm"
     });
@@ -2913,6 +2914,7 @@ export default function App() {
         isFile: true,
         fileName: "Voice message.webm",
         fileType: "audio/webm",
+        duration,
         userId: sessionUserId,
         createdAt: serverTimestamp()
       });
@@ -2936,6 +2938,7 @@ export default function App() {
 
     setError("");
     recordingChunksRef.current = [];
+    recordingDurationRef.current = 0;
     setRecordingDuration(0);
     setIsRecordingPaused(false);
 
@@ -2961,7 +2964,7 @@ export default function App() {
           stream.getTracks().forEach((track) => track.stop());
 
           if (shouldSendRef.current) {
-            sendAudioRecording(blob);
+            sendAudioRecording(blob, recordingDurationRef.current);
           }
         };
 
@@ -2976,6 +2979,7 @@ export default function App() {
         setIsRecording(true);
 
         recordingTimerRef.current = setInterval(() => {
+          recordingDurationRef.current += 1;
           setRecordingDuration((prev) => prev + 1);
         }, 1000);
       })
@@ -2999,6 +3003,7 @@ export default function App() {
       mediaRecorderRef.current.resume();
       setIsRecordingPaused(false);
       recordingTimerRef.current = setInterval(() => {
+        recordingDurationRef.current += 1;
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     }
@@ -3021,6 +3026,7 @@ export default function App() {
 
   function cancelRecording() {
     stopRecording(false);
+    recordingDurationRef.current = 0;
     setRecordingDuration(0);
   }
 
@@ -3368,7 +3374,9 @@ export default function App() {
                   id: replyTo.id,
                   text: replyTo.text,
                   userId: replyTo.userId,
-                  senderName: replyTo.senderName
+                  senderName: replyTo.senderName,
+                  ...(replyTo.contentType ? { contentType: replyTo.contentType } : {}),
+                  ...(Number.isFinite(replyTo.duration) ? { duration: replyTo.duration } : {})
                 }
               }
             : {}),
