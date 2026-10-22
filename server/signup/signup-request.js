@@ -6,20 +6,16 @@ if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  const { email, displayName, password, provider, turnstileToken, website, headless } = req.body || {};
+  const { email, displayName, password, provider, uid, turnstileToken, website, headless } = req.body || {};
   if (website || headless) return res.status(400).json({ error: "Unable to submit request." });
   if (!email || !displayName) return res.status(400).json({ error: "Complete the form." });
 
   try {
     const kind = provider === "google" ? "google" : "password";
-    let uid;
     if (kind === "google") {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Sign in with Google first so the request can be bound to your account." });
+      if (!uid || typeof uid !== "string") {
+        return res.status(400).json({ error: "Sign in with Google first so the request can be bound to your account." });
       }
-      const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
-      uid = decodedToken.uid;
     }
     if (kind === "google") {
       if (!process.env.TURNSTILE_SECRET_KEY) {
@@ -47,6 +43,17 @@ export default async function handler(req, res) {
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanName = String(displayName).trim();
 
+    if (kind === "google") {
+      const googleUser = await admin.auth().getUser(uid).catch(() => null);
+      if (
+        !googleUser ||
+        String(googleUser.email || "").toLowerCase() !== cleanEmail ||
+        !(googleUser.providerData || []).some((account) => account.providerId === "google.com")
+      ) {
+        return res.status(400).json({ error: "Sign in with the Google account for this email first." });
+      }
+    }
+
     const attemptsRef = db.collection("signup-rate-limits").doc(cleanEmail);
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(attemptsRef);
@@ -61,11 +68,13 @@ export default async function handler(req, res) {
       }
     });
 
-    const existing = await admin.auth().getUserByEmail(cleanEmail).catch((error) => {
-      if (error.code === "auth/user-not-found") return null;
-      throw error;
-    });
-    if (existing) return res.status(400).json({ error: "That email already has an account. Sign in instead." });
+    if (kind === "password") {
+      const existing = await admin.auth().getUserByEmail(cleanEmail).catch((error) => {
+        if (error.code === "auth/user-not-found") return null;
+        throw error;
+      });
+      if (existing) return res.status(400).json({ error: "That email already has an account. Sign in instead." });
+    }
 
     const pendingSnap = await db
       .collection("signup-requests")

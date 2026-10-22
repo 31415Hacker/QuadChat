@@ -25,18 +25,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
-    const { code } = parseBody(req);
+    const { code, email, uid } = parseBody(req);
     if (!code) {
       return res.status(400).json({ error: "Invite code is required." });
     }
+    if (!uid || typeof uid !== "string") {
+      return res.status(400).json({ error: "Sign in with Google first." });
+    }
 
-    const uid = decodedToken.uid;
-    const cleanEmail = String(decodedToken.email || "").toLowerCase();
+    const cleanEmail = String(email || "").trim().toLowerCase();
     if (!cleanEmail) {
       return res.status(400).json({ error: "Email is required." });
     }

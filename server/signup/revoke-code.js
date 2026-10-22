@@ -28,8 +28,8 @@ async function requireAdmin(req) {
   }
   const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
   const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
-  if (!callerDoc.exists || callerDoc.data().isAdmin !== true) {
-    const error = new Error("Only admins can revoke invite codes.");
+  if (!callerDoc.exists || (callerDoc.data().isAdmin !== true && callerDoc.data().isDeveloper !== true)) {
+    const error = new Error("Only admins or developers can revoke invite codes.");
     error.status = 403;
     throw error;
   }
