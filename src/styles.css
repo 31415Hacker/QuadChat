@@ -1150,6 +1150,10 @@ button:disabled {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
+button.magic-link-url {
+  text-align: left;
+}
+
 .magic-link-url:hover {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 3px var(--shadow-focus);
@@ -1248,6 +1252,34 @@ button:disabled {
   color: var(--text-primary);
   font-size: 0.95rem;
   letter-spacing: 0.08em;
+}
+
+.invite-code-copy {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+}
+
+.invite-code-copy:hover code,
+.invite-code-copy:focus-visible code {
+  color: var(--accent-blue);
+}
+
+.invite-code-copy span,
+.copy-confirmation {
+  color: var(--accent-blue);
+  font-family: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0;
 }
 
 .admin-invite-code-info span {

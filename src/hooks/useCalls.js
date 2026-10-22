@@ -100,6 +100,55 @@ export function useCalls({
 
   const [activeCalls, setActiveCalls] = useState([]);
 
+  useEffect(() => {
+    if (groupCallStatus !== "connected" || !sessionUserId) return undefined;
+    const stream = groupCallLocalStreamRef.current;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!stream || !AudioContextCtor) return undefined;
+
+    let ctx;
+    let source;
+    let analyser;
+    try {
+      ctx = new AudioContextCtor();
+      source = ctx.createMediaStreamSource(stream);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.55;
+      source.connect(analyser);
+    } catch (_) {
+      ctx?.close().catch(() => {});
+      return undefined;
+    }
+
+    const samples = new Float32Array(analyser.fftSize);
+    let speaking = false;
+    let lastSpeechAt = 0;
+    const tick = () => {
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      try {
+        analyser.getFloatTimeDomainData(samples);
+        let sum = 0;
+        for (let index = 0; index < samples.length; index += 1) sum += samples[index] * samples[index];
+        const rms = Math.sqrt(sum / samples.length);
+        if (rms >= 0.025) {
+          speaking = true;
+          lastSpeechAt = Date.now();
+        } else if (rms < 0.012 && Date.now() - lastSpeechAt >= 250) {
+          speaking = false;
+        }
+        setGroupCallSpeaking((prev) => prev[sessionUserId] === speaking ? prev : { ...prev, [sessionUserId]: speaking });
+      } catch (_) { /* stream ended while the call was closing */ }
+    };
+    const timer = window.setInterval(tick, 120);
+    return () => {
+      window.clearInterval(timer);
+      try { source.disconnect(); } catch (_) { /* already detached */ }
+      analyser.disconnect();
+      ctx.close().catch(() => {});
+    };
+  }, [groupCallStatus, sessionUserId]);
+
   const [p2pGroupCallStatus, setP2pGroupCallStatus] = useState("idle");
   const [p2pGroupCallHostId, setP2pGroupCallHostId] = useState(null);
   const [p2pGroupCallParticipants, setP2pGroupCallParticipants] = useState({});

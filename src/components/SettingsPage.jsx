@@ -1,6 +1,7 @@
 import {
   Bell,
   BellOff,
+  Check,
   Chrome,
   CircleUserRound,
   Copy,
@@ -145,6 +146,22 @@ export default function SettingsPage({
   revokeInviteCode
 }) {
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+  const [copiedInviteCode, setCopiedInviteCode] = useState("");
+
+  useEffect(() => {
+    if (!copiedInviteCode) return undefined;
+    const timeout = window.setTimeout(() => setCopiedInviteCode(""), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [copiedInviteCode]);
+
+  async function copyInviteCode(code) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedInviteCode(code);
+    } catch {
+      // The code remains visible so it can still be selected manually.
+    }
+  }
 
   useEffect(() => {
     if (settingsTab === "admin" && isCurrentUserAdmin) {
@@ -972,30 +989,37 @@ export default function SettingsPage({
                   </div>
                   {newInviteCode ? (
                     <div className="magic-link-result">
-                      <div
+                      <button
+                        type="button"
                         className="magic-link-url"
-                        onClick={() => navigator.clipboard.writeText(newInviteCode)}
+                        onClick={() => copyInviteCode(newInviteCode)}
                         title="Copy invite code"
                       >
                         <span>{newInviteCode}</span>
-                        <Copy size={16} />
-                      </div>
+                        {copiedInviteCode === newInviteCode ? <><span className="copy-confirmation">Copied!</span><Check size={16} /></> : <Copy size={16} />}
+                      </button>
                     </div>
                   ) : null}
-                  {inviteCodes.length > 0 ? (
+                  {inviteCodes.filter((inviteCode) => !inviteCode.used).length > 0 ? (
                     <div className="admin-invite-code-list">
-                      {inviteCodes.map((inviteCode) => (
+                      {inviteCodes.filter((inviteCode) => !inviteCode.used).map((inviteCode) => (
                         <article className="admin-invite-code-item" key={inviteCode.id}>
                           <div className="admin-invite-code-info">
-                            <code>{inviteCode.id}</code>
+                            <button
+                              className="invite-code-copy"
+                              type="button"
+                              onClick={() => copyInviteCode(inviteCode.id)}
+                              title="Copy invite code"
+                            >
+                              <code>{inviteCode.id}</code>
+                              {copiedInviteCode === inviteCode.id ? <><span>Copied!</span><Check size={15} /></> : <Copy size={15} />}
+                            </button>
                             <span>
                               {inviteCode.email
                                 ? `Restricted to ${inviteCode.email}`
                                 : "Valid for any email"}
                             </span>
-                            <span className={inviteCode.used ? "admin-request-provider--google" : ""}>
-                              {inviteCode.used ? "Used" : "Available"}
-                            </span>
+                            <span>Available</span>
                           </div>
                           <button
                             className="danger-button"
