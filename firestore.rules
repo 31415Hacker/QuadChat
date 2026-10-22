@@ -237,7 +237,7 @@ service cloud.firestore {
             && (!("isDeveloper" in request.resource.data) || request.resource.data.isDeveloper == false)
           )
         )
-      );
+      ;
 
       allow update: if signedIn()
         && !(isProtectedAdminTarget() &&
