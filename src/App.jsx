@@ -993,7 +993,7 @@ export default function App() {
   const deploymentIsRecent =
     appSettings.deploymentStatus === "deploying" &&
     appSettings.deployingCommit &&
-    appSettings.deployingCommit !== __COMMIT_HASH__ &&
+    !appSettings.deployingCommit.startsWith(__COMMIT_HASH__) &&
     deploymentClock - appSettings.deploymentStartedAt < 15 * 60_000;
   const deploymentNotice = updateAvailable ? "update" : deploymentIsRecent ? "deploying" : "";
 
