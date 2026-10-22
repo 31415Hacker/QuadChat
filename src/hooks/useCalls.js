@@ -1813,7 +1813,9 @@ export function useCalls({
 
       const room = new Room({ adaptiveStream: true, dynacast: true });
       async function publishAudio() {
-        if (!room.localParticipant.permissions?.canPublish || groupCallRoomRef.current !== room) return;
+        // Older LiveKit clients can omit `canPublish` until permissions are
+        // synchronized. Only an explicit server denial should block audio.
+        if (room.localParticipant.permissions?.canPublish === false || groupCallRoomRef.current !== room) return;
         if (groupCallPublishedTrackRef.current) return;
         for (const track of stream.getAudioTracks()) {
           const pub = await room.localParticipant.publishTrack(track, { dtx: true });
@@ -1830,7 +1832,7 @@ export function useCalls({
       }
       room.on(RoomEvent.ParticipantPermissionsChanged, (_previous, participant) => {
         if (participant !== room.localParticipant) return;
-        if (!participant.permissions?.canPublish) {
+        if (participant.permissions?.canPublish === false) {
           groupCallPublishedTrackRef.current = null;
         } else {
           publishAudio().catch((error) => onCallError?.(error.message));
