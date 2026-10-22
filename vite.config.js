@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { noiseSuppressionAudioWorkletVitePlugin } from "@workadventure/noise-suppression/vite";
 
 import { execSync } from "child_process";
 
@@ -15,6 +16,7 @@ export default defineConfig({
   base: "/",
   plugins: [
     react(),
+    noiseSuppressionAudioWorkletVitePlugin(),
     {
       name: "quadchat-build-version",
       generateBundle() {

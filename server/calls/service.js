@@ -76,16 +76,25 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
     return data;
   }
 
-  // Serialize credential issuance, permission changes, renewals and deletion.
+  // Serialize credential issuance, permission changes, and deletion.
   // A lock is never client-readable/writable and expires after a crashed request.
   async function locked(room, action) {
     const ref = database.ref(`call-locks/${room}`);
-    const owner = randomUUID();
-    const result = await ref.transaction((data) => {
-      if (data?.expiresAt > now()) return;
-      return { owner, expiresAt: now() + 60_000 };
-    });
-    if (!result.committed) throw failure(409, "Call is being updated. Please try again.");
+    let owner = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = randomUUID();
+      const result = await ref.transaction((data) => {
+        if (data?.expiresAt > now()) return;
+        return { owner: candidate, expiresAt: now() + 15_000 };
+      });
+      if (result.committed) {
+        owner = candidate;
+        break;
+      }
+      // A real mute/delete/token operation is normally only a few hundred ms.
+      await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+    }
+    if (!owner) throw failure(409, "Call is being updated. Please try again.");
     try {
       return await action();
     } finally {
@@ -179,6 +188,20 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
       await limit(`join-user-${caller.uid}`, 10);
       await limit(`join-room-${room}`, 30);
     }
+    if (action === "renew-call") {
+      // Every connected participant renews every 25 seconds. Renewals do not
+      // issue credentials or change room membership, so locking them makes an
+      // active room appear perpetually busy to people trying to join.
+      const data = await directory(room, false);
+      const accessRef = database.ref(`call-access/${room}/${caller.uid}`);
+      const access = (await accessRef.get()).val();
+      if (!access || access.session !== body.session || access.expiresAt <= now()) throw failure(403, "Call access expired. Rejoin the call.");
+      await rooms.getParticipant(data.livekitRoom, caller.uid);
+      const mute = (await database.ref(`group-calls/${room}/mutes/${caller.uid}`).get()).val();
+      await permission(data.livekitRoom, caller.uid, publishingAllowed(caller.profile, mute, now()));
+      await accessRef.update({ expiresAt: now() + ACCESS_TTL });
+      return { accessExpiresAt: now() + ACCESS_TTL };
+    }
     return locked(room, async () => {
       const data = await directory(room, action === "delete-call");
       const accessRef = database.ref(`call-access/${room}/${caller.uid}`);
@@ -192,17 +215,6 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
         await database.ref(`call-issued/${room}/${caller.uid}`).set(true);
         await accessRef.set({ expiresAt: now() + ACCESS_TTL, session });
         return { token, session, accessExpiresAt: now() + ACCESS_TTL };
-      }
-
-      if (action === "renew-call") {
-        const access = (await accessRef.get()).val();
-        if (!access || access.session !== body.session || access.expiresAt <= now()) throw failure(403, "Call access expired. Rejoin the call.");
-        // A lease can only be renewed by an actually connected LiveKit member.
-        await rooms.getParticipant(data.livekitRoom, caller.uid);
-        const mute = (await database.ref(`group-calls/${room}/mutes/${caller.uid}`).get()).val();
-        await permission(data.livekitRoom, caller.uid, publishingAllowed(caller.profile, mute, now()));
-        await accessRef.update({ expiresAt: now() + ACCESS_TTL });
-        return { accessExpiresAt: now() + ACCESS_TTL };
       }
 
       const isAdmin = caller.profile.isAdmin === true || caller.profile.isDeveloper === true;

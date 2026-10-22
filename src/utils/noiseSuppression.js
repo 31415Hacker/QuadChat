@@ -4,19 +4,21 @@ import rnnoiseWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise.wasm?url";
 import rnnoiseSimdWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url";
 
 export const NOISE_MODE_KEY = "quadchat-noise-mode";
-export const NOISE_MODES = ["off", "browser", "ai"];
+export const NOISE_MODES = ["off", "browser", "ai", "deepfilter"];
 export const DEFAULT_NOISE_MODE = "browser";
 
 export const NOISE_MODE_LABELS = {
   off: "Off",
   browser: "Standard",
-  ai: "AI (RNNoise)"
+  ai: "AI (RNNoise)",
+  deepfilter: "AI (DeepFilterNet)"
 };
 
 export const NOISE_MODE_HINTS = {
   off: "Send your microphone untouched. Best in a quiet room.",
   browser: "Use the browser's built-in noise suppression. Low CPU and works everywhere.",
-  ai: "Run RNNoise, a neural-network denoiser, on your microphone. Best in noisy rooms, uses more battery."
+  ai: "Run RNNoise, a neural-network denoiser, on your microphone. Best in noisy rooms, uses more battery.",
+  deepfilter: "Run DeepFilterNet locally for stronger voice cleanup. Downloads an approximately 11 MB model the first time and uses more CPU."
 };
 
 export function normalizeNoiseMode(mode) {
@@ -116,28 +118,43 @@ export function createNoiseController({
     onOutgoingTrackChange?.(track);
   }
 
-  async function buildPipeline() {
+  async function buildPipeline(model) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) throw new Error("AudioContext is unavailable");
-    // RNNoise assumes a 48kHz input; the context resamples the microphone.
+    // Both neural filters run at 48 kHz; the context resamples the microphone.
     const ctx = new AudioCtx({ sampleRate: 48000 });
+    let source;
+    let node;
+    let dest;
+    let dispose;
     try {
-      const wasmBinary = await loadRnnoiseBinary();
-      await ctx.audioWorklet.addModule(rnnoiseWorkletUrl);
+      if (model === "deepfilter") {
+        const { createDeepFilterNetAudioWorklet } = await import("@workadventure/noise-suppression/deepfilternet");
+        const deepFilter = await createDeepFilterNetAudioWorklet(ctx);
+        await deepFilter.ready;
+        node = deepFilter.node;
+        dispose = deepFilter.dispose;
+      } else {
+        const wasmBinary = await loadRnnoiseBinary();
+        await ctx.audioWorklet.addModule(rnnoiseWorkletUrl);
+        node = new RnnoiseWorkletNode(ctx, { maxChannels: 2, wasmBinary });
+      }
       if (destroyed) {
         await ctx.close().catch(() => {});
         return null;
       }
-      const source = ctx.createMediaStreamSource(rawStream);
-      const node = new RnnoiseWorkletNode(ctx, { maxChannels: 2, wasmBinary });
-      const dest = ctx.createMediaStreamDestination();
+      source = ctx.createMediaStreamSource(rawStream);
+      dest = ctx.createMediaStreamDestination();
       source.connect(node);
       node.connect(dest);
       if (ctx.state === "suspended") {
         await ctx.resume().catch(() => {});
       }
-      return { ctx, source, node, dest, track: dest.stream.getAudioTracks()[0] };
+      return { ctx, source, node, dest, dispose, track: dest.stream.getAudioTracks()[0] };
     } catch (error) {
+      try { source?.disconnect(); } catch (_) { /* already detached */ }
+      try { node?.disconnect(); } catch (_) { /* already detached */ }
+      try { dispose?.(); } catch (_) { /* already disposed */ }
       await ctx.close().catch(() => {});
       throw error;
     }
@@ -150,6 +167,7 @@ export function createNoiseController({
     try { active.source.disconnect(); } catch (_) { /* already gone */ }
     try { active.node.disconnect(); } catch (_) { /* already gone */ }
     try { active.node.destroy?.(); } catch (_) { /* already gone */ }
+    try { active.dispose?.(); } catch (_) { /* already disposed */ }
     try { active.track.stop(); } catch (_) { /* already ended */ }
     active.dest.stream.getTracks().forEach((track) => {
       try { track.stop(); } catch (_) { /* already ended */ }
@@ -157,11 +175,11 @@ export function createNoiseController({
     await active.ctx.close().catch(() => {});
   }
 
-  async function activateAi() {
+  async function activateAi(model) {
     if (pipeline) return true;
     let built;
     try {
-      built = await buildPipeline();
+      built = await buildPipeline(model);
     } catch (error) {
       console.warn("[NOISE] AI suppression unavailable, falling back to standard:", error);
       mode = "browser";
@@ -192,10 +210,10 @@ export function createNoiseController({
   async function doSetMode(nextMode) {
     if (destroyed) return mode;
     const normalized = normalizeNoiseMode(nextMode);
-    if (normalized === "ai") {
-      await applyCaptureNoiseConstraint(rawTrack, "ai");
-      mode = "ai";
-      await activateAi();
+    if (normalized === "ai" || normalized === "deepfilter") {
+      await applyCaptureNoiseConstraint(rawTrack, normalized);
+      mode = normalized;
+      await activateAi(normalized);
     } else {
       mode = normalized;
       await deactivateAi(normalized);
@@ -224,5 +242,45 @@ export function createNoiseController({
     getMode: () => mode,
     getOutgoingTrack: currentOutgoingTrack,
     isAiActive: () => Boolean(pipeline)
+  };
+}
+
+/**
+ * Creates an RNNoise pipeline for received call audio. Unlike the microphone
+ * controller, it never owns or stops the incoming remote stream.
+ */
+export async function createRemoteNoiseController({ inputStream, onOutputStream }) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error("AudioContext is unavailable");
+  const ctx = new AudioCtx({ sampleRate: 48000 });
+  let source;
+  let node;
+  let dest;
+  try {
+    const wasmBinary = await loadRnnoiseBinary();
+    await ctx.audioWorklet.addModule(rnnoiseWorkletUrl);
+    source = ctx.createMediaStreamSource(inputStream);
+    node = new RnnoiseWorkletNode(ctx, { maxChannels: 2, wasmBinary });
+    dest = ctx.createMediaStreamDestination();
+    source.connect(node);
+    node.connect(dest);
+    if (ctx.state === "suspended") await ctx.resume();
+    onOutputStream(dest.stream);
+  } catch (error) {
+    try { source?.disconnect(); } catch (_) { /* already detached */ }
+    try { node?.disconnect(); } catch (_) { /* already detached */ }
+    try { node?.destroy?.(); } catch (_) { /* already destroyed */ }
+    await ctx.close().catch(() => {});
+    throw error;
+  }
+
+  return {
+    destroy() {
+      try { source.disconnect(); } catch (_) { /* already detached */ }
+      try { node.disconnect(); } catch (_) { /* already detached */ }
+      try { node.destroy?.(); } catch (_) { /* already destroyed */ }
+      dest.stream.getTracks().forEach((track) => track.stop());
+      ctx.close().catch(() => {});
+    }
   };
 }

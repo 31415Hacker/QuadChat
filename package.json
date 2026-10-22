@@ -1,6 +1,6 @@
 {
   "name": "quadchat",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "@emoji-mart/react": "^1.1.1",
     "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@workadventure/noise-suppression": "^0.2.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "firebase": "^11.10.0",

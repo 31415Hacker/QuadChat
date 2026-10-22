@@ -19,6 +19,7 @@ import { callApi } from "../utils/callApi.js";
 import {
   captureConstraintsForMode,
   createNoiseController,
+  createRemoteNoiseController,
   normalizeNoiseMode
 } from "../utils/noiseSuppression.js";
 
@@ -58,6 +59,11 @@ export function useCalls({
   const startCallLockRef = useRef(false);
   const answerCallLockRef = useRef(false);
   const remoteAudioRef = useRef(null);
+  const remoteAudioStreamsRef = useRef({});
+  const remoteNoiseControllersRef = useRef({});
+  const remoteNoiseChangingRef = useRef(new Set());
+  const [remoteNoiseSuppression, setRemoteNoiseSuppression] = useState({});
+  const [remoteAudioParticipants, setRemoteAudioParticipants] = useState({});
   const screenAudioRef = useRef(null);
   const screenVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
@@ -122,6 +128,69 @@ export function useCalls({
       remoteAudioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream, callStatus]);
+
+  function audioElementForParticipant(participantId) {
+    if (participantId === "private") return remoteAudioRef.current;
+    return [...(groupCallAudioContainerRef.current?.querySelectorAll("audio") || [])]
+      .find((audio) => audio.dataset.participant === participantId) || null;
+  }
+
+  function disableRemoteNoiseSuppression(participantId) {
+    const controller = remoteNoiseControllersRef.current[participantId];
+    if (controller) {
+      controller.destroy();
+      delete remoteNoiseControllersRef.current[participantId];
+    }
+    const audio = audioElementForParticipant(participantId);
+    const rawStream = remoteAudioStreamsRef.current[participantId];
+    if (audio && rawStream) audio.srcObject = rawStream;
+    setRemoteNoiseSuppression((prev) => ({ ...prev, [participantId]: false }));
+  }
+
+  function cleanupRemoteNoiseSuppression() {
+    Object.keys(remoteNoiseControllersRef.current).forEach(disableRemoteNoiseSuppression);
+    remoteNoiseControllersRef.current = {};
+    remoteAudioStreamsRef.current = {};
+    remoteNoiseChangingRef.current.clear();
+    setRemoteNoiseSuppression({});
+    setRemoteAudioParticipants({});
+  }
+
+  async function toggleRemoteNoiseSuppression(participantId) {
+    if (remoteNoiseChangingRef.current.has(participantId)) return;
+    if (remoteNoiseSuppression[participantId]) {
+      disableRemoteNoiseSuppression(participantId);
+      return;
+    }
+
+    const audio = audioElementForParticipant(participantId);
+    const inputStream = remoteAudioStreamsRef.current[participantId];
+    if (!audio || !inputStream) return;
+
+    remoteNoiseChangingRef.current.add(participantId);
+    try {
+      const controller = await createRemoteNoiseController({
+        inputStream,
+        onOutputStream: (outputStream) => {
+          if (remoteAudioStreamsRef.current[participantId] === inputStream) {
+            audio.srcObject = outputStream;
+            audio.play().catch(() => {});
+          }
+        }
+      });
+      if (remoteAudioStreamsRef.current[participantId] !== inputStream) {
+        controller.destroy();
+        return;
+      }
+      remoteNoiseControllersRef.current[participantId] = controller;
+      setRemoteNoiseSuppression((prev) => ({ ...prev, [participantId]: true }));
+    } catch (error) {
+      console.warn("[NOISE] Remote RNNoise unavailable:", error);
+      onCallError?.("RNNoise could not filter that call member's audio.");
+    } finally {
+      remoteNoiseChangingRef.current.delete(participantId);
+    }
+  }
 
   useEffect(() => {
     if (callStatus !== "connected") {
@@ -545,6 +614,7 @@ export function useCalls({
     callCleanupsRef.current.forEach(fn => fn());
     callCleanupsRef.current = [];
     console.log("[CALL-CLEANUP] listeners detached");
+    cleanupRemoteNoiseSuppression();
 
     if (peerRef.current) {
       console.log("[CALL-CLEANUP] closing peer connection");
@@ -637,6 +707,8 @@ export function useCalls({
         setRemoteScreenStream(stream);
       } else {
         console.log("[CALL] ontrack — remote audio received");
+        remoteAudioStreamsRef.current.private = stream;
+        setRemoteAudioParticipants({ private: true });
         setRemoteStream(stream);
       }
     };
@@ -1174,6 +1246,7 @@ export function useCalls({
   function cleanupGroupCall() {
     if (groupCallCleaningRef.current) return;
     groupCallCleaningRef.current = true;
+    cleanupRemoteNoiseSuppression();
     clearTimeout(groupCallSoloTimeoutRef.current);
     groupCallSoloTimeoutRef.current = null;
     if (groupCallLeaseRef.current) {
@@ -1237,6 +1310,7 @@ export function useCalls({
   function cleanupP2PGroupCall() {
     if (p2pGroupCallCleaningRef.current) return;
     p2pGroupCallCleaningRef.current = true;
+    cleanupRemoteNoiseSuppression();
 
     p2pGroupCallUnsubsRef.current.forEach((fn) => fn());
     p2pGroupCallUnsubsRef.current = [];
@@ -1791,8 +1865,11 @@ export function useCalls({
             });
           }
         } else {
+          const audioStream = new MediaStream([track.mediaStreamTrack]);
+          remoteAudioStreamsRef.current[participant.identity] = audioStream;
+          setRemoteAudioParticipants((prev) => ({ ...prev, [participant.identity]: true }));
           const audio = document.createElement("audio");
-          audio.srcObject = new MediaStream([track.mediaStreamTrack]);
+          audio.srcObject = audioStream;
           audio.autoplay = true;
           audio.setAttribute("data-participant", participant.identity);
           if (publication.trackSid) audio.setAttribute("data-track-sid", publication.trackSid);
@@ -1820,6 +1897,9 @@ export function useCalls({
           el.srcObject = null;
           el.remove();
         });
+        disableRemoteNoiseSuppression(participant.identity);
+        delete remoteAudioStreamsRef.current[participant.identity];
+        setRemoteAudioParticipants((prev) => ({ ...prev, [participant.identity]: false }));
       });
 
       room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -1860,6 +1940,9 @@ export function useCalls({
           el.srcObject = null;
           el.remove();
         });
+        disableRemoteNoiseSuppression(participant.identity);
+        delete remoteAudioStreamsRef.current[participant.identity];
+        setRemoteAudioParticipants((prev) => ({ ...prev, [participant.identity]: false }));
         if (notificationsEnabled && notificationPermission === "granted") {
           const name = participant.name || participant.identity;
           new Notification("QuadChat", {
@@ -2047,6 +2130,8 @@ export function useCalls({
     screenSharedByName,
     screenShareRequest,
     remoteAudioRef,
+    remoteNoiseSuppression,
+    remoteAudioParticipants,
     screenAudioRef,
     screenVideoRef,
     groupCallStatus,
@@ -2071,6 +2156,7 @@ export function useCalls({
     rejectCall,
     hangUp,
     toggleCallMute,
+    toggleRemoteNoiseSuppression,
     toggleCamera,
     toggleScreenShare,
     stopScreenShare,

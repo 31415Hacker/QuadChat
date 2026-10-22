@@ -5,13 +5,14 @@ function NoiseModeButton({ noiseMode, onCycleNoiseMode }) {
   const label = NOISE_MODE_LABELS[noiseMode] || noiseMode;
   return (
     <button
-      className={`call-action-btn${noiseMode !== "off" ? " call-action-btn--active" : ""}`}
+      className={`call-action-btn noise-mode-button${noiseMode !== "off" ? " call-action-btn--active" : ""}`}
       type="button"
       onClick={onCycleNoiseMode}
       title={`Noise suppression: ${label}`}
       aria-label={`Noise suppression: ${label}. Click to change.`}
     >
       <Waves size={16} />
+      <span>{label}</span>
     </button>
   );
 }

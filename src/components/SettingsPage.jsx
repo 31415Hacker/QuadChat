@@ -541,7 +541,7 @@ export default function SettingsPage({
                   </div>
                   <div className="dm-sound-options">
                     {NOISE_MODES.map((mode) => {
-                      const aiUnavailable = mode === "ai" && !isAiNoiseSupported();
+                      const aiUnavailable = (mode === "ai" || mode === "deepfilter") && !isAiNoiseSupported();
                       return (
                         <label className="dm-sound-option" key={mode}>
                           <input
