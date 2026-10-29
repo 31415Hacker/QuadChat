@@ -5,7 +5,7 @@ import {
 	SELF,
 } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
-import worker, { findStandaloneProfanity } from "../src";
+import worker, { findStandaloneProfanity, getSpamMuteEscalation } from "../src";
 
 describe("QuadChat Presence worker", () => {
 	it("responds with a status banner (unit style)", async () => {
@@ -54,5 +54,25 @@ describe("Swear filter standalone detection", () => {
 
 	it("returns empty when nothing was censored", () => {
 		expect(findStandaloneProfanity("hello world", "hello world")).toEqual([]);
+	});
+});
+
+describe("Spam rate limiter", () => {
+	it("allows the configured number of messages, then flags the next one", async () => {
+		const limiter = env.PRESENCE.get(
+			env.PRESENCE.idFromName(`spam:test-${crypto.randomUUID()}`),
+		);
+		expect((await limiter.recordMessage(3)).isSpam).toBe(false);
+		expect((await limiter.recordMessage(3)).isSpam).toBe(false);
+		expect((await limiter.recordMessage(3)).isSpam).toBe(false);
+		expect((await limiter.recordMessage(3)).isSpam).toBe(true);
+	});
+
+	it("escalates from ten seconds to a capped 24-hour mute", () => {
+		expect(getSpamMuteEscalation(0)).toMatchObject({ ms: 10_000, label: "10 seconds", nextLevel: 1 });
+		expect(getSpamMuteEscalation(1)).toMatchObject({ ms: 30_000, label: "30 seconds", nextLevel: 2 });
+		expect(getSpamMuteEscalation(11)).toMatchObject({ ms: 18 * 60 * 60_000, label: "18 hours", nextLevel: 12 });
+		expect(getSpamMuteEscalation(12)).toMatchObject({ ms: 24 * 60 * 60_000, label: "24 hours", nextLevel: 12 });
+		expect(getSpamMuteEscalation(99)).toMatchObject({ ms: 24 * 60 * 60_000, nextLevel: 12 });
 	});
 });

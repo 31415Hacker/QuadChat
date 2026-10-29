@@ -195,7 +195,11 @@ export default function App() {
   const [settingsPhotoFile, setSettingsPhotoFile] = useState(null);
   const [settingsPhotoPreview, setSettingsPhotoPreview] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [appSettings, setAppSettings] = useState({ signupEnabled: true, settingsLoaded: false });
+  const [appSettings, setAppSettings] = useState({
+    signupEnabled: true,
+    spamMessagesPerSecond: 3,
+    settingsLoaded: false
+  });
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [deploymentClock, setDeploymentClock] = useState(Date.now());
   const [isDarkTheme, setIsDarkTheme] = useState(() => {
@@ -953,6 +957,10 @@ export default function App() {
           signupEnabled: snapshot.exists()
             ? snapshot.data().signupEnabled !== false
             : true,
+          spamMessagesPerSecond: Math.max(
+            1,
+            Math.min(100, Number(snapshot.data()?.spamMessagesPerSecond) || 3)
+          ),
           deploymentStatus: snapshot.data()?.deploymentStatus || "",
           deployingCommit: snapshot.data()?.deployingCommit || "",
           deploymentStartedAt: snapshot.data()?.deploymentStartedAt || 0,
@@ -2308,6 +2316,26 @@ export default function App() {
     }
   }
 
+  async function setSpamMessagesPerSecond(value) {
+    if (!isCurrentUserAdmin) return;
+
+    const spamMessagesPerSecond = Math.max(1, Math.min(100, Math.round(Number(value) || 3)));
+    setSettingsMessage("");
+    try {
+      await setDoc(
+        appSettingsRef,
+        {
+          spamMessagesPerSecond,
+          updatedAt: serverTimestamp(),
+          updatedBy: sessionUserId
+        },
+        { merge: true }
+      );
+    } catch (firebaseError) {
+      setSettingsMessage(firebaseError.message);
+    }
+  }
+
   const refreshSignupRequests = useCallback(async () => {
     if (!isCurrentUserAdmin) return;
     try {
@@ -3381,10 +3409,12 @@ export default function App() {
       }
 
       if (!isCurrentUserAdmin && cleanMessage) {
-        const moderation = await checkMessageProfanity(user, cleanMessage, activeChannel);
-        if (moderation?.flagged) {
-          setError(
-            moderation.muted
+          const moderation = await checkMessageProfanity(user, cleanMessage, activeChannel, true);
+          if (moderation?.flagged) {
+            setError(
+              moderation.reason === "spam"
+                ? `🚫 That message was blocked because you sent messages too quickly. You've been auto-muted for ${moderation.muteDurationLabel || "24 hours"}. Only an admin can unmute you.`
+                : moderation.muted
               ? `🚫 That message was blocked by the swear filter. You've been auto-muted for 24 hours. Only an admin can unmute you.${moderation.words?.[0] ? ` (caught: "${moderation.words[0]}")` : ""}`
               : "🚫 That message was blocked by the swear filter."
           );
@@ -4046,8 +4076,9 @@ export default function App() {
            setMessageSoundVolume={setMessageSoundVolume}
            ringtoneVolume={ringtoneVolume}
            setRingtoneVolume={setRingtoneVolume}
-          appSettings={appSettings}
-          toggleSignup={toggleSignup}
+           appSettings={appSettings}
+           toggleSignup={toggleSignup}
+           setSpamMessagesPerSecond={setSpamMessagesPerSecond}
           magicLinkEmail={magicLinkEmail}
           setMagicLinkEmail={setMagicLinkEmail}
           generateMagicLink={generateMagicLink}

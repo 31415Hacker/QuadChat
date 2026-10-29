@@ -26,6 +26,7 @@ import {
 import { formatDuration } from "../utils/format.js";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const MESSAGE_TEXT_CHUNK_SIZE = 300;
 
 const MessageItem = memo(function MessageItem({
   item,
@@ -50,6 +51,7 @@ const MessageItem = memo(function MessageItem({
 }) {
   const [showReactions, setShowReactions] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [visibleTextLength, setVisibleTextLength] = useState(MESSAGE_TEXT_CHUNK_SIZE);
   const reactionPickerRef = useRef(null);
 
   useEffect(() => {
@@ -73,6 +75,10 @@ const MessageItem = memo(function MessageItem({
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [showInfo]);
+
+  useEffect(() => {
+    setVisibleTextLength(MESSAGE_TEXT_CHUNK_SIZE);
+  }, [item.id, item.text]);
 
   const reactionEntries = useMemo(() => {
     const reactions = item.reactions || {};
@@ -365,9 +371,20 @@ const MessageItem = memo(function MessageItem({
       ) : item.type === "game_session_card" ? (
         <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} onJoinGroupCall={joinGroupCall} />
       ) : typeof item.text === "string" && item.text ? (
-        <p>
-          {renderMessageText(item.text, profiles, item.adminCommand, sessionUserId, item.targetUserId, knownNames)}
-        </p>
+        <div className="message-text">
+          <p>
+            {renderMessageText(item.text.slice(0, visibleTextLength), profiles, item.adminCommand, sessionUserId, item.targetUserId, knownNames)}
+          </p>
+          {item.text.length > visibleTextLength ? (
+            <button
+              className="message-read-more"
+              onClick={() => setVisibleTextLength((length) => length + MESSAGE_TEXT_CHUNK_SIZE)}
+              type="button"
+            >
+              Read more…
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {reactionEntries.length > 0 ? (
         <div className="message-reactions">

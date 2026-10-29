@@ -10,6 +10,21 @@ const PROFANITY_API = "https://www.purgomalum.com/service/json";
 const PROFANITY_FILL = "*";
 const AUTO_MUTE_DURATION_MS = 24 * 60 * 60 * 1000;
 const AUTO_MUTE_BY = "__auto-mod__";
+const SPAM_MUTE_DURATIONS = [
+  { ms: 10_000, label: "10 seconds" },
+  { ms: 30_000, label: "30 seconds" },
+  { ms: 60_000, label: "1 minute" },
+  { ms: 5 * 60_000, label: "5 minutes" },
+  { ms: 10 * 60_000, label: "10 minutes" },
+  { ms: 30 * 60_000, label: "30 minutes" },
+  { ms: 60 * 60_000, label: "1 hour" },
+  { ms: 2 * 60 * 60_000, label: "2 hours" },
+  { ms: 5 * 60 * 60_000, label: "5 hours" },
+  { ms: 10 * 60 * 60_000, label: "10 hours" },
+  { ms: 12 * 60 * 60_000, label: "12 hours" },
+  { ms: 18 * 60 * 60_000, label: "18 hours" },
+  { ms: 24 * 60 * 60_000, label: "24 hours" }
+];
 
 const CORS_ORIGIN = "https://quadchat-cf697.web.app";
 const CORS_HEADERS = {
@@ -125,23 +140,64 @@ function buildBadMessageWrite(account, uid, text, channel, words) {
   };
 }
 
-function buildAutoMuteWrite(account, uid) {
+function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION_MS, spamMuteLevel = null) {
   const documentName = `${databasePath(account)}/documents/users/${uid}`;
+  const fields = {
+    muted: { booleanValue: true },
+    mutedUntil: {
+      timestampValue: new Date(Date.now() + durationMs).toISOString()
+    },
+    mutedBy: { stringValue: AUTO_MUTE_BY }
+  };
+  const fieldPaths = ["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"];
+  if (Number.isInteger(spamMuteLevel)) {
+    fields.spamMuteLevel = { integerValue: String(spamMuteLevel) };
+    fieldPaths.push("spamMuteLevel");
+  }
+  return {
+    update: {
+      name: documentName,
+      fields,
+      updateMask: {
+        fieldPaths
+      },
+      updateTransforms: [{ fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" }]
+    }
+  };
+}
+
+function buildSpamIncidentWrite(account, uid, text, channel, limit) {
+  const documentName = `${databasePath(account)}/documents/spam-incidents/${crypto.randomUUID()}`;
   return {
     update: {
       name: documentName,
       fields: {
-        muted: { booleanValue: true },
-        mutedUntil: {
-          timestampValue: new Date(Date.now() + AUTO_MUTE_DURATION_MS).toISOString()
-        },
-        mutedBy: { stringValue: AUTO_MUTE_BY }
+        text: { stringValue: text },
+        channel: { stringValue: channel },
+        userId: { stringValue: uid },
+        messagesPerSecond: { integerValue: String(limit) }
       },
       updateMask: {
-        fieldPaths: ["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"]
+        fieldPaths: ["text", "channel", "userId", "messagesPerSecond", "createdAt"]
       },
-      updateTransforms: [{ fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" }]
+      updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
     }
+  };
+}
+
+function getSpamMessagesPerSecond(settingsDoc) {
+  const configured = Number(
+    settingsDoc?.fields?.spamMessagesPerSecond?.integerValue ??
+    settingsDoc?.fields?.spamMessagesPerSecond?.doubleValue
+  );
+  return Number.isInteger(configured) && configured >= 1 && configured <= 100 ? configured : 3;
+}
+
+export function getSpamMuteEscalation(level) {
+  const safeLevel = Math.max(0, Math.min(SPAM_MUTE_DURATIONS.length - 1, Number(level) || 0));
+  return {
+    ...SPAM_MUTE_DURATIONS[safeLevel],
+    nextLevel: Math.min(safeLevel + 1, SPAM_MUTE_DURATIONS.length - 1)
   };
 }
 
@@ -174,6 +230,7 @@ async function handleModerate(request, env) {
 
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   const channel = typeof body?.channel === "string" ? body.channel.slice(0, 64) : "";
+  const checkSpam = body?.checkSpam === true;
   if (!text) {
     return json({ error: "No text supplied" }, 400, true);
   }
@@ -181,22 +238,61 @@ async function handleModerate(request, env) {
     return json({ error: "Text too long" }, 400, true);
   }
 
-  const words = await checkProfanity(text);
-  if (!words || words.length === 0) {
-    return json({ flagged: false, words: [] }, 200, true);
-  }
-
   const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
   let isAdmin = false;
+  let spamMessagesPerSecond = 3;
+  let spamMuteLevel = 0;
   try {
-    const callerDoc = await readFirestoreDoc(account, "users", callerUid);
+    const [callerDoc, settingsDoc] = await Promise.all([
+      readFirestoreDoc(account, "users", callerUid),
+      readFirestoreDoc(account, "settings", "app")
+    ]);
     const callerData = callerDoc?.fields || {};
     isAdmin =
       callerData.isAdmin?.booleanValue === true ||
       callerData.isDeveloper?.booleanValue === true;
+    spamMessagesPerSecond = getSpamMessagesPerSecond(settingsDoc);
+    spamMuteLevel = Math.max(0, Math.min(
+      SPAM_MUTE_DURATIONS.length - 1,
+      Number(callerData.spamMuteLevel?.integerValue ?? callerData.spamMuteLevel?.doubleValue) || 0
+    ));
   } catch (err) {
-    console.error("[PROFANITY] failed to read caller profile:", err?.message || err);
+    console.error("[MODERATION] failed to read moderation settings:", err?.message || err);
+  }
+
+  if (checkSpam && !isAdmin) {
+    let isSpam = false;
+    try {
+      const limiter = env.PRESENCE.get(env.PRESENCE.idFromName(`spam:${callerUid}`));
+      const result = await limiter.recordMessage(spamMessagesPerSecond);
+      isSpam = result.isSpam;
+    } catch (err) {
+      console.error("[SPAM] rate check skipped, failing open:", err?.message || err);
+    }
+    if (isSpam) {
+      const escalation = getSpamMuteEscalation(spamMuteLevel);
+      try {
+        await commitFirestoreWrites(account, [
+          buildSpamIncidentWrite(account, callerUid, text, channel, spamMessagesPerSecond),
+          buildAutoMuteWrite(account, callerUid, escalation.ms, escalation.nextLevel)
+        ]);
+        return json({
+          flagged: true,
+          muted: true,
+          reason: "spam",
+          muteDurationLabel: escalation.label,
+          words: []
+        }, 200, true);
+      } catch (err) {
+        return json({ error: err.message }, 500, true);
+      }
+    }
+  }
+
+  const words = await checkProfanity(text);
+  if (!words || words.length === 0) {
+    return json({ flagged: false, words: [] }, 200, true);
   }
 
   const writes = [buildBadMessageWrite(account, callerUid, text, channel, words)];
@@ -450,6 +546,11 @@ export class PresenceServer extends DurableObject {
     this.sessions = new Map();
     this.connectionAttempts = new Map();
     this.messageWindows = new Map();
+    this.healthCheck = null;
+  }
+
+  ensureHealthCheck() {
+    if (this.healthCheck) return;
     this.healthCheck = setInterval(() => {
       const now = Date.now();
       for (const [webSocket, session] of this.sessions) {
@@ -463,7 +564,18 @@ export class PresenceServer extends DurableObject {
     }, 15000);
   }
 
+  async recordMessage(limit) {
+    const now = Date.now();
+    const windowStart = now - 1000;
+    const timestamps = (await this.ctx.storage.get("timestamps") || [])
+      .filter((timestamp) => Number.isFinite(timestamp) && timestamp > windowStart);
+    timestamps.push(now);
+    await this.ctx.storage.put("timestamps", timestamps);
+    return { isSpam: timestamps.length > limit };
+  }
+
   async fetch(request) {
+    this.ensureHealthCheck();
     const url = new URL(request.url);
 
     if (url.searchParams.get("token")) {

@@ -2034,13 +2034,41 @@ button.magic-link-url {
   white-space: pre-wrap;
 }
 
+.message-read-more {
+  background: transparent;
+  border: 0;
+  color: var(--text-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  margin-top: 4px;
+  padding: 0;
+}
+
+.message-read-more:hover,
+.message-read-more:focus-visible {
+  text-decoration: underline;
+}
+
+.settings-number-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.settings-number-row input {
+  max-width: 92px;
+}
+
 .message-attachments {
   display: grid;
   gap: 8px;
   margin-top: 9px;
 }
 
-.message-attachments + p {
+.message-attachments + p,
+.message-attachments + .message-text p {
   margin-top: 7px;
 }
 

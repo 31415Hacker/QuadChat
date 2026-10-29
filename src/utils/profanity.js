@@ -10,7 +10,7 @@ function workerBaseUrl() {
   ).replace(/\/+$/, "");
 }
 
-export async function checkMessageProfanity(user, text, channel = "") {
+export async function checkMessageProfanity(user, text, channel = "", checkSpam = false) {
   try {
     if (!user || !text) return null;
     const baseUrl = workerBaseUrl();
@@ -22,7 +22,7 @@ export async function checkMessageProfanity(user, text, channel = "") {
         "Content-Type": "application/json",
         Authorization: `Bearer ${idToken}`
       },
-      body: JSON.stringify({ text, channel })
+      body: JSON.stringify({ text, channel, checkSpam })
     });
     if (!response.ok) return null;
     return await response.json();

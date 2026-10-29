@@ -112,6 +112,7 @@ export default function SettingsPage({
   setRingtoneVolume,
   appSettings,
   toggleSignup,
+  setSpamMessagesPerSecond,
   magicLinkEmail,
   setMagicLinkEmail,
   generateMagicLink,
@@ -879,6 +880,23 @@ export default function SettingsPage({
                       type="checkbox"
                     />
                     <span>Allow sign up</span>
+                  </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Spam protection</h3>
+                    <p>Automatically mute members who exceed this many messages in one second. Admins and developers are exempt.</p>
+                  </div>
+                  <label className="settings-number-row" htmlFor="spam-messages-per-second">
+                    <span>Messages per second</span>
+                    <input
+                      id="spam-messages-per-second"
+                      min="1"
+                      max="100"
+                      onChange={(event) => setSpamMessagesPerSecond(event.target.value)}
+                      type="number"
+                      value={appSettings.spamMessagesPerSecond}
+                    />
                   </label>
                 </section>
                 <section className="settings-section-box">
