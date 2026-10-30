@@ -199,6 +199,7 @@ export default function App() {
     signupEnabled: true,
     spamMessageLimit: 3,
     spamWindowSeconds: 1,
+    spamMuteLevelResetHours: 1,
     settingsLoaded: false
   });
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -965,6 +966,10 @@ export default function App() {
           spamWindowSeconds: Math.max(
             1,
             Math.min(3600, Math.round(Number(snapshot.data()?.spamWindowSeconds) || 1))
+          ),
+          spamMuteLevelResetHours: Math.max(
+            1,
+            Math.min(720, Math.round(Number(snapshot.data()?.spamMuteLevelResetHours) || 1))
           ),
           deploymentStatus: snapshot.data()?.deploymentStatus || "",
           deployingCommit: snapshot.data()?.deployingCommit || "",
@@ -2361,6 +2366,17 @@ export default function App() {
     }
   }
 
+  async function setSpamMuteLevelResetHours(value) {
+    if (!isCurrentUserAdmin) return;
+    const spamMuteLevelResetHours = Math.max(1, Math.min(720, Math.round(Number(value) || 1)));
+    setSettingsMessage("");
+    try {
+      await setDoc(appSettingsRef, { spamMuteLevelResetHours, updatedAt: serverTimestamp(), updatedBy: sessionUserId }, { merge: true });
+    } catch (firebaseError) {
+      setSettingsMessage(firebaseError.message);
+    }
+  }
+
   const refreshSignupRequests = useCallback(async () => {
     if (!isCurrentUserAdmin) return;
     try {
@@ -2509,7 +2525,7 @@ export default function App() {
     }
   }
 
-  async function manageAccount(action, accountId = adminAccountId, passwordValue = "") {
+  async function manageAccount(action, accountId = adminAccountId, passwordValue = "", extra = {}) {
     if (!user || !accountId) return null;
 
     setIsManagingAccount(true);
@@ -2522,7 +2538,7 @@ export default function App() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${idToken}`
         },
-        body: JSON.stringify({ action, uid: accountId, password: passwordValue })
+        body: JSON.stringify({ action, uid: accountId, password: passwordValue, ...extra })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
@@ -2604,6 +2620,17 @@ export default function App() {
     const result = await manageAccount("unban");
     if (result) {
       setAdminAccountDetails((details) => details ? { ...details, disabled: false } : details);
+      setAdminAccountMessage(result.message);
+    }
+  }
+
+  async function setAdminSpamMuteLevel(level) {
+    const result = await manageAccount("spamMuteLevel", adminAccountId, "", { spamMuteLevel: level });
+    if (result) {
+      setAdminAccountDetails((details) => details ? {
+        ...details,
+        profile: { ...details.profile, spamMuteLevel: result.spamMuteLevel }
+      } : details);
       setAdminAccountMessage(result.message);
     }
   }
@@ -4104,7 +4131,8 @@ export default function App() {
            appSettings={appSettings}
            toggleSignup={toggleSignup}
             setSpamMessageLimit={setSpamMessageLimit}
-            setSpamWindowSeconds={setSpamWindowSeconds}
+             setSpamWindowSeconds={setSpamWindowSeconds}
+             setSpamMuteLevelResetHours={setSpamMuteLevelResetHours}
           magicLinkEmail={magicLinkEmail}
           setMagicLinkEmail={setMagicLinkEmail}
           generateMagicLink={generateMagicLink}
@@ -4121,15 +4149,16 @@ export default function App() {
              setAdminAccountMessage("");
            }}
            adminAccountDetails={adminAccountDetails}
-           adminAccountPassword={adminAccountPassword}
+            adminAccountPassword={adminAccountPassword}
            setAdminAccountPassword={setAdminAccountPassword}
            adminAccountMessage={adminAccountMessage}
            isManagingAccount={isManagingAccount}
            viewAdminAccount={viewAdminAccount}
            changeAdminAccountPassword={changeAdminAccountPassword}
            deleteAdminAccount={deleteAdminAccount}
-           banAdminAccount={banAdminAccount}
-           unbanAdminAccount={unbanAdminAccount}
+            banAdminAccount={banAdminAccount}
+            unbanAdminAccount={unbanAdminAccount}
+            setAdminSpamMuteLevel={setAdminSpamMuteLevel}
            signupRequests={signupRequests}
            inviteCodes={inviteCodes}
            refreshSignupRequests={refreshSignupRequests}

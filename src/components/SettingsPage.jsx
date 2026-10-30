@@ -114,6 +114,7 @@ export default function SettingsPage({
   toggleSignup,
   setSpamMessageLimit,
   setSpamWindowSeconds,
+  setSpamMuteLevelResetHours,
   magicLinkEmail,
   setMagicLinkEmail,
   generateMagicLink,
@@ -134,6 +135,7 @@ export default function SettingsPage({
   deleteAdminAccount,
   banAdminAccount,
   unbanAdminAccount,
+  setAdminSpamMuteLevel,
   signupRequests,
   inviteCodes,
   refreshSignupRequests,
@@ -910,6 +912,17 @@ export default function SettingsPage({
                       value={appSettings.spamWindowSeconds}
                     />
                   </label>
+                  <label className="settings-number-row" htmlFor="spam-reset-hours">
+                    <span>Reset penalty after hours</span>
+                    <input
+                      id="spam-reset-hours"
+                      min="1"
+                      max="720"
+                      onChange={(event) => setSpamMuteLevelResetHours(event.target.value)}
+                      type="number"
+                      value={appSettings.spamMuteLevelResetHours}
+                    />
+                  </label>
                 </section>
                 <section className="settings-section-box">
                   <div>
@@ -1135,6 +1148,21 @@ export default function SettingsPage({
                             <button className="danger-button" disabled={isManagingAccount} onClick={banAdminAccount} type="button">Ban account</button>
                           )}
                           <button className="danger-button" disabled={isManagingAccount} onClick={deleteAdminAccount} type="button"><Trash2 size={17} /><span>Delete account</span></button>
+                        </div>
+                        <div className="admin-password-action">
+                          <label htmlFor="spam-penalty-level">Spam penalty level (0 = lowest, 12 = highest)</label>
+                          <div>
+                            <select
+                              id="spam-penalty-level"
+                              defaultValue={Number(adminAccountDetails.profile?.spamMuteLevel) || 0}
+                              disabled={isManagingAccount}
+                              onChange={(event) => setAdminSpamMuteLevel(Number(event.target.value))}
+                            >
+                              {Array.from({ length: 13 }, (_, level) => <option key={level} value={level}>{level}{level === 0 ? " — lowest / reset" : level === 12 ? " — highest" : ""}</option>)}
+                            </select>
+                            <button disabled={isManagingAccount} onClick={() => setAdminSpamMuteLevel(0)} type="button">Reset to lowest</button>
+                            <button disabled={isManagingAccount} onClick={() => setAdminSpamMuteLevel(12)} type="button">Set highest</button>
+                          </div>
                         </div>
                       </>}
                     </div> : null}

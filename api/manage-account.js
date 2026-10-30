@@ -109,7 +109,7 @@ export default async function handler(req, res) {
 
   try {
     const caller = await requireAdmin(req);
-    const { action, uid, password } = parseBody(req);
+    const { action, uid, password, spamMuteLevel } = parseBody(req);
     if (!uid || typeof uid !== "string") {
       return res.status(400).json({ error: "Account ID is required." });
     }
@@ -173,6 +173,19 @@ export default async function handler(req, res) {
         unbannedBy: caller.uid
       }, { merge: true });
       return res.status(200).json({ message: "Account unbanned. It can sign in again." });
+    }
+
+    if (action === "spamMuteLevel") {
+      const level = Number(spamMuteLevel);
+      if (!Number.isInteger(level) || level < 0 || level > 12) {
+        return res.status(400).json({ error: "Spam penalty level must be between 0 and 12." });
+      }
+      await admin.firestore().doc(`users/${uid}`).set({
+        spamMuteLevel: level,
+        spamMuteLevelUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        spamMuteLevelSetBy: caller.uid
+      }, { merge: true });
+      return res.status(200).json({ message: `Spam penalty level set to ${level}.`, spamMuteLevel: level });
     }
 
     if (action === "delete") {

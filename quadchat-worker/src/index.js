@@ -169,7 +169,10 @@ export function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION
     updateMask: {
       fieldPaths
     },
-    updateTransforms: [{ fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" }]
+    updateTransforms: [
+      { fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" },
+      ...(Number.isInteger(spamMuteLevel) ? [{ fieldPath: "spamMuteLevelUpdatedAt", setToServerValue: "REQUEST_TIME" }] : [])
+    ]
   };
 }
 
@@ -204,10 +207,20 @@ function getSpamRateLimit(settingsDoc) {
     settingsDoc?.fields?.spamWindowSeconds?.integerValue ??
     settingsDoc?.fields?.spamWindowSeconds?.doubleValue
   );
+  const resetHours = Number(
+    settingsDoc?.fields?.spamMuteLevelResetHours?.integerValue ??
+    settingsDoc?.fields?.spamMuteLevelResetHours?.doubleValue
+  );
   return {
     messageLimit: Number.isInteger(messageLimit) && messageLimit >= 1 && messageLimit <= 100 ? messageLimit : 3,
-    windowSeconds: Number.isInteger(windowSeconds) && windowSeconds >= 1 && windowSeconds <= 3600 ? windowSeconds : 1
+    windowSeconds: Number.isInteger(windowSeconds) && windowSeconds >= 1 && windowSeconds <= 3600 ? windowSeconds : 1,
+    resetHours: Number.isInteger(resetHours) && resetHours >= 1 && resetHours <= 720 ? resetHours : 1
   };
+}
+
+function spamLevelHasExpired(callerData, resetHours) {
+  const updatedAtMs = Date.parse(callerData.spamMuteLevelUpdatedAt?.timestampValue || "");
+  return Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs >= resetHours * 60 * 60 * 1000;
 }
 
 export function getSpamMuteEscalation(level) {
@@ -266,6 +279,7 @@ async function handleModerate(request, env) {
   let isAdmin = false;
   let spamMessageLimit = 3;
   let spamWindowSeconds = 1;
+  let spamMuteLevelResetHours = 1;
   let spamMuteLevel = 0;
   if (account) {
     try {
@@ -277,11 +291,12 @@ async function handleModerate(request, env) {
       isAdmin =
         callerData.isAdmin?.booleanValue === true ||
         callerData.isDeveloper?.booleanValue === true;
-      ({ messageLimit: spamMessageLimit, windowSeconds: spamWindowSeconds } = getSpamRateLimit(settingsDoc));
+      ({ messageLimit: spamMessageLimit, windowSeconds: spamWindowSeconds, resetHours: spamMuteLevelResetHours } = getSpamRateLimit(settingsDoc));
       spamMuteLevel = Math.max(0, Math.min(
         SPAM_MUTE_DURATIONS.length - 1,
         Number(callerData.spamMuteLevel?.integerValue ?? callerData.spamMuteLevel?.doubleValue) || 0
       ));
+      if (spamLevelHasExpired(callerData, spamMuteLevelResetHours)) spamMuteLevel = 0;
     } catch (err) {
       console.error("[MODERATION] failed to read moderation settings:", err?.message || err);
     }
