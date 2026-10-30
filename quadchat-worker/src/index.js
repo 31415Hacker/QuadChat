@@ -300,7 +300,8 @@ async function handleModerate(request, env) {
           words: []
         }, 200, corsHeaders);
       } catch (err) {
-        return json({ error: err.message }, 500, corsHeaders);
+        console.error("[SPAM] failed to record incident or mute user, failing open:", err?.message || err);
+        return json({ flagged: false, words: [] }, 200, corsHeaders);
       }
     }
   }
@@ -324,7 +325,8 @@ async function handleModerate(request, env) {
   try {
     await commitFirestoreWrites(account, writes);
   } catch (err) {
-    return json({ error: err.message }, 500, corsHeaders);
+    console.error("[PROFANITY] failed to record message or mute user, failing open:", err?.message || err);
+    return json({ flagged: false, words: [] }, 200, corsHeaders);
   }
 
   return json({ flagged: true, muted, words }, 200, corsHeaders);
