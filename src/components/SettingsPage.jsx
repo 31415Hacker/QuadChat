@@ -112,7 +112,8 @@ export default function SettingsPage({
   setRingtoneVolume,
   appSettings,
   toggleSignup,
-  setSpamMessagesPerSecond,
+  setSpamMessageLimit,
+  setSpamWindowSeconds,
   magicLinkEmail,
   setMagicLinkEmail,
   generateMagicLink,
@@ -885,17 +886,28 @@ export default function SettingsPage({
                 <section className="settings-section-box">
                   <div>
                     <h3>Spam protection</h3>
-                    <p>Automatically mute members who exceed this many messages in one second. Admins and developers are exempt.</p>
+                    <p>Automatically mute members who exceed this message rate. Admins and developers are exempt.</p>
                   </div>
-                  <label className="settings-number-row" htmlFor="spam-messages-per-second">
-                    <span>Messages per second</span>
+                  <label className="settings-number-row" htmlFor="spam-message-limit">
+                    <span>Messages</span>
                     <input
-                      id="spam-messages-per-second"
+                      id="spam-message-limit"
                       min="1"
                       max="100"
-                      onChange={(event) => setSpamMessagesPerSecond(event.target.value)}
+                      onChange={(event) => setSpamMessageLimit(event.target.value)}
                       type="number"
-                      value={appSettings.spamMessagesPerSecond}
+                      value={appSettings.spamMessageLimit}
+                    />
+                  </label>
+                  <label className="settings-number-row" htmlFor="spam-window-seconds">
+                    <span>Per seconds</span>
+                    <input
+                      id="spam-window-seconds"
+                      min="1"
+                      max="3600"
+                      onChange={(event) => setSpamWindowSeconds(event.target.value)}
+                      type="number"
+                      value={appSettings.spamWindowSeconds}
                     />
                   </label>
                 </section>

@@ -173,7 +173,7 @@ function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION_MS, sp
   };
 }
 
-function buildSpamIncidentWrite(account, uid, text, channel, limit) {
+function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSeconds) {
   const documentName = `${databasePath(account)}/documents/spam-incidents/${crypto.randomUUID()}`;
   return {
     update: {
@@ -182,22 +182,32 @@ function buildSpamIncidentWrite(account, uid, text, channel, limit) {
         text: { stringValue: text },
         channel: { stringValue: channel },
         userId: { stringValue: uid },
-        messagesPerSecond: { integerValue: String(limit) }
+        messageLimit: { integerValue: String(limit) },
+        windowSeconds: { integerValue: String(windowSeconds) }
       },
       updateMask: {
-        fieldPaths: ["text", "channel", "userId", "messagesPerSecond", "createdAt"]
+        fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds", "createdAt"]
       },
       updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
     }
   };
 }
 
-function getSpamMessagesPerSecond(settingsDoc) {
-  const configured = Number(
+function getSpamRateLimit(settingsDoc) {
+  const messageLimit = Number(
+    settingsDoc?.fields?.spamMessageLimit?.integerValue ??
+    settingsDoc?.fields?.spamMessageLimit?.doubleValue ??
     settingsDoc?.fields?.spamMessagesPerSecond?.integerValue ??
     settingsDoc?.fields?.spamMessagesPerSecond?.doubleValue
   );
-  return Number.isInteger(configured) && configured >= 1 && configured <= 100 ? configured : 3;
+  const windowSeconds = Number(
+    settingsDoc?.fields?.spamWindowSeconds?.integerValue ??
+    settingsDoc?.fields?.spamWindowSeconds?.doubleValue
+  );
+  return {
+    messageLimit: Number.isInteger(messageLimit) && messageLimit >= 1 && messageLimit <= 100 ? messageLimit : 3,
+    windowSeconds: Number.isInteger(windowSeconds) && windowSeconds >= 1 && windowSeconds <= 3600 ? windowSeconds : 1
+  };
 }
 
 export function getSpamMuteEscalation(level) {
@@ -254,7 +264,8 @@ async function handleModerate(request, env) {
   }
 
   let isAdmin = false;
-  let spamMessagesPerSecond = 3;
+  let spamMessageLimit = 3;
+  let spamWindowSeconds = 1;
   let spamMuteLevel = 0;
   if (account) {
     try {
@@ -266,7 +277,7 @@ async function handleModerate(request, env) {
       isAdmin =
         callerData.isAdmin?.booleanValue === true ||
         callerData.isDeveloper?.booleanValue === true;
-      spamMessagesPerSecond = getSpamMessagesPerSecond(settingsDoc);
+      ({ messageLimit: spamMessageLimit, windowSeconds: spamWindowSeconds } = getSpamRateLimit(settingsDoc));
       spamMuteLevel = Math.max(0, Math.min(
         SPAM_MUTE_DURATIONS.length - 1,
         Number(callerData.spamMuteLevel?.integerValue ?? callerData.spamMuteLevel?.doubleValue) || 0
@@ -280,7 +291,7 @@ async function handleModerate(request, env) {
     let isSpam = false;
     try {
       const limiter = env.PRESENCE.get(env.PRESENCE.idFromName(`spam:${callerUid}`));
-      const result = await limiter.recordMessage(spamMessagesPerSecond);
+      const result = await limiter.recordMessage(spamMessageLimit, spamWindowSeconds * 1000);
       isSpam = result.isSpam;
     } catch (err) {
       console.error("[SPAM] rate check skipped, failing open:", err?.message || err);
@@ -289,7 +300,7 @@ async function handleModerate(request, env) {
       const escalation = getSpamMuteEscalation(spamMuteLevel);
       try {
         await commitFirestoreWrites(account, [
-          buildSpamIncidentWrite(account, callerUid, text, channel, spamMessagesPerSecond),
+          buildSpamIncidentWrite(account, callerUid, text, channel, spamMessageLimit, spamWindowSeconds),
           buildAutoMuteWrite(account, callerUid, escalation.ms, escalation.nextLevel)
         ]);
         return json({
@@ -585,9 +596,9 @@ export class PresenceServer extends DurableObject {
     }, 15000);
   }
 
-  async recordMessage(limit) {
+  async recordMessage(limit, windowMs = 1000) {
     const now = Date.now();
-    const windowStart = now - 1000;
+    const windowStart = now - windowMs;
     const timestamps = (await this.ctx.storage.get("timestamps") || [])
       .filter((timestamp) => Number.isFinite(timestamp) && timestamp > windowStart);
     timestamps.push(now);

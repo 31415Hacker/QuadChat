@@ -197,7 +197,8 @@ export default function App() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [appSettings, setAppSettings] = useState({
     signupEnabled: true,
-    spamMessagesPerSecond: 3,
+    spamMessageLimit: 3,
+    spamWindowSeconds: 1,
     settingsLoaded: false
   });
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -957,9 +958,13 @@ export default function App() {
           signupEnabled: snapshot.exists()
             ? snapshot.data().signupEnabled !== false
             : true,
-          spamMessagesPerSecond: Math.max(
+          spamMessageLimit: Math.max(
             1,
-            Math.min(100, Number(snapshot.data()?.spamMessagesPerSecond) || 3)
+            Math.min(100, Number(snapshot.data()?.spamMessageLimit ?? snapshot.data()?.spamMessagesPerSecond) || 3)
+          ),
+          spamWindowSeconds: Math.max(
+            1,
+            Math.min(3600, Math.round(Number(snapshot.data()?.spamWindowSeconds) || 1))
           ),
           deploymentStatus: snapshot.data()?.deploymentStatus || "",
           deployingCommit: snapshot.data()?.deployingCommit || "",
@@ -2316,16 +2321,36 @@ export default function App() {
     }
   }
 
-  async function setSpamMessagesPerSecond(value) {
+  async function setSpamMessageLimit(value) {
     if (!isCurrentUserAdmin) return;
 
-    const spamMessagesPerSecond = Math.max(1, Math.min(100, Math.round(Number(value) || 3)));
+    const spamMessageLimit = Math.max(1, Math.min(100, Math.round(Number(value) || 3)));
     setSettingsMessage("");
     try {
       await setDoc(
         appSettingsRef,
         {
-          spamMessagesPerSecond,
+          spamMessageLimit,
+          updatedAt: serverTimestamp(),
+          updatedBy: sessionUserId
+        },
+        { merge: true }
+      );
+    } catch (firebaseError) {
+      setSettingsMessage(firebaseError.message);
+    }
+  }
+
+  async function setSpamWindowSeconds(value) {
+    if (!isCurrentUserAdmin) return;
+
+    const spamWindowSeconds = Math.max(1, Math.min(3600, Math.round(Number(value) || 1)));
+    setSettingsMessage("");
+    try {
+      await setDoc(
+        appSettingsRef,
+        {
+          spamWindowSeconds,
           updatedAt: serverTimestamp(),
           updatedBy: sessionUserId
         },
@@ -4078,7 +4103,8 @@ export default function App() {
            setRingtoneVolume={setRingtoneVolume}
            appSettings={appSettings}
            toggleSignup={toggleSignup}
-           setSpamMessagesPerSecond={setSpamMessagesPerSecond}
+            setSpamMessageLimit={setSpamMessageLimit}
+            setSpamWindowSeconds={setSpamWindowSeconds}
           magicLinkEmail={magicLinkEmail}
           setMagicLinkEmail={setMagicLinkEmail}
           generateMagicLink={generateMagicLink}
