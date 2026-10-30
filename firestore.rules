@@ -132,7 +132,7 @@ service cloud.firestore {
           "text", "userId", "createdAt", "adminCommand", "command",
           "commandTarget", "notificationText", "targetUserId", "replyTo",
           "attachments", "isFile", "fileName", "fileType", "duration", "type",
-          "title", "googleMeetLink", "note", "tableData", "name"
+          "title", "googleMeetLink", "note", "tableData", "name", "pollQuestion", "pollOptions", "pollMaxChoices", "pollAllowCustom", "pollVotes", "pollCustomVotes"
         ])
         && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin() || isDeveloper())
         && (!("text" in request.resource.data) || request.resource.data.text is string)
@@ -143,6 +143,8 @@ service cloud.firestore {
         && (!("duration" in request.resource.data) || request.resource.data.duration is number)
         && (!("type" in request.resource.data) || request.resource.data.type is string)
         && (!("title" in request.resource.data) || request.resource.data.title is string)
+        && (!("pollQuestion" in request.resource.data) || request.resource.data.pollQuestion is string)
+        && (!("pollOptions" in request.resource.data) || (request.resource.data.pollOptions is list && request.resource.data.pollOptions.size() >= 2 && request.resource.data.pollOptions.size() <= 20))
         && (!("note" in request.resource.data) || request.resource.data.note is string)
         && (!("googleMeetLink" in request.resource.data) || request.resource.data.googleMeetLink is string)
         && (channel != "updates" || isDeveloper())
@@ -179,6 +181,22 @@ service cloud.firestore {
             && (!("reactions" in request.resource.data)
                 || request.resource.data.reactions
                     .diff("reactions" in resource.data ? resource.data.reactions : {})
+                    .affectedKeys()
+                    .hasOnly([request.auth.uid]))
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["pollVotes"])
+            && (!("pollVotes" in request.resource.data)
+                || request.resource.data.pollVotes
+                    .diff("pollVotes" in resource.data ? resource.data.pollVotes : {})
+                    .affectedKeys()
+                    .hasOnly([request.auth.uid]))
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["pollCustomVotes"])
+            && (!("pollCustomVotes" in request.resource.data)
+                || request.resource.data.pollCustomVotes
+                    .diff("pollCustomVotes" in resource.data ? resource.data.pollCustomVotes : {})
                     .affectedKeys()
                     .hasOnly([request.auth.uid]))
           )

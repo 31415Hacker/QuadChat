@@ -4,6 +4,7 @@ import {
   FileText,
   Film,
   Gamepad2,
+  BarChart3,
   Image,
   Mic,
   Paperclip,
@@ -32,6 +33,7 @@ export default function Composer({
   pendingFiles,
   removePendingFile,
   onGamingPost,
+  onPollPost,
   isRecording,
   isRecordingPaused,
   cancelRecording,
@@ -339,6 +341,9 @@ export default function Composer({
                   >
                     <Image size={20} />
                     <span>Photos &amp; Videos</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowAttachMenu(false); onPollPost(); }}>
+                    <BarChart3 size={20} /><span>Poll</span>
                   </button>
                   <button
                     type="button"

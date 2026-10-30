@@ -15,6 +15,7 @@ import {
   Trash2
 } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
+import PollCard from "./PollCard.jsx";
 import { getFileKind, getImagePreviewUrl } from "./FilePreviewModal.jsx";
 import { formatDayLabel, dayKey, formatTime } from "../utils/format.js";
 import { getProfileName, normalizeName } from "../utils/names.js";
@@ -45,6 +46,7 @@ const MessageItem = memo(function MessageItem({
   sessionUserId,
   activeName,
   handleRsvp,
+  handlePollVote,
   joinGroupCall,
   onJumpToMessage,
   onPreviewFile
@@ -370,6 +372,8 @@ const MessageItem = memo(function MessageItem({
         )
       ) : item.type === "game_session_card" ? (
         <GameSessionCard data={item} sessionUserId={sessionUserId} sessionUserName={activeName} onRsvp={(status, customText) => handleRsvp(item.id, status, customText)} onJoinGroupCall={joinGroupCall} />
+      ) : item.type === "poll" ? (
+        <PollCard poll={item} sessionUserId={sessionUserId} onVote={handlePollVote} />
       ) : typeof item.text === "string" && item.text ? (
         <div className="message-text">
           <p>
@@ -523,6 +527,7 @@ const MessageList = memo(function MessageList({
                   sessionUserId={sessionUserId}
                   activeName={activeName}
                   handleRsvp={handleRsvp}
+                  handlePollVote={handlePollVote}
                   joinGroupCall={joinGroupCall}
                   onJumpToMessage={onJumpToMessage}
                   onPreviewFile={onPreviewFile}

@@ -117,6 +117,7 @@ import {
   GamingPostModal
 } from "./components/Modals.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
+import PollModal from "./components/PollModal.jsx";
 import {
   ScreenShareRequestBanner,
   ActiveCallBar,
@@ -276,6 +277,7 @@ export default function App() {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showGamingPost, setShowGamingPost] = useState(false);
   const [gamingPostCard, setGamingPostCard] = useState(null);
+  const [showPollModal, setShowPollModal] = useState(false);
   const [inviteCall, setInviteCall] = useState(null);
   const [pendingCallInvites, setPendingCallInvites] = useState([]);
 
@@ -3714,6 +3716,22 @@ export default function App() {
     setShowGamingPost(true);
   };
 
+  async function createPoll({ question, options, maxChoices, allowCustom }) {
+    if (!sessionUserId || options.length < 2 || options.length > 20) return;
+    await addMessageWithOptimisticState({ type: "poll", pollQuestion: question, pollOptions: options, pollMaxChoices: Math.min(maxChoices, options.length), pollAllowCustom: allowCustom, pollVotes: {}, pollCustomVotes: {}, userId: sessionUserId });
+    setShowPollModal(false);
+  }
+
+  const handlePollVote = useCallback(async (poll, optionIndex) => {
+    if (typeof optionIndex === "string" && optionIndex.startsWith("custom:")) {
+      await updateDoc(doc(db, "messages", activeChannel, "messages", poll.id), { [`pollCustomVotes.${sessionUserId}`]: optionIndex.slice(7) });
+      return;
+    }
+    const current = Array.isArray(poll.pollVotes?.[sessionUserId]) ? poll.pollVotes[sessionUserId] : [];
+    const next = current.includes(optionIndex) ? current.filter((value) => value !== optionIndex) : [...current, optionIndex].slice(-(poll.pollMaxChoices || 1));
+    await updateDoc(doc(db, "messages", activeChannel, "messages", poll.id), { [`pollVotes.${sessionUserId}`]: next });
+  }, [activeChannel, sessionUserId]);
+
   if (!isAuthReady) {
     return <AppLoadingScreen message="Checking your session…" />;
   }
@@ -4001,6 +4019,7 @@ export default function App() {
                     startEditMessage={startEditMessage}
                     handleDeleteMessage={handleDeleteMessage}
                     handleRsvp={handleRsvp}
+                    handlePollVote={handlePollVote}
                     handleToggleReaction={handleToggleReaction}
                     joinGroupCall={joinSessionGroupCallStable}
                     onJumpToMessage={jumpToReply}
@@ -4056,6 +4075,7 @@ export default function App() {
               pendingFiles={pendingFiles}
               removePendingFile={removePendingFile}
               onGamingPost={openGamingPost}
+              onPollPost={() => setShowPollModal(true)}
               isRecording={isRecording}
               isRecordingPaused={isRecordingPaused}
               cancelRecording={cancelRecording}
@@ -4199,6 +4219,7 @@ export default function App() {
            revokeInviteCode={revokeInviteCode}
          />
       ) : null}
+      {showPollModal ? <PollModal onClose={() => setShowPollModal(false)} onCreate={createPoll} /> : null}
       <FilePreviewModal file={filePreview} onClose={() => setFilePreview(null)} />
       <AvatarPreviewModal profile={avatarPreview} onClose={() => setAvatarPreview(null)} />
       {inviteCall ? (
