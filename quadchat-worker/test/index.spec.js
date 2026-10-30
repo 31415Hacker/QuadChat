@@ -57,6 +57,24 @@ describe("Swear filter standalone detection", () => {
 	});
 });
 
+describe("Moderation CORS", () => {
+	it("allows both production app origins", async () => {
+		for (const origin of ["https://quad-chat.com", "https://quadchat-cf697.web.app"]) {
+			const response = await worker.fetch(
+				new Request("https://quadchat-worker.ariqipraditya.workers.dev/moderate", {
+					method: "OPTIONS",
+					headers: { Origin: origin },
+				}),
+				env,
+				createExecutionContext(),
+			);
+			expect(response.status).toBe(204);
+			expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+			expect(response.headers.get("Vary")).toBe("Origin");
+		}
+	});
+});
+
 describe("Spam rate limiter", () => {
 	it("allows the configured number of messages, then flags the next one", async () => {
 		const limiter = env.PRESENCE.get(

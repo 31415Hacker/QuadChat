@@ -26,20 +26,27 @@ const SPAM_MUTE_DURATIONS = [
   { ms: 24 * 60 * 60_000, label: "24 hours" }
 ];
 
-const CORS_ORIGIN = "https://quadchat-cf697.web.app";
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": CORS_ORIGIN,
+const CORS_ORIGINS = new Set([
+  "https://quad-chat.com",
+  "https://quadchat-cf697.web.app"
+]);
+
+function getCorsHeaders(request) {
+  const origin = request.headers.get("Origin");
+  return {
+    ...(CORS_ORIGINS.has(origin) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}),
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
-};
+  };
+}
 
-function json(data, status = 200, cors = false) {
+function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
-      ...(cors ? CORS_HEADERS : {})
+      ...headers
     }
   });
 }
@@ -202,40 +209,41 @@ export function getSpamMuteEscalation(level) {
 }
 
 async function handleModerate(request, env) {
+  const corsHeaders = getCorsHeaders(request);
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
   if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405, true);
+    return json({ error: "Method not allowed" }, 405, corsHeaders);
   }
 
   const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!idToken) {
-    return json({ error: "Not authenticated" }, 401, true);
+    return json({ error: "Not authenticated" }, 401, corsHeaders);
   }
 
   let callerUid;
   try {
     callerUid = await verifyFirebaseIdToken(idToken);
   } catch (err) {
-    return json({ error: `Unauthorized: ${err.message}` }, 401, true);
+    return json({ error: `Unauthorized: ${err.message}` }, 401, corsHeaders);
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400, true);
+    return json({ error: "Invalid JSON body" }, 400, corsHeaders);
   }
 
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   const channel = typeof body?.channel === "string" ? body.channel.slice(0, 64) : "";
   const checkSpam = body?.checkSpam === true;
   if (!text) {
-    return json({ error: "No text supplied" }, 400, true);
+    return json({ error: "No text supplied" }, 400, corsHeaders);
   }
   if (text.length > 2500) {
-    return json({ error: "Text too long" }, 400, true);
+    return json({ error: "Text too long" }, 400, corsHeaders);
   }
 
   const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -283,16 +291,16 @@ async function handleModerate(request, env) {
           reason: "spam",
           muteDurationLabel: escalation.label,
           words: []
-        }, 200, true);
+        }, 200, corsHeaders);
       } catch (err) {
-        return json({ error: err.message }, 500, true);
+        return json({ error: err.message }, 500, corsHeaders);
       }
     }
   }
 
   const words = await checkProfanity(text);
   if (!words || words.length === 0) {
-    return json({ flagged: false, words: [] }, 200, true);
+    return json({ flagged: false, words: [] }, 200, corsHeaders);
   }
 
   const writes = [buildBadMessageWrite(account, callerUid, text, channel, words)];
@@ -305,10 +313,10 @@ async function handleModerate(request, env) {
   try {
     await commitFirestoreWrites(account, writes);
   } catch (err) {
-    return json({ error: err.message }, 500, true);
+    return json({ error: err.message }, 500, corsHeaders);
   }
 
-  return json({ flagged: true, muted, words }, 200, true);
+  return json({ flagged: true, muted, words }, 200, corsHeaders);
 }
 
 const FIREBASE_PROJECT_ID = "quadchat-cf697";
