@@ -5,7 +5,13 @@ import {
 	SELF,
 } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
-import worker, { findStandaloneProfanity, getSpamMuteEscalation } from "../src";
+import worker, {
+	buildAutoMuteWrite,
+	buildBadMessageWrite,
+	buildSpamIncidentWrite,
+	findStandaloneProfanity,
+	getSpamMuteEscalation,
+} from "../src";
 
 describe("QuadChat Presence worker", () => {
 	it("responds with a status banner (unit style)", async () => {
@@ -71,6 +77,24 @@ describe("Moderation CORS", () => {
 			expect(response.status).toBe(204);
 			expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
 			expect(response.headers.get("Vary")).toBe("Origin");
+		}
+	});
+});
+
+describe("Moderation Firestore writes", () => {
+	it("keeps write masks and transforms alongside the document update", () => {
+		const account = { project_id: "quadchat-cf697" };
+		const writes = [
+			buildBadMessageWrite(account, "user", "bad text", "group", ["word"]),
+			buildAutoMuteWrite(account, "user"),
+			buildSpamIncidentWrite(account, "user", "fast text", "group", 5, 10),
+		];
+
+		for (const write of writes) {
+			expect(write.updateMask).toBeDefined();
+			expect(write.updateTransforms).toBeDefined();
+			expect(write.update.updateMask).toBeUndefined();
+			expect(write.update.updateTransforms).toBeUndefined();
 		}
 	});
 });

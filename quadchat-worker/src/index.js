@@ -128,7 +128,7 @@ async function commitFirestoreWrites(account, writes) {
   }
 }
 
-function buildBadMessageWrite(account, uid, text, channel, words) {
+export function buildBadMessageWrite(account, uid, text, channel, words) {
   const documentName = `${databasePath(account)}/documents/bad-messages/${crypto.randomUUID()}`;
   return {
     update: {
@@ -138,16 +138,16 @@ function buildBadMessageWrite(account, uid, text, channel, words) {
         channel: { stringValue: channel },
         userId: { stringValue: uid },
         words: { arrayValue: { values: words.map((word) => ({ stringValue: word })) } }
-      },
-      updateMask: {
-        fieldPaths: ["text", "channel", "userId", "words"]
-      },
-      updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
-    }
+      }
+    },
+    updateMask: {
+      fieldPaths: ["text", "channel", "userId", "words"]
+    },
+    updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
   };
 }
 
-function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION_MS, spamMuteLevel = null) {
+export function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION_MS, spamMuteLevel = null) {
   const documentName = `${databasePath(account)}/documents/users/${uid}`;
   const fields = {
     muted: { booleanValue: true },
@@ -164,16 +164,16 @@ function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION_MS, sp
   return {
     update: {
       name: documentName,
-      fields,
-      updateMask: {
-        fieldPaths
-      },
-      updateTransforms: [{ fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" }]
-    }
+      fields
+    },
+    updateMask: {
+      fieldPaths
+    },
+    updateTransforms: [{ fieldPath: "mutedUpdatedAt", setToServerValue: "REQUEST_TIME" }]
   };
 }
 
-function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSeconds) {
+export function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSeconds) {
   const documentName = `${databasePath(account)}/documents/spam-incidents/${crypto.randomUUID()}`;
   return {
     update: {
@@ -184,12 +184,12 @@ function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSecond
         userId: { stringValue: uid },
         messageLimit: { integerValue: String(limit) },
         windowSeconds: { integerValue: String(windowSeconds) }
-      },
-      updateMask: {
-        fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds"]
-      },
-      updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
-    }
+      }
+    },
+    updateMask: {
+      fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds"]
+    },
+    updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
   };
 }
 
