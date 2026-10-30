@@ -140,7 +140,7 @@ function buildBadMessageWrite(account, uid, text, channel, words) {
         words: { arrayValue: { values: words.map((word) => ({ stringValue: word })) } }
       },
       updateMask: {
-        fieldPaths: ["text", "channel", "userId", "words", "createdAt"]
+        fieldPaths: ["text", "channel", "userId", "words"]
       },
       updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
     }
@@ -156,7 +156,7 @@ function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION_MS, sp
     },
     mutedBy: { stringValue: AUTO_MUTE_BY }
   };
-  const fieldPaths = ["muted", "mutedUntil", "mutedBy", "mutedUpdatedAt"];
+  const fieldPaths = ["muted", "mutedUntil", "mutedBy"];
   if (Number.isInteger(spamMuteLevel)) {
     fields.spamMuteLevel = { integerValue: String(spamMuteLevel) };
     fieldPaths.push("spamMuteLevel");
@@ -186,7 +186,7 @@ function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSecond
         windowSeconds: { integerValue: String(windowSeconds) }
       },
       updateMask: {
-        fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds", "createdAt"]
+        fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds"]
       },
       updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
     }
