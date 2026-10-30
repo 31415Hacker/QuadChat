@@ -246,30 +246,37 @@ async function handleModerate(request, env) {
     return json({ error: "Text too long" }, 400, corsHeaders);
   }
 
-  const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+  let account = null;
+  try {
+    account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+  } catch (err) {
+    console.error("[MODERATION] Firebase service account unavailable, failing open:", err?.message || err);
+  }
 
   let isAdmin = false;
   let spamMessagesPerSecond = 3;
   let spamMuteLevel = 0;
-  try {
-    const [callerDoc, settingsDoc] = await Promise.all([
-      readFirestoreDoc(account, "users", callerUid),
-      readFirestoreDoc(account, "settings", "app")
-    ]);
-    const callerData = callerDoc?.fields || {};
-    isAdmin =
-      callerData.isAdmin?.booleanValue === true ||
-      callerData.isDeveloper?.booleanValue === true;
-    spamMessagesPerSecond = getSpamMessagesPerSecond(settingsDoc);
-    spamMuteLevel = Math.max(0, Math.min(
-      SPAM_MUTE_DURATIONS.length - 1,
-      Number(callerData.spamMuteLevel?.integerValue ?? callerData.spamMuteLevel?.doubleValue) || 0
-    ));
-  } catch (err) {
-    console.error("[MODERATION] failed to read moderation settings:", err?.message || err);
+  if (account) {
+    try {
+      const [callerDoc, settingsDoc] = await Promise.all([
+        readFirestoreDoc(account, "users", callerUid),
+        readFirestoreDoc(account, "settings", "app")
+      ]);
+      const callerData = callerDoc?.fields || {};
+      isAdmin =
+        callerData.isAdmin?.booleanValue === true ||
+        callerData.isDeveloper?.booleanValue === true;
+      spamMessagesPerSecond = getSpamMessagesPerSecond(settingsDoc);
+      spamMuteLevel = Math.max(0, Math.min(
+        SPAM_MUTE_DURATIONS.length - 1,
+        Number(callerData.spamMuteLevel?.integerValue ?? callerData.spamMuteLevel?.doubleValue) || 0
+      ));
+    } catch (err) {
+      console.error("[MODERATION] failed to read moderation settings:", err?.message || err);
+    }
   }
 
-  if (checkSpam && !isAdmin) {
+  if (account && checkSpam && !isAdmin) {
     let isSpam = false;
     try {
       const limiter = env.PRESENCE.get(env.PRESENCE.idFromName(`spam:${callerUid}`));
@@ -300,6 +307,10 @@ async function handleModerate(request, env) {
 
   const words = await checkProfanity(text);
   if (!words || words.length === 0) {
+    return json({ flagged: false, words: [] }, 200, corsHeaders);
+  }
+
+  if (!account) {
     return json({ flagged: false, words: [] }, 200, corsHeaders);
   }
 
