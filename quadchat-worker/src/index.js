@@ -176,7 +176,7 @@ export function buildAutoMuteWrite(account, uid, durationMs = AUTO_MUTE_DURATION
   };
 }
 
-export function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSeconds) {
+export function buildSpamIncidentWrite(account, uid, text, channel, limit, windowSeconds, reason = "spam") {
   const documentName = `${databasePath(account)}/documents/spam-incidents/${crypto.randomUUID()}`;
   return {
     update: {
@@ -186,11 +186,12 @@ export function buildSpamIncidentWrite(account, uid, text, channel, limit, windo
         channel: { stringValue: channel },
         userId: { stringValue: uid },
         messageLimit: { integerValue: String(limit) },
-        windowSeconds: { integerValue: String(windowSeconds) }
+        windowSeconds: { integerValue: String(windowSeconds) },
+        reason: { stringValue: reason }
       }
     },
     updateMask: {
-      fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds"]
+      fieldPaths: ["text", "channel", "userId", "messageLimit", "windowSeconds", "reason"]
     },
     updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
   };
@@ -221,6 +222,19 @@ function getSpamRateLimit(settingsDoc) {
 function spamLevelHasExpired(callerData, resetHours) {
   const updatedAtMs = Date.parse(callerData.spamMuteLevelUpdatedAt?.timestampValue || "");
   return Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs >= resetHours * 60 * 60 * 1000;
+}
+
+function getDuplicateMessageRule(settingsDoc) {
+  const limit = Number(settingsDoc?.fields?.duplicateMessageLimit?.integerValue ?? settingsDoc?.fields?.duplicateMessageLimit?.doubleValue);
+  const windowSeconds = Number(settingsDoc?.fields?.duplicateMessageWindowSeconds?.integerValue ?? settingsDoc?.fields?.duplicateMessageWindowSeconds?.doubleValue);
+  return {
+    limit: Number.isInteger(limit) && limit >= 2 && limit <= 100 ? limit : 3,
+    windowSeconds: Number.isInteger(windowSeconds) && windowSeconds >= 1 && windowSeconds <= 3600 ? windowSeconds : 60
+  };
+}
+
+function normalizeMessageForDuplicateCheck(text) {
+  return text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }
 
 export function getSpamMuteEscalation(level) {
@@ -280,6 +294,8 @@ async function handleModerate(request, env) {
   let spamMessageLimit = 3;
   let spamWindowSeconds = 1;
   let spamMuteLevelResetHours = 1;
+  let duplicateMessageLimit = 3;
+  let duplicateMessageWindowSeconds = 60;
   let spamMuteLevel = 0;
   if (account) {
     try {
@@ -292,6 +308,7 @@ async function handleModerate(request, env) {
         callerData.isAdmin?.booleanValue === true ||
         callerData.isDeveloper?.booleanValue === true;
       ({ messageLimit: spamMessageLimit, windowSeconds: spamWindowSeconds, resetHours: spamMuteLevelResetHours } = getSpamRateLimit(settingsDoc));
+      ({ limit: duplicateMessageLimit, windowSeconds: duplicateMessageWindowSeconds } = getDuplicateMessageRule(settingsDoc));
       spamMuteLevel = Math.max(0, Math.min(
         SPAM_MUTE_DURATIONS.length - 1,
         Number(callerData.spamMuteLevel?.integerValue ?? callerData.spamMuteLevel?.doubleValue) || 0
@@ -306,8 +323,15 @@ async function handleModerate(request, env) {
     let isSpam = false;
     try {
       const limiter = env.PRESENCE.get(env.PRESENCE.idFromName(`spam:${callerUid}`));
-      const result = await limiter.recordMessage(spamMessageLimit, spamWindowSeconds * 1000);
+      const result = await limiter.recordMessage({
+        rateLimit: spamMessageLimit,
+        rateWindowMs: spamWindowSeconds * 1000,
+        text: normalizeMessageForDuplicateCheck(text),
+        duplicateLimit: duplicateMessageLimit,
+        duplicateWindowMs: duplicateMessageWindowSeconds * 1000
+      });
       isSpam = result.isSpam;
+      var spamReason = result.reason;
     } catch (err) {
       console.error("[SPAM] rate check skipped, failing open:", err?.message || err);
     }
@@ -315,13 +339,13 @@ async function handleModerate(request, env) {
       const escalation = getSpamMuteEscalation(spamMuteLevel);
       try {
         await commitFirestoreWrites(account, [
-          buildSpamIncidentWrite(account, callerUid, text, channel, spamMessageLimit, spamWindowSeconds),
+          buildSpamIncidentWrite(account, callerUid, text, channel, spamMessageLimit, spamWindowSeconds, spamReason),
           buildAutoMuteWrite(account, callerUid, escalation.ms, escalation.nextLevel)
         ]);
         return json({
           flagged: true,
           muted: true,
-          reason: "spam",
+          reason: spamReason,
           muteDurationLabel: escalation.label,
           words: []
         }, 200, corsHeaders);
@@ -611,14 +635,17 @@ export class PresenceServer extends DurableObject {
     }, 15000);
   }
 
-  async recordMessage(limit, windowMs = 1000) {
+  async recordMessage({ rateLimit, rateWindowMs, text, duplicateLimit, duplicateWindowMs }) {
     const now = Date.now();
-    const windowStart = now - windowMs;
-    const timestamps = (await this.ctx.storage.get("timestamps") || [])
-      .filter((timestamp) => Number.isFinite(timestamp) && timestamp > windowStart);
-    timestamps.push(now);
-    await this.ctx.storage.put("timestamps", timestamps);
-    return { isSpam: timestamps.length > limit };
+    const entries = (await this.ctx.storage.get("messages") || [])
+      .filter((entry) => entry && Number.isFinite(entry.at) && entry.at > now - Math.max(rateWindowMs, duplicateWindowMs));
+    entries.push({ at: now, text });
+    await this.ctx.storage.put("messages", entries);
+
+    const rateCount = entries.filter((entry) => entry.at > now - rateWindowMs).length;
+    const duplicateCount = entries.filter((entry) => entry.text === text && entry.at > now - duplicateWindowMs).length;
+    if (duplicateCount > duplicateLimit) return { isSpam: true, reason: "duplicate" };
+    return { isSpam: rateCount > rateLimit, reason: "spam" };
   }
 
   async fetch(request) {

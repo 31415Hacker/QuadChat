@@ -200,6 +200,8 @@ export default function App() {
     spamMessageLimit: 3,
     spamWindowSeconds: 1,
     spamMuteLevelResetHours: 1,
+    duplicateMessageLimit: 3,
+    duplicateMessageWindowSeconds: 60,
     settingsLoaded: false
   });
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -971,6 +973,8 @@ export default function App() {
             1,
             Math.min(720, Math.round(Number(snapshot.data()?.spamMuteLevelResetHours) || 1))
           ),
+          duplicateMessageLimit: Math.max(2, Math.min(100, Math.round(Number(snapshot.data()?.duplicateMessageLimit) || 3))),
+          duplicateMessageWindowSeconds: Math.max(1, Math.min(3600, Math.round(Number(snapshot.data()?.duplicateMessageWindowSeconds) || 60))),
           deploymentStatus: snapshot.data()?.deploymentStatus || "",
           deployingCommit: snapshot.data()?.deployingCommit || "",
           deploymentStartedAt: snapshot.data()?.deploymentStartedAt || 0,
@@ -2377,6 +2381,26 @@ export default function App() {
     }
   }
 
+  async function setDuplicateMessageLimit(value) {
+    if (!isCurrentUserAdmin) return;
+    const duplicateMessageLimit = Math.max(2, Math.min(100, Math.round(Number(value) || 3)));
+    try {
+      await setDoc(appSettingsRef, { duplicateMessageLimit, updatedAt: serverTimestamp(), updatedBy: sessionUserId }, { merge: true });
+    } catch (firebaseError) {
+      setSettingsMessage(firebaseError.message);
+    }
+  }
+
+  async function setDuplicateMessageWindowSeconds(value) {
+    if (!isCurrentUserAdmin) return;
+    const duplicateMessageWindowSeconds = Math.max(1, Math.min(3600, Math.round(Number(value) || 60)));
+    try {
+      await setDoc(appSettingsRef, { duplicateMessageWindowSeconds, updatedAt: serverTimestamp(), updatedBy: sessionUserId }, { merge: true });
+    } catch (firebaseError) {
+      setSettingsMessage(firebaseError.message);
+    }
+  }
+
   const refreshSignupRequests = useCallback(async () => {
     if (!isCurrentUserAdmin) return;
     try {
@@ -3464,8 +3488,8 @@ export default function App() {
           const moderation = await checkMessageProfanity(user, cleanMessage, activeChannel, true);
           if (moderation?.flagged) {
             setError(
-              moderation.reason === "spam"
-                ? `🚫 That message was blocked because you sent messages too quickly. You've been auto-muted for ${moderation.muteDurationLabel || "24 hours"}. Only an admin can unmute you.`
+              moderation.reason === "spam" || moderation.reason === "duplicate"
+                ? `🚫 That message was blocked because you ${moderation.reason === "duplicate" ? "repeated the same message too many times" : "sent messages too quickly"}. You've been auto-muted for ${moderation.muteDurationLabel || "24 hours"}. Only an admin can unmute you.`
                 : moderation.muted
               ? `🚫 That message was blocked by the swear filter. You've been auto-muted for 24 hours. Only an admin can unmute you.${moderation.words?.[0] ? ` (caught: "${moderation.words[0]}")` : ""}`
               : "🚫 That message was blocked by the swear filter."
@@ -4133,6 +4157,8 @@ export default function App() {
             setSpamMessageLimit={setSpamMessageLimit}
              setSpamWindowSeconds={setSpamWindowSeconds}
              setSpamMuteLevelResetHours={setSpamMuteLevelResetHours}
+             setDuplicateMessageLimit={setDuplicateMessageLimit}
+             setDuplicateMessageWindowSeconds={setDuplicateMessageWindowSeconds}
           magicLinkEmail={magicLinkEmail}
           setMagicLinkEmail={setMagicLinkEmail}
           generateMagicLink={generateMagicLink}

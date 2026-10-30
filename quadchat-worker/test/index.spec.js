@@ -104,10 +104,21 @@ describe("Spam rate limiter", () => {
 		const limiter = env.PRESENCE.get(
 			env.PRESENCE.idFromName(`spam:test-${crypto.randomUUID()}`),
 		);
-		expect((await limiter.recordMessage(3)).isSpam).toBe(false);
-		expect((await limiter.recordMessage(3)).isSpam).toBe(false);
-		expect((await limiter.recordMessage(3)).isSpam).toBe(false);
-		expect((await limiter.recordMessage(3)).isSpam).toBe(true);
+		const record = (text) => limiter.recordMessage({ rateLimit: 3, rateWindowMs: 1_000, text, duplicateLimit: 10, duplicateWindowMs: 60_000 });
+		expect((await record("one")).isSpam).toBe(false);
+		expect((await record("two")).isSpam).toBe(false);
+		expect((await record("three")).isSpam).toBe(false);
+		expect((await record("four")).isSpam).toBe(true);
+	});
+
+	it("flags repeated identical messages separately from the rate limit", async () => {
+		const limiter = env.PRESENCE.get(
+			env.PRESENCE.idFromName(`duplicate:test-${crypto.randomUUID()}`),
+		);
+		const record = () => limiter.recordMessage({ rateLimit: 10, rateWindowMs: 1_000, text: "same", duplicateLimit: 2, duplicateWindowMs: 60_000 });
+		expect((await record()).isSpam).toBe(false);
+		expect((await record()).isSpam).toBe(false);
+		expect(await record()).toMatchObject({ isSpam: true, reason: "duplicate" });
 	});
 
 	it("escalates from ten seconds to a capped 24-hour mute", () => {

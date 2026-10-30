@@ -115,6 +115,8 @@ export default function SettingsPage({
   setSpamMessageLimit,
   setSpamWindowSeconds,
   setSpamMuteLevelResetHours,
+  setDuplicateMessageLimit,
+  setDuplicateMessageWindowSeconds,
   magicLinkEmail,
   setMagicLinkEmail,
   generateMagicLink,
@@ -922,6 +924,14 @@ export default function SettingsPage({
                       type="number"
                       value={appSettings.spamMuteLevelResetHours}
                     />
+                  </label>
+                  <label className="settings-number-row" htmlFor="duplicate-message-limit">
+                    <span>Same message limit</span>
+                    <input id="duplicate-message-limit" min="2" max="100" onChange={(event) => setDuplicateMessageLimit(event.target.value)} type="number" value={appSettings.duplicateMessageLimit} />
+                  </label>
+                  <label className="settings-number-row" htmlFor="duplicate-message-window">
+                    <span>Same message window (seconds)</span>
+                    <input id="duplicate-message-window" min="1" max="3600" onChange={(event) => setDuplicateMessageWindowSeconds(event.target.value)} type="number" value={appSettings.duplicateMessageWindowSeconds} />
                   </label>
                 </section>
                 <section className="settings-section-box">
