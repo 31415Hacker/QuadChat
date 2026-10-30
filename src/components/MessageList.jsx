@@ -433,6 +433,7 @@ const MessageList = memo(function MessageList({
   startEditMessage,
   handleDeleteMessage,
   handleRsvp,
+  handlePollVote,
   handleToggleReaction,
   joinGroupCall,
   onJumpToMessage,
