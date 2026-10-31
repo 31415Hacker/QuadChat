@@ -487,7 +487,6 @@ export default function SettingsPage({
                     <span>Remove account</span>
                   </button>
                 </section>
-
                 <div className="settings-actions">
                   <button type="submit" disabled={isSavingSettings}>
                     Save changes
@@ -860,6 +859,13 @@ export default function SettingsPage({
                     <input checked={showSidebarSeconds} onChange={() => setShowSidebarSeconds((value) => !value)} type="checkbox" />
                     <span>{showSidebarSeconds ? "On" : "Off"}</span>
                   </label>
+                </section>
+                <section className="settings-section-box">
+                  <div><h3>QuadChat Background Service</h3><p>Downloads the companion for your device. You must unzip and run it yourself; it cannot start automatically from your browser.</p></div>
+                  <a className="background-service-download" href={(() => {
+                    const platform = navigator.userAgent.includes("CrOS") ? "linux-x64" : navigator.userAgent.includes("Win") ? "windows-x64" : navigator.userAgent.includes("Mac") ? "macos-arm64" : "linux-x64";
+                    return `https://github.com/31415Hacker/QuadChat/releases/download/background-service-latest/quadchat-background-service-${platform}.zip`;
+                  })()}>Download Background Service for QuadChat</a>
                 </section>
               </>
             ) : null}

@@ -1,0 +1,9 @@
+[package]
+name = "quadchat-background-service"
+version = "0.1.0"
+edition = "2021"
+description = "QuadChat background companion service"
+
+[[bin]]
+name = "quadchat-background-service"
+path = "src/main.rs"

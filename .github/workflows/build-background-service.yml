@@ -1,0 +1,64 @@
+name: Build QuadChat Background Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "quadchat-background-service/**"
+      - ".github/workflows/build-background-service.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+            binary: quadchat-background-service.exe
+          - os: macos-latest
+            name: macos-arm64
+            binary: quadchat-background-service
+          - os: ubuntu-latest
+            name: linux-x64
+            binary: quadchat-background-service
+    defaults:
+      run:
+        working-directory: quadchat-background-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist/quadchat-background-service-${{ matrix.name }}
+          cp target/release/${{ matrix.binary }} dist/quadchat-background-service-${{ matrix.name }}/
+          cp README.md dist/quadchat-background-service-${{ matrix.name }}/
+          cd dist && zip -r quadchat-background-service-${{ matrix.name }}.zip quadchat-background-service-${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: quadchat-background-service/dist/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: background-service-latest
+          name: QuadChat Background Service (latest)
+          prerelease: true
+          make_latest: false
+          files: release-assets/*.zip
