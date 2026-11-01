@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "QuadChat background companion service"
 
+[dependencies]
+getrandom = "0.2"
+
 [[bin]]
 name = "quadchat-background-service"
 path = "src/main.rs"
