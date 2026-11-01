@@ -44,6 +44,7 @@ jobs:
         run: |
           choco install nsis -y --no-progress
           New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target/release/quadchat-background-service.exe installers/quadchat-background-service.exe
           & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" installers/windows-installer.nsi
       - name: Build macOS package
         if: matrix.package == 'pkg'
