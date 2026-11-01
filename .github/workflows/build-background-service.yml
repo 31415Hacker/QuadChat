@@ -40,11 +40,11 @@ jobs:
       - run: cargo build --release
       - name: Build Windows installer
         if: matrix.package == 'exe'
-        shell: bash
+        shell: pwsh
         run: |
-          choco install nsis -y
-          mkdir -p dist
-          makensis installers/windows-installer.nsi
+          choco install nsis -y --no-progress
+          New-Item -ItemType Directory -Force -Path dist
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" installers/windows-installer.nsi
       - name: Build macOS package
         if: matrix.package == 'pkg'
         shell: bash
@@ -85,4 +85,5 @@ jobs:
           name: QuadChat Background Service (latest)
           prerelease: true
           make_latest: false
+          overwrite_files: true
           files: release-assets/*
