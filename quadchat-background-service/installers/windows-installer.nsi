@@ -1,3 +1,4 @@
+!cd ".."
 !define PRODUCT "QuadChat Background Service"
 !define EXE "quadchat-background-service.exe"
 
@@ -11,7 +12,7 @@ Page instfiles
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  File "../target/release/quadchat-background-service.exe"
+  File "target/release/quadchat-background-service.exe"
   CreateShortcut "$DESKTOP\QuadChat Background Service.lnk" "$INSTDIR\${EXE}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
