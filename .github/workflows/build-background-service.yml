@@ -44,6 +44,7 @@ jobs:
         run: |
           choco install nsis -y --no-progress
           New-Item -ItemType Directory -Force -Path dist
+          New-Item -ItemType Directory -Force -Path installers/dist
           Copy-Item target/release/quadchat-background-service.exe installers/quadchat-background-service.exe
           & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" installers/windows-installer.nsi
       - name: Build macOS package
@@ -65,6 +66,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
+          if [ "${{ matrix.package }}" = "exe" ]; then cp installers/dist/quadchat-background-service-windows-x64-setup.exe dist/; fi
           if [ "${{ matrix.package }}" = "pkg" ]; then cp quadchat-background-service-macos-arm64.pkg dist/; fi
           if [ "${{ matrix.package }}" = "deb" ]; then cp quadchat-background-service-linux-x64.deb dist/; fi
       - uses: actions/upload-artifact@v4
