@@ -865,7 +865,7 @@ export default function SettingsPage({
                   <a className="background-service-download" href={(() => {
                     const file = navigator.userAgent.includes("CrOS") ? "quadchat-background-service-linux-x64.deb" : navigator.userAgent.includes("Win") ? "quadchat-background-service-windows-x64-setup.exe" : navigator.userAgent.includes("Mac") ? "quadchat-background-service-macos-arm64.pkg" : "quadchat-background-service-linux-x64.deb";
                     return `https://github.com/31415Hacker/QuadChat/releases/download/background-service-latest/${file}`;
-                  })()}>Download Background Service for QuadChat</a>
+                  })()}>Install QuadChat Service</a>
                 </section>
               </>
             ) : null}
