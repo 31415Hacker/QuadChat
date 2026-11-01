@@ -1,0 +1,8 @@
+Package: quadchat-background-service
+Version: 0.1.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: QuadChat <support@quad-chat.com>
+Description: QuadChat Background Service
+ Native companion for QuadChat.

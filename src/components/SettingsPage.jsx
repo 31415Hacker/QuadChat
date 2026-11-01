@@ -863,8 +863,8 @@ export default function SettingsPage({
                 <section className="settings-section-box">
                   <div><h3>QuadChat Background Service</h3><p>Downloads the companion for your device. You must unzip and run it yourself; it cannot start automatically from your browser.</p></div>
                   <a className="background-service-download" href={(() => {
-                    const platform = navigator.userAgent.includes("CrOS") ? "linux-x64" : navigator.userAgent.includes("Win") ? "windows-x64" : navigator.userAgent.includes("Mac") ? "macos-arm64" : "linux-x64";
-                    return `https://github.com/31415Hacker/QuadChat/releases/download/background-service-latest/quadchat-background-service-${platform}.zip`;
+                    const file = navigator.userAgent.includes("CrOS") ? "quadchat-background-service-linux-x64.deb" : navigator.userAgent.includes("Win") ? "quadchat-background-service-windows-x64-setup.exe" : navigator.userAgent.includes("Mac") ? "quadchat-background-service-macos-arm64.pkg" : "quadchat-background-service-linux-x64.deb";
+                    return `https://github.com/31415Hacker/QuadChat/releases/download/background-service-latest/${file}`;
                   })()}>Download Background Service for QuadChat</a>
                 </section>
               </>
