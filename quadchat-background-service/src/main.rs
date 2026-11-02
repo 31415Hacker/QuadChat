@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const TEST_PORT: u16 = 43721;
 
@@ -29,8 +29,12 @@ fn run_local_connection_test() {
     let mut paired = false;
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
         let mut request = [0_u8; 8192];
-        let Ok(size) = stream.read(&mut request) else { continue };
+        let Ok(size) = stream.read(&mut request) else {
+            println!("[LOCAL TEST +{}ms] Ignored idle local connection", started_at.elapsed().as_millis());
+            continue;
+        };
         let request = String::from_utf8_lossy(&request[..size]);
         let request_line = request.lines().next().unwrap_or("<empty request>");
         println!("[LOCAL TEST +{}ms] {request_line}", started_at.elapsed().as_millis());
