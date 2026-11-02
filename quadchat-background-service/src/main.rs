@@ -41,8 +41,7 @@ fn run_local_connection_test() {
             if request.contains(&format!("state={token}")) && request.contains("code=") {
                 paired = true;
                 println!("Local OAuth-style authorization completed.");
-                let body = format!("<script>location.replace('http://localhost:5173/service-connection-test.html?service_token={token}')</script>");
-                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                let response = format!("HTTP/1.1 302 Found\r\nLocation: http://localhost:5173/service-connection-test.html?service_token={token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                 let _ = stream.write_all(response.as_bytes());
             } else {
                 println!("[LOCAL TEST] Authorization callback rejected: missing/invalid state or code");
