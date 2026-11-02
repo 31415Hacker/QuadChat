@@ -45,7 +45,7 @@ fn run_local_connection_test() {
             }
         } else if request.starts_with("GET /status ") {
             respond(&mut stream, "200 OK", &format!(r#"{{"paired":{paired},"mode":"local-test"}}"#));
-        } else if !request.contains(&format!("X-QuadChat-Test-Token: {token}")) {
+        } else if !request.to_ascii_lowercase().contains(&format!("x-quadchat-test-token: {token}")) {
             respond(&mut stream, "401 Unauthorized", r#"{"error":"Invalid test token"}"#);
         } else if request.starts_with("POST /pair ") {
             paired = true;
