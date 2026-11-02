@@ -22,6 +22,7 @@ fn run_local_connection_test() {
     let listener = TcpListener::bind(("127.0.0.1", TEST_PORT)).expect("Could not bind local test port");
     println!("QuadChat local service test listening on http://127.0.0.1:{TEST_PORT}");
     println!("Test token: {token}");
+    println!("Authorize at: http://localhost:5173/service-authorize.html?state={token}");
     let mut paired = false;
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
@@ -30,6 +31,14 @@ fn run_local_connection_test() {
         let request = String::from_utf8_lossy(&request[..size]);
         if request.starts_with("OPTIONS ") {
             respond(&mut stream, "204 No Content", "");
+        } else if request.starts_with("GET /callback?") {
+            if request.contains(&format!("state={token}")) && request.contains("code=") {
+                paired = true;
+                println!("Local OAuth-style authorization completed.");
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 96\r\n\r\n<h1>QuadChat Service authorized</h1><p>You may close this tab and return to the Service Lab.</p>");
+            } else {
+                respond(&mut stream, "400 Bad Request", r#"{"error":"Invalid authorization response"}"#);
+            }
         } else if request.starts_with("GET /status ") {
             respond(&mut stream, "200 OK", &format!(r#"{{"paired":{paired},"mode":"local-test"}}"#));
         } else if !request.contains(&format!("X-QuadChat-Test-Token: {token}")) {
