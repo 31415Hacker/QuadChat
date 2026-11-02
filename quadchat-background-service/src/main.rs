@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
+use keyring::Entry;
 
 const SERVICE_PORT: u16 = 43721;
 const AUTH_PORT: u16 = 43722;
@@ -13,6 +14,8 @@ const LAB_ORIGIN: &str = "http://localhost:5173";
 const CALLBACK_URI: &str = "http://127.0.0.1:43721/callback";
 const CODE_TTL: Duration = Duration::from_secs(60);
 const TOKEN_TTL: Duration = Duration::from_secs(600);
+const KEYRING_SERVICE: &str = "QuadChat Local OAuth Test";
+const KEYRING_ACCOUNT: &str = "local-device-token";
 
 #[derive(Clone)]
 struct PendingAuthorization {
@@ -31,11 +34,12 @@ struct LocalAuthStore {
     pending: HashMap<String, PendingAuthorization>,
     codes: HashMap<String, AuthorizationCode>,
     tokens: HashMap<String, Instant>,
+    claimed_states: HashSet<String>,
 }
 
 impl LocalAuthStore {
     fn new() -> Self {
-        Self { pending: HashMap::new(), codes: HashMap::new(), tokens: HashMap::new() }
+        Self { pending: HashMap::new(), codes: HashMap::new(), tokens: HashMap::new(), claimed_states: HashSet::new() }
     }
 
     fn exchange_code(&mut self, code: &str, verifier: &str) -> Result<(String, u64), &'static str> {
@@ -55,6 +59,22 @@ impl LocalAuthStore {
 
     fn revoke(&mut self, token: &str) -> bool {
         self.tokens.remove(token).is_some()
+    }
+}
+
+fn device_token_keyring() -> Result<Entry, String> {
+    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|error| error.to_string())
+}
+
+fn store_device_token(token: &str) -> Result<(), String> {
+    device_token_keyring()?.set_password(token).map_err(|error| error.to_string())
+}
+
+fn delete_device_token() {
+    match device_token_keyring().and_then(|entry| entry.delete_credential().map_err(|error| error.to_string())) {
+        Ok(()) => println!("[LOCAL SERVICE] Removed local test token from the OS credential store"),
+        Err(error) if error.to_ascii_lowercase().contains("no entry") => {},
+        Err(error) => println!("[LOCAL SERVICE] Could not remove local test token from the OS credential store: {error}"),
     }
 }
 
@@ -165,6 +185,11 @@ fn run_local_auth_server(store: Arc<Mutex<LocalAuthStore>>, started_at: Instant)
                 respond(&mut stream, "400 Bad Request", r#"{"error":"invalid_authorization_request"}"#, false);
                 continue;
             }
+            if !store.lock().unwrap().claimed_states.insert(params["state"].clone()) {
+                println!("[LOCAL OAUTH] Rejected reused authorization link");
+                respond(&mut stream, "400 Bad Request", r#"{"error":"authorization_link_already_used"}"#, false);
+                continue;
+            }
             let transaction = random_hex(24);
             store.lock().unwrap().pending.insert(transaction.clone(), PendingAuthorization {
                 redirect_uri: CALLBACK_URI.to_owned(), state: params["state"].clone(), code_challenge: params["code_challenge"].clone(), created_at: Instant::now(),
@@ -240,6 +265,7 @@ fn run_local_connection_test() {
     let challenge = pkce_challenge(&verifier);
     let state = random_hex(32);
     let authorization_url = format!("http://127.0.0.1:{AUTH_PORT}/authorize?response_type=code&client_id=quadchat-local-service&redirect_uri={}&state={state}&code_challenge={challenge}&code_challenge_method=S256", percent_encode(CALLBACK_URI));
+    delete_device_token();
     println!("Open this authorization link, then explicitly approve the service:");
     println!("{authorization_url}");
     let mut device_token: Option<String> = None;
@@ -267,10 +293,19 @@ fn run_local_connection_test() {
             let form = format!("grant_type=authorization_code&client_id=quadchat-local-service&code={code}&code_verifier={verifier}");
             match post_form(AUTH_PORT, "/token", &form).ok().and_then(|response| json_field(response.split_once("\r\n\r\n").map(|(_, body)| body).unwrap_or(""), "access_token")) {
                 Some(token) => {
-                    device_token = Some(token);
-                    token_expires_at = Some(Instant::now() + TOKEN_TTL);
-                    println!("[LOCAL SERVICE +{}ms] Authorization completed: one-time code exchanged with PKCE.", started_at.elapsed().as_millis());
-                    redirect(&mut stream, &format!("{LAB_ORIGIN}/service-connection-test.html?authorized=1"));
+                    match store_device_token(&token) {
+                        Ok(()) => {
+                            device_token = Some(token);
+                            token_expires_at = Some(Instant::now() + TOKEN_TTL);
+                            println!("[LOCAL SERVICE +{}ms] Authorization completed: one-time code exchanged with PKCE and stored in the OS credential store.", started_at.elapsed().as_millis());
+                            redirect(&mut stream, &format!("{LAB_ORIGIN}/service-connection-test.html?authorized=1"));
+                        }
+                        Err(error) => {
+                            println!("[LOCAL SERVICE] Token exchange succeeded but secure credential storage failed: {error}");
+                            let _ = post_form(AUTH_PORT, "/revoke", &format!("token={token}"));
+                            respond(&mut stream, "500 Internal Server Error", r#"{"error":"secure_token_storage_failed"}"#, false);
+                        }
+                    }
                 }
                 None => {
                     println!("[LOCAL SERVICE] Authorization code exchange failed");
@@ -283,6 +318,7 @@ fn run_local_connection_test() {
         } else if method == "POST" && path == "/revoke" {
             if let Some(token) = device_token.take() { let _ = post_form(AUTH_PORT, "/revoke", &format!("token={token}")); }
             token_expires_at = None;
+            delete_device_token();
             println!("[LOCAL SERVICE] Local device token revoked and discarded");
             respond(&mut stream, "200 OK", r#"{"revoked":true}"#, true);
         } else {
@@ -323,5 +359,12 @@ mod tests {
         let mut store = LocalAuthStore::new();
         store.codes.insert("expired".into(), AuthorizationCode { code_challenge: pkce_challenge("verifier"), expires_at: Instant::now() - Duration::from_secs(1) });
         assert!(store.exchange_code("expired", "verifier").is_err());
+    }
+
+    #[test]
+    fn authorization_link_state_is_single_use() {
+        let mut store = LocalAuthStore::new();
+        assert!(store.claimed_states.insert("state".into()));
+        assert!(!store.claimed_states.insert("state".into()));
     }
 }
