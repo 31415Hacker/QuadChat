@@ -31,11 +31,15 @@ fn run_local_connection_test() {
         let request = String::from_utf8_lossy(&request[..size]);
         if request.starts_with("OPTIONS ") {
             respond(&mut stream, "204 No Content", "");
+        } else if request.starts_with("GET /authorize-url ") {
+            respond(&mut stream, "200 OK", &format!(r#"{{"url":"http://localhost:5173/service-authorize.html?state={token}"}}"#));
         } else if request.starts_with("GET /callback?") {
             if request.contains(&format!("state={token}")) && request.contains("code=") {
                 paired = true;
                 println!("Local OAuth-style authorization completed.");
-                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 96\r\n\r\n<h1>QuadChat Service authorized</h1><p>You may close this tab and return to the Service Lab.</p>");
+                let body = format!("<script>location.replace('http://localhost:5173/service-connection-test.html?service_token={token}')</script>");
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                let _ = stream.write_all(response.as_bytes());
             } else {
                 respond(&mut stream, "400 Bad Request", r#"{"error":"Invalid authorization response"}"#);
             }
