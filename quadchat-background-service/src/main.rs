@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::time::Instant;
 
 const TEST_PORT: u16 = 43721;
 
@@ -20,6 +21,8 @@ fn respond(stream: &mut std::net::TcpStream, status: &str, body: &str) {
 fn run_local_connection_test() {
     let token = std::env::var("QUADCHAT_TEST_TOKEN").unwrap_or_else(|_| generate_test_token());
     let listener = TcpListener::bind(("127.0.0.1", TEST_PORT)).expect("Could not bind local test port");
+    let started_at = Instant::now();
+    let mut authorization_started_at: Option<Instant> = None;
     println!("QuadChat local service test listening on http://127.0.0.1:{TEST_PORT}");
     println!("Test token: {token}");
     println!("Authorize at: http://localhost:5173/service-authorize.html?state={token}");
@@ -30,17 +33,21 @@ fn run_local_connection_test() {
         let Ok(size) = stream.read(&mut request) else { continue };
         let request = String::from_utf8_lossy(&request[..size]);
         let request_line = request.lines().next().unwrap_or("<empty request>");
-        println!("[LOCAL TEST] {request_line}");
+        println!("[LOCAL TEST +{}ms] {request_line}", started_at.elapsed().as_millis());
         if request.starts_with("OPTIONS ") {
             println!("[LOCAL TEST] CORS preflight accepted");
             respond(&mut stream, "204 No Content", "");
         } else if request.starts_with("GET /authorize-url ") {
-            println!("[LOCAL TEST] Issued browser authorization URL");
+            authorization_started_at = Some(Instant::now());
+            println!("[LOCAL TEST +{}ms] Issued browser authorization URL", started_at.elapsed().as_millis());
             respond(&mut stream, "200 OK", &format!(r#"{{"url":"http://localhost:5173/service-authorize.html?state={token}"}}"#));
         } else if request.starts_with("GET /callback?") {
             if request.contains(&format!("state={token}")) && request.contains("code=") {
                 paired = true;
-                println!("Local OAuth-style authorization completed.");
+                let authorization_elapsed = authorization_started_at
+                    .map(|time| format!(" after {}ms", time.elapsed().as_millis()))
+                    .unwrap_or_default();
+                println!("[LOCAL TEST +{}ms] Authorization completed{authorization_elapsed}.", started_at.elapsed().as_millis());
                 let response = format!("HTTP/1.1 302 Found\r\nLocation: http://localhost:5173/service-connection-test.html?service_token={token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                 let _ = stream.write_all(response.as_bytes());
             } else {
