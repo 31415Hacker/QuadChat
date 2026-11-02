@@ -6,6 +6,7 @@ description = "QuadChat background companion service"
 
 [dependencies]
 getrandom = "0.2"
+sha2 = "0.10"
 
 [[bin]]
 name = "quadchat-background-service"
