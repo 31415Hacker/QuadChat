@@ -239,6 +239,9 @@ fn run_local_connection_test() {
     let verifier = random_hex(48);
     let challenge = pkce_challenge(&verifier);
     let state = random_hex(32);
+    let authorization_url = format!("http://127.0.0.1:{AUTH_PORT}/authorize?response_type=code&client_id=quadchat-local-service&redirect_uri={}&state={state}&code_challenge={challenge}&code_challenge_method=S256", percent_encode(CALLBACK_URI));
+    println!("Open this authorization link, then explicitly approve the service:");
+    println!("{authorization_url}");
     let mut device_token: Option<String> = None;
     let mut token_expires_at: Option<Instant> = None;
 
@@ -248,15 +251,11 @@ fn run_local_connection_test() {
             println!("[LOCAL SERVICE +{}ms] Ignored idle local connection", started_at.elapsed().as_millis());
             continue;
         };
-        let (method, target, headers, _) = request_parts(&request);
+        let (method, target, _headers, _) = request_parts(&request);
         println!("[LOCAL SERVICE +{}ms] {method} {target}", started_at.elapsed().as_millis());
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
         if method == "OPTIONS" {
             respond(&mut stream, "204 No Content", "", true);
-        } else if method == "GET" && path == "/authorize-url" {
-            let url = format!("http://127.0.0.1:{AUTH_PORT}/authorize?response_type=code&client_id=quadchat-local-service&redirect_uri={}&state={state}&code_challenge={challenge}&code_challenge_method=S256", percent_encode(CALLBACK_URI));
-            println!("[LOCAL SERVICE] Started authorization request with a fresh PKCE challenge");
-            respond(&mut stream, "200 OK", &format!(r#"{{"url":"{url}"}}"#), true);
         } else if method == "GET" && path == "/callback" {
             let params = parameters(query);
             let code = params.get("code").map(String::as_str).unwrap_or("");
@@ -281,12 +280,6 @@ fn run_local_connection_test() {
         } else if method == "GET" && path == "/status" {
             let paired = device_token.is_some() && token_expires_at.is_some_and(|expires_at| Instant::now() < expires_at);
             respond(&mut stream, "200 OK", &format!(r#"{{"paired":{paired},"mode":"local-oauth-pkce","tokenStoredByService":{paired}}}"#), true);
-        } else if method == "POST" && path == "/event" {
-            let is_lab = headers.get("origin").is_some_and(|origin| origin == LAB_ORIGIN);
-            let paired = device_token.is_some() && token_expires_at.is_some_and(|expires_at| Instant::now() < expires_at);
-            if !is_lab { respond(&mut stream, "403 Forbidden", r#"{"error":"local_lab_origin_required"}"#, true); }
-            else if !paired { respond(&mut stream, "403 Forbidden", r#"{"error":"service_not_authorized"}"#, true); }
-            else { println!("[LOCAL SERVICE] Accepted local test event (diagnostic control only)."); respond(&mut stream, "200 OK", r#"{"received":true}"#, true); }
         } else if method == "POST" && path == "/revoke" {
             if let Some(token) = device_token.take() { let _ = post_form(AUTH_PORT, "/revoke", &format!("token={token}")); }
             token_expires_at = None;
