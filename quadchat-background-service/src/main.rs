@@ -29,9 +29,13 @@ fn run_local_connection_test() {
         let mut request = [0_u8; 8192];
         let Ok(size) = stream.read(&mut request) else { continue };
         let request = String::from_utf8_lossy(&request[..size]);
+        let request_line = request.lines().next().unwrap_or("<empty request>");
+        println!("[LOCAL TEST] {request_line}");
         if request.starts_with("OPTIONS ") {
+            println!("[LOCAL TEST] CORS preflight accepted");
             respond(&mut stream, "204 No Content", "");
         } else if request.starts_with("GET /authorize-url ") {
+            println!("[LOCAL TEST] Issued browser authorization URL");
             respond(&mut stream, "200 OK", &format!(r#"{{"url":"http://localhost:5173/service-authorize.html?state={token}"}}"#));
         } else if request.starts_with("GET /callback?") {
             if request.contains(&format!("state={token}")) && request.contains("code=") {
@@ -41,11 +45,14 @@ fn run_local_connection_test() {
                 let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len());
                 let _ = stream.write_all(response.as_bytes());
             } else {
+                println!("[LOCAL TEST] Authorization callback rejected: missing/invalid state or code");
                 respond(&mut stream, "400 Bad Request", r#"{"error":"Invalid authorization response"}"#);
             }
         } else if request.starts_with("GET /status ") {
+            println!("[LOCAL TEST] Status requested; paired={paired}");
             respond(&mut stream, "200 OK", &format!(r#"{{"paired":{paired},"mode":"local-test"}}"#));
         } else if !request.to_ascii_lowercase().contains(&format!("x-quadchat-test-token: {token}")) {
+            println!("[LOCAL TEST] Request rejected: test token missing or invalid");
             respond(&mut stream, "401 Unauthorized", r#"{"error":"Invalid test token"}"#);
         } else if request.starts_with("POST /pair ") {
             paired = true;
@@ -53,9 +60,10 @@ fn run_local_connection_test() {
             respond(&mut stream, "200 OK", r#"{"paired":true}"#);
         } else if request.starts_with("POST /event ") {
             if !paired {
+                println!("[LOCAL TEST] Event rejected: browser has not completed authorization");
                 respond(&mut stream, "403 Forbidden", r#"{"error":"Pair this browser first"}"#);
             } else {
-                println!("Received local QuadChat test event.");
+                println!("[LOCAL TEST] Accepted local QuadChat test event.");
                 respond(&mut stream, "200 OK", r#"{"received":true}"#);
             }
         } else {
