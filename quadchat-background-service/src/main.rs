@@ -312,7 +312,7 @@ fn run_local_connection_test() {
     thread::spawn(move || run_local_auth_server(auth_store, started_at));
     let listener = TcpListener::bind(("127.0.0.1", SERVICE_PORT)).expect("Could not bind local service test port");
     println!("QuadChat local service test listening on http://127.0.0.1:{SERVICE_PORT}");
-    println!("This development-only harness uses in-memory localhost OAuth + PKCE. It does not contact QuadChat, Firebase, or any database.");
+    println!("This development-only harness uses localhost OAuth + PKCE and verifies approval with the local Firebase Auth Emulator. It does not contact production QuadChat, Firebase, or any database.");
     let verifier = random_hex(48);
     let challenge = pkce_challenge(&verifier);
     let state = random_hex(32);
