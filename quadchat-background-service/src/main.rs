@@ -1,10 +1,13 @@
+mod credentials;
+
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use keyring::Entry;
 
@@ -387,12 +390,95 @@ fn run_local_connection_test() {
     }
 }
 
+#[derive(Deserialize)]
+struct ProductionTokenResponse {
+    access_token: String,
+    device_id: String,
+    subject: String,
+    expires_in: u64,
+}
+
+fn run_production_pairing() -> Result<(), String> {
+    let worker_url = std::env::var("QUADCHAT_COMPANION_WORKER_URL")
+        .map_err(|_| "Set QUADCHAT_COMPANION_WORKER_URL to the HTTPS Cloudflare Worker URL".to_owned())?
+        .trim_end_matches('/').to_owned();
+    let authorize_url = std::env::var("QUADCHAT_COMPANION_AUTHORIZE_URL")
+        .map_err(|_| "Set QUADCHAT_COMPANION_AUTHORIZE_URL to QuadChat's companion-authorize.html URL".to_owned())?;
+    if !worker_url.starts_with("https://") || !authorize_url.starts_with("https://") {
+        return Err("Production pairing requires HTTPS URLs".to_owned());
+    }
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|error| error.to_string())?;
+    let callback_uri = format!("http://127.0.0.1:{}/callback", listener.local_addr().map_err(|error| error.to_string())?.port());
+    let verifier = random_hex(48);
+    let state = random_hex(32);
+    let authorization_url = format!(
+        "{authorize_url}?code_challenge={}&state={state}&redirect_uri={}&device_name=QuadChat%20Service",
+        pkce_challenge(&verifier),
+        percent_encode(&callback_uri)
+    );
+    println!("Opening QuadChat approval page. Approve the service in your browser.");
+    webbrowser::open(&authorization_url).map_err(|error| format!("Could not open browser: {error}"))?;
+
+    let mut callback = None;
+    for stream in listener.incoming() {
+        let Ok(mut stream) = stream else { continue };
+        let Some(request) = read_stream(&mut stream) else { continue };
+        let (_, target, _, _) = request_parts(&request);
+        if !target.starts_with("/callback?") {
+            respond(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#, false);
+            continue;
+        }
+        callback = Some((stream, target.to_owned()));
+        break;
+    }
+    let (mut stream, target) = callback.ok_or_else(|| "Authorization callback was not received".to_owned())?;
+    let (_, query) = target.split_once('?').unwrap_or((target.as_str(), ""));
+    let params = parameters(query);
+    let code = params.get("code").ok_or_else(|| "Authorization callback has no code".to_owned())?;
+    if params.get("state") != Some(&state) {
+        respond(&mut stream, "400 Bad Request", r#"{"error":"invalid_state"}"#, false);
+        return Err("Authorization callback state did not match".to_owned());
+    }
+    let response = reqwest::blocking::Client::new()
+        .post(format!("{worker_url}/companion/token"))
+        .json(&serde_json::json!({ "code": code, "codeVerifier": verifier }))
+        .send().map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Token exchange failed: {}", response.status()));
+    }
+    let token: ProductionTokenResponse = response.json().map_err(|error| error.to_string())?;
+    credentials::save(&credentials::DeviceCredential {
+        device_id: token.device_id,
+        access_token: token.access_token,
+        subject: token.subject,
+        expires_at_ms: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_err(|error| error.to_string())?.as_millis() as u64 + token.expires_in.saturating_mul(1000),
+    })?;
+    respond(&mut stream, "200 OK", r#"{"paired":true}"#, false);
+    println!("QuadChat Service paired and stored in the OS credential store.");
+    Ok(())
+}
+
 fn percent_encode(value: &str) -> String {
     value.bytes().map(|byte| if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') { (byte as char).to_string() } else { format!("%{byte:02X}") }).collect()
 }
 
 fn main() {
     if std::env::args().any(|arg| arg == "--local-connection-test") { run_local_connection_test(); }
+    else if std::env::args().any(|arg| arg == "--pair-companion") {
+        if let Err(error) = run_production_pairing() { eprintln!("Companion pairing failed: {error}"); std::process::exit(1); }
+    }
+    else if std::env::args().any(|arg| arg == "--companion-status") {
+        match credentials::load() {
+            Ok(Some(credential)) => println!("Paired device {} for {} (expires at {}ms)", credential.device_id, credential.subject, credential.expires_at_ms),
+            Ok(None) => println!("No QuadChat companion credential is stored."),
+            Err(error) => { eprintln!("Could not read OS credential store: {error}"); std::process::exit(1); }
+        }
+    }
+    else if std::env::args().any(|arg| arg == "--forget-companion") {
+        if let Err(error) = credentials::clear() { eprintln!("Could not clear OS credential store: {error}"); std::process::exit(1); }
+        println!("QuadChat companion credential removed.");
+    }
     else { println!("Hello, World from the QuadChat Background Service!"); println!("Run with --local-connection-test to start the localhost OAuth + PKCE test harness."); }
 }
 

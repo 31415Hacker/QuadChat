@@ -43,6 +43,10 @@ export default defineConfig({
           ],
           media: ["lucide-react"]
         }
+      },
+      input: {
+        app: "index.html",
+        companionAuthorize: "companion-authorize.html"
       }
     }
   }
