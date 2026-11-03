@@ -14,6 +14,8 @@ const LAB_ORIGIN: &str = "http://localhost:5173";
 const CALLBACK_URI: &str = "http://127.0.0.1:43721/callback";
 const CODE_TTL: Duration = Duration::from_secs(60);
 const TOKEN_TTL: Duration = Duration::from_secs(600);
+const AUTH_EMULATOR_PORT: u16 = 19099;
+const AUTH_EMULATOR_API_KEY: &str = "emulator-api-key";
 const KEYRING_SERVICE: &str = "QuadChat Local OAuth Test";
 const KEYRING_ACCOUNT: &str = "local-device-token";
 
@@ -28,12 +30,20 @@ struct PendingAuthorization {
 struct AuthorizationCode {
     code_challenge: String,
     expires_at: Instant,
+    account_id: String,
+    account_email: String,
+}
+
+struct DeviceToken {
+    expires_at: Instant,
+    account_id: String,
+    account_email: String,
 }
 
 struct LocalAuthStore {
     pending: HashMap<String, PendingAuthorization>,
     codes: HashMap<String, AuthorizationCode>,
-    tokens: HashMap<String, Instant>,
+    tokens: HashMap<String, DeviceToken>,
     claimed_states: HashSet<String>,
 }
 
@@ -42,7 +52,7 @@ impl LocalAuthStore {
         Self { pending: HashMap::new(), codes: HashMap::new(), tokens: HashMap::new(), claimed_states: HashSet::new() }
     }
 
-    fn exchange_code(&mut self, code: &str, verifier: &str) -> Result<(String, u64), &'static str> {
+    fn exchange_code(&mut self, code: &str, verifier: &str) -> Result<(String, u64, String, String), &'static str> {
         let Some(authorization_code) = self.codes.remove(code) else {
             return Err("Authorization code is invalid, expired, or was already used");
         };
@@ -53,12 +63,18 @@ impl LocalAuthStore {
             return Err("PKCE verifier does not match the authorization code");
         }
         let token = random_hex(32);
-        self.tokens.insert(token.clone(), Instant::now() + TOKEN_TTL);
-        Ok((token, TOKEN_TTL.as_secs()))
+        let account_id = authorization_code.account_id;
+        let account_email = authorization_code.account_email;
+        self.tokens.insert(token.clone(), DeviceToken {
+            expires_at: Instant::now() + TOKEN_TTL,
+            account_id: account_id.clone(),
+            account_email: account_email.clone(),
+        });
+        Ok((token, TOKEN_TTL.as_secs(), account_id, account_email))
     }
 
-    fn revoke(&mut self, token: &str) -> bool {
-        self.tokens.remove(token).is_some()
+    fn revoke(&mut self, token: &str) -> Option<DeviceToken> {
+        self.tokens.remove(token).filter(|device| device.expires_at > Instant::now())
     }
 }
 
@@ -199,6 +215,14 @@ fn run_local_auth_server(store: Arc<Mutex<LocalAuthStore>>, started_at: Instant)
         } else if method == "POST" && path == "/authorize/approve" {
             let params = parameters(body);
             let transaction = params.get("transaction").map(String::as_str).unwrap_or("");
+            let identity = match verify_emulator_identity(params.get("id_token").map(String::as_str).unwrap_or("")) {
+                Ok(identity) => identity,
+                Err(error) => {
+                    println!("[LOCAL OAUTH] Approval rejected: {error}");
+                    respond(&mut stream, "401 Unauthorized", r#"{"error":"emulator_sign_in_required"}"#, true);
+                    continue;
+                }
+            };
             let pending = store.lock().unwrap().pending.remove(transaction);
             let Some(pending) = pending else {
                 respond(&mut stream, "400 Bad Request", r#"{"error":"invalid_or_expired_transaction"}"#, true);
@@ -209,8 +233,8 @@ fn run_local_auth_server(store: Arc<Mutex<LocalAuthStore>>, started_at: Instant)
                 continue;
             }
             let code = random_hex(32);
-            store.lock().unwrap().codes.insert(code.clone(), AuthorizationCode { code_challenge: pending.code_challenge, expires_at: Instant::now() + CODE_TTL });
-            println!("[LOCAL OAUTH] Approval issued one-time authorization code (expires in 60s)");
+            store.lock().unwrap().codes.insert(code.clone(), AuthorizationCode { code_challenge: pending.code_challenge, expires_at: Instant::now() + CODE_TTL, account_id: identity.0, account_email: identity.1.clone() });
+            println!("[LOCAL OAUTH] Approval for {} issued one-time authorization code (expires in 60s)", identity.1);
             respond(&mut stream, "200 OK", &format!(r#"{{"redirectUrl":"{}?code={code}&state={}"}}"#, pending.redirect_uri, pending.state), true);
         } else if method == "POST" && path == "/token" {
             let params = parameters(body);
@@ -220,9 +244,9 @@ fn run_local_auth_server(store: Arc<Mutex<LocalAuthStore>>, started_at: Instant)
                 store.lock().unwrap().exchange_code(params.get("code").map(String::as_str).unwrap_or(""), params.get("code_verifier").map(String::as_str).unwrap_or(""))
             };
             match result {
-                Ok((token, expires_in)) => {
+                Ok((token, expires_in, account_id, account_email)) => {
                     println!("[LOCAL OAUTH] PKCE verified; issued local device token (expires in {expires_in}s)");
-                    respond(&mut stream, "200 OK", &format!(r#"{{"access_token":"{token}","token_type":"Bearer","expires_in":{expires_in}}}"#), false);
+                    respond(&mut stream, "200 OK", &format!(r#"{{"access_token":"{token}","token_type":"Bearer","expires_in":{expires_in},"subject":"{account_id}","email":"{account_email}"}}"#), false);
                 }
                 Err(error) => {
                     println!("[LOCAL OAUTH] Token exchange rejected: {error}");
@@ -232,7 +256,10 @@ fn run_local_auth_server(store: Arc<Mutex<LocalAuthStore>>, started_at: Instant)
         } else if method == "POST" && path == "/revoke" {
             let token = parameters(body).remove("token").unwrap_or_default();
             let revoked = store.lock().unwrap().revoke(&token);
-            println!("[LOCAL OAUTH] Device token revocation requested; found={revoked}");
+            match revoked {
+                Some(device) => println!("[LOCAL OAUTH] Revoked device token for {} ({})", device.account_email, device.account_id),
+                None => println!("[LOCAL OAUTH] Device token revocation requested; token was absent or expired"),
+            }
             respond(&mut stream, "200 OK", "{}", false);
         } else {
             respond(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#, false);
@@ -247,10 +274,35 @@ fn post_form(port: u16, path: &str, form: &str) -> Result<String, String> {
     read_stream(&mut stream).ok_or_else(|| "Local OAuth server did not respond".to_owned())
 }
 
+fn post_json(port: u16, path: &str, body: &str) -> Result<String, String> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).map_err(|error| error.to_string())?;
+    let request = format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+    stream.write_all(request.as_bytes()).map_err(|error| error.to_string())?;
+    read_stream(&mut stream).ok_or_else(|| "Firebase Auth Emulator did not respond".to_owned())
+}
+
 fn json_field(body: &str, field: &str) -> Option<String> {
     let marker = format!("\"{field}\":\"");
     let start = body.find(&marker)? + marker.len();
     Some(body[start..].split('"').next()?.to_owned())
+}
+
+fn verify_emulator_identity(id_token: &str) -> Result<(String, String), String> {
+    if id_token.is_empty() || id_token.contains('"') || id_token.contains('\\') {
+        return Err("Missing or malformed Firebase Emulator ID token".to_owned());
+    }
+    let response = post_json(
+        AUTH_EMULATOR_PORT,
+        &format!("/identitytoolkit.googleapis.com/v1/accounts:lookup?key={AUTH_EMULATOR_API_KEY}"),
+        &format!(r#"{{"idToken":"{id_token}"}}"#),
+    )?;
+    let (head, body) = response.split_once("\r\n\r\n").unwrap_or(("", ""));
+    if !head.starts_with("HTTP/1.1 200") {
+        return Err("Firebase Emulator rejected the signed-in session".to_owned());
+    }
+    let uid = json_field(body, "localId").ok_or_else(|| "Firebase Emulator response has no account ID".to_owned())?;
+    let email = json_field(body, "email").ok_or_else(|| "Firebase Emulator response has no email".to_owned())?;
+    Ok((uid, email))
 }
 
 fn run_local_connection_test() {
@@ -270,6 +322,7 @@ fn run_local_connection_test() {
     println!("{authorization_url}");
     let mut device_token: Option<String> = None;
     let mut token_expires_at: Option<Instant> = None;
+    let mut paired_account_email: Option<String> = None;
 
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
@@ -291,13 +344,18 @@ fn run_local_connection_test() {
                 continue;
             }
             let form = format!("grant_type=authorization_code&client_id=quadchat-local-service&code={code}&code_verifier={verifier}");
-            match post_form(AUTH_PORT, "/token", &form).ok().and_then(|response| json_field(response.split_once("\r\n\r\n").map(|(_, body)| body).unwrap_or(""), "access_token")) {
-                Some(token) => {
+            let token_response = post_form(AUTH_PORT, "/token", &form).ok().and_then(|response| {
+                let body = response.split_once("\r\n\r\n").map(|(_, body)| body).unwrap_or("");
+                Some((json_field(body, "access_token")?, json_field(body, "email")?))
+            });
+            match token_response {
+                Some((token, account_email)) => {
                     match store_device_token(&token) {
                         Ok(()) => {
                             device_token = Some(token);
                             token_expires_at = Some(Instant::now() + TOKEN_TTL);
-                            println!("[LOCAL SERVICE +{}ms] Authorization completed: one-time code exchanged with PKCE and stored in the OS credential store.", started_at.elapsed().as_millis());
+                            paired_account_email = Some(account_email.clone());
+                            println!("[LOCAL SERVICE +{}ms] Authorization completed for {account_email}: one-time code exchanged with PKCE and stored in the OS credential store.", started_at.elapsed().as_millis());
                             redirect(&mut stream, &format!("{LAB_ORIGIN}/service-connection-test.html?authorized=1"));
                         }
                         Err(error) => {
@@ -314,10 +372,12 @@ fn run_local_connection_test() {
             }
         } else if method == "GET" && path == "/status" {
             let paired = device_token.is_some() && token_expires_at.is_some_and(|expires_at| Instant::now() < expires_at);
-            respond(&mut stream, "200 OK", &format!(r#"{{"paired":{paired},"mode":"local-oauth-pkce","tokenStoredByService":{paired}}}"#), true);
+            let account_email = if paired { paired_account_email.as_deref().unwrap_or("") } else { "" };
+            respond(&mut stream, "200 OK", &format!(r#"{{"paired":{paired},"mode":"local-oauth-pkce","tokenStoredByService":{paired},"accountEmail":"{account_email}"}}"#), true);
         } else if method == "POST" && path == "/revoke" {
             if let Some(token) = device_token.take() { let _ = post_form(AUTH_PORT, "/revoke", &format!("token={token}")); }
             token_expires_at = None;
+            paired_account_email = None;
             delete_device_token();
             println!("[LOCAL SERVICE] Local device token revoked and discarded");
             respond(&mut stream, "200 OK", r#"{"revoked":true}"#, true);
@@ -349,7 +409,7 @@ mod tests {
     fn code_cannot_be_exchanged_twice_or_with_wrong_verifier() {
         let verifier = "local-verifier";
         let mut store = LocalAuthStore::new();
-        store.codes.insert("code".into(), AuthorizationCode { code_challenge: pkce_challenge(verifier), expires_at: Instant::now() + CODE_TTL });
+        store.codes.insert("code".into(), AuthorizationCode { code_challenge: pkce_challenge(verifier), expires_at: Instant::now() + CODE_TTL, account_id: "uid".into(), account_email: "test@quadchat.local".into() });
         assert!(store.exchange_code("code", "wrong-verifier").is_err());
         assert!(store.exchange_code("code", verifier).is_err());
     }
@@ -357,7 +417,7 @@ mod tests {
     #[test]
     fn expired_code_is_rejected() {
         let mut store = LocalAuthStore::new();
-        store.codes.insert("expired".into(), AuthorizationCode { code_challenge: pkce_challenge("verifier"), expires_at: Instant::now() - Duration::from_secs(1) });
+        store.codes.insert("expired".into(), AuthorizationCode { code_challenge: pkce_challenge("verifier"), expires_at: Instant::now() - Duration::from_secs(1), account_id: "uid".into(), account_email: "test@quadchat.local".into() });
         assert!(store.exchange_code("expired", "verifier").is_err());
     }
 
