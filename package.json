@@ -1,12 +1,15 @@
 {
   "name": "quadchat",
-  "version": "2.3.43",
+  "version": "2.3.44",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
     "server": "node server.js",
     "dev": "vite --host 0.0.0.0",
+    "dev:emulator": "vite --host 0.0.0.0 --mode emulator",
+    "emulators": "npx --yes firebase-tools emulators:start --project quadchat-test --only auth,firestore,database",
+    "seed:emulator": "FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19099 FIRESTORE_EMULATOR_HOST=127.0.0.1:18080 FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19000 node scripts/seed-emulator.js",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
