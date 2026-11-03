@@ -560,6 +560,30 @@ async function handleCompanionRevoke(request, env) {
   }
 }
 
+async function handleCompanionNotify(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const senderId = await verifyFirebaseIdToken(requireBearer(request));
+    const { type, channel, targetUserId } = await request.json();
+    if (type !== "dm_message" || typeof channel !== "string" || !channel.startsWith("dm_") || typeof targetUserId !== "string") {
+      return json({ error: "invalid_notification_event" }, 400, corsHeaders);
+    }
+    const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    const dm = await readFirestoreDoc(account, "dms", channel);
+    const participants = dm?.fields?.participants?.arrayValue?.values
+      ?.map((entry) => entry.stringValue)
+      .filter((value) => typeof value === "string") || [];
+    if (participants.length !== 2 || !participants.includes(senderId) || !participants.includes(targetUserId) || senderId === targetUserId) {
+      return json({ error: "notification_not_authorized" }, 403, corsHeaders);
+    }
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(targetUserId));
+    await relay.deliver({ type: "dm_message", channel, createdAt: Date.now() });
+    return json({ delivered: true }, 200, corsHeaders);
+  } catch {
+    return json({ error: "authorization_required" }, 401, corsHeaders);
+  }
+}
+
 function pemToArrayBuffer(pem) {
   const base64 = pem
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
@@ -699,6 +723,9 @@ export default {
     if (request.method === "POST" && url.pathname === "/companion/revoke") {
       return handleCompanionRevoke(request, env);
     }
+    if (request.method === "POST" && url.pathname === "/companion/notify") {
+      return handleCompanionNotify(request, env);
+    }
     if (url.pathname === "/companion/connect" && request.headers.get("Upgrade") === "websocket") {
       const userId = url.searchParams.get("user");
       if (!userId || userId.length > 256) return new Response("Missing user", { status: 400 });
@@ -754,6 +781,20 @@ export class CompanionRelay extends DurableObject {
     for (const [socket, session] of this.sessions) {
       if (session.deviceId === deviceId) socket.close(1008, "Device revoked");
     }
+  }
+
+  async deliver(event) {
+    const payload = JSON.stringify(event);
+    let delivered = 0;
+    for (const [socket] of this.sessions) {
+      try {
+        socket.send(payload);
+        delivered += 1;
+      } catch {
+        this.sessions.delete(socket);
+      }
+    }
+    return { delivered };
   }
 
   async fetch(request) {

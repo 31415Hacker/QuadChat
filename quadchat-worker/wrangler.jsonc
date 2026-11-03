@@ -30,18 +30,10 @@
 			}
 		]
 	},
-	"exports": {
-		"PresenceServer": {
-			"type": "durable-object",
-			"storage": "sqlite"
-		},
-		"PairingCode": {
-			"type": "durable-object",
-			"storage": "sqlite"
-		},
-		"CompanionRelay": {
-			"type": "durable-object",
-			"storage": "sqlite"
+	"migrations": [
+		{
+			"tag": "v1-companion-relay",
+			"new_sqlite_classes": ["PresenceServer", "PairingCode", "CompanionRelay"]
 		}
-	}
+	]
 }
