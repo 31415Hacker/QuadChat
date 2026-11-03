@@ -35,7 +35,7 @@ function getCorsHeaders(request) {
   const origin = request.headers.get("Origin");
   return {
     ...(CORS_ORIGINS.has(origin) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}),
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
   };
@@ -560,6 +560,25 @@ async function handleCompanionRevoke(request, env) {
   }
 }
 
+async function handleCompanionDevices(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const userId = await verifyFirebaseIdToken(requireBearer(request));
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    if (request.method === "GET") return json({ devices: await relay.listDevices() }, 200, corsHeaders);
+    if (request.method === "DELETE") {
+      const { deviceId, all } = await request.json();
+      if (all === true) await relay.revokeAll();
+      else if (typeof deviceId === "string" && deviceId.length <= 100) await relay.revoke(deviceId);
+      else return json({ error: "invalid_device" }, 400, corsHeaders);
+      return json({ revoked: true }, 200, corsHeaders);
+    }
+    return json({ error: "method_not_allowed" }, 405, corsHeaders);
+  } catch {
+    return json({ error: "authorization_required" }, 401, corsHeaders);
+  }
+}
+
 async function handleCompanionNotify(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
@@ -736,6 +755,9 @@ export default {
     if (request.method === "POST" && url.pathname === "/companion/revoke") {
       return handleCompanionRevoke(request, env);
     }
+    if ((request.method === "GET" || request.method === "DELETE") && url.pathname === "/companion/devices") {
+      return handleCompanionDevices(request, env);
+    }
     if (request.method === "POST" && url.pathname === "/companion/notify") {
       return handleCompanionNotify(request, env);
     }
@@ -796,6 +818,21 @@ export class CompanionRelay extends DurableObject {
     }
   }
 
+  async revokeAll() {
+    await this.ctx.storage.put("devices", {});
+    for (const [socket] of this.sessions) socket.close(1008, "Devices revoked");
+    this.sessions.clear();
+  }
+
+  async listDevices() {
+    const devices = (await this.ctx.storage.get("devices")) || {};
+    return Object.entries(devices).map(([deviceId, device]) => ({
+      deviceId,
+      expiresAt: device.expiresAt,
+      lastConnectedAt: device.lastConnectedAt || null
+    }));
+  }
+
   async deliver(event) {
     const payload = JSON.stringify(event);
     let delivered = 0;
@@ -825,6 +862,9 @@ export class CompanionRelay extends DurableObject {
         const device = devices[deviceId];
         if (!device || device.expiresAt < Date.now() || !safeEqual(device.tokenHash, await sha256Hex(token))) throw new Error("Invalid device token");
         authenticated = true;
+        device.lastConnectedAt = Date.now();
+        devices[deviceId] = device;
+        await this.ctx.storage.put("devices", devices);
         clearTimeout(timer);
         this.sessions.set(server, { deviceId });
         server.send(JSON.stringify({ type: "ready" }));
