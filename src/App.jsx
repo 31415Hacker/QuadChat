@@ -40,7 +40,7 @@ import { onChildAdded, onValue, ref as rtdbRef, set, remove } from "firebase/dat
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
-import { getCompanionCallAvailability, notifyPairedDmDevice } from "./utils/companionRelay.js";
+import { getCompanionCallAvailability, notifyPairedMessageDevices } from "./utils/companionRelay.js";
 
 import {
   CHANNELS,
@@ -3542,7 +3542,7 @@ export default function App() {
               `📎 ${uploadedAttachments[0].name}${attachmentCount > 1 ? ` +${attachmentCount - 1} more` : ""}`
           );
         }
-        await addMessageWithOptimisticState({
+        const messageId = await addMessageWithOptimisticState({
           ...(messageText ? { text: messageText } : {}),
           ...(commandResult?.metadata || {}),
           ...(replyTo && !commandResult?.metadata
@@ -3562,7 +3562,14 @@ export default function App() {
         });
         if (isDmChannelId(activeChannel)) {
           const targetUserId = dmPartnerId(activeChannel, sessionUserId);
-          notifyPairedDmDevice(user, activeChannel, targetUserId);
+          notifyPairedMessageDevices(user, activeChannel, messageId, [targetUserId]);
+        } else {
+          notifyPairedMessageDevices(
+            user,
+            activeChannel,
+            messageId,
+            Object.values(profiles).filter((profile) => profile.id !== sessionUserId && !profile.banned).map((profile) => profile.id)
+          );
         }
       }
 

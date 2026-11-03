@@ -405,19 +405,31 @@ struct RelayEvent {
     event_type: String,
     #[serde(rename = "callKey")]
     call_key: Option<String>,
+    #[serde(rename = "senderName")]
+    sender_name: Option<String>,
+    text: Option<String>,
+    channel: Option<String>,
 }
 
 fn show_relay_notification(event: &RelayEvent) {
     let (summary, body) = match event.event_type.as_str() {
-        "dm_message" => ("QuadChat", "You have a new direct message."),
-        "incoming_call" => ("QuadChat incoming call", "Open QuadChat to answer your call."),
+        "message" => {
+            let sender = event.sender_name.as_deref().unwrap_or("Someone");
+            let title = if event.channel.as_deref().is_some_and(|channel| channel.starts_with("dm_")) {
+                format!("QuadChat: {sender}")
+            } else {
+                format!("QuadChat group chat: {sender}")
+            };
+            (title, event.text.as_deref().unwrap_or("You have a new message.").to_owned())
+        }
+        "incoming_call" => ("QuadChat incoming call".to_owned(), "Open QuadChat to answer your call.".to_owned()),
         _ => return,
     };
-    if let Err(error) = notify_rust::Notification::new()
-        .summary(summary)
-        .body(body)
-        .appname("QuadChat Service")
-        .show() {
+    let mut notification = notify_rust::Notification::new();
+    notification.summary(&summary).body(&body).appname("QuadChat Service");
+    #[cfg(target_os = "linux")]
+    notification.sound_name(if event.event_type == "incoming_call" { "phone-incoming-call" } else { "message-new-instant" });
+    if let Err(error) = notification.show() {
         eprintln!("[COMPANION] Native notification failed: {error}");
     }
     if event.event_type == "incoming_call" {

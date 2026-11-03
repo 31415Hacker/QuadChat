@@ -14,6 +14,7 @@ const PROFANITY_API = "https://www.purgomalum.com/service/json";
 const PROFANITY_FILL = "*";
 const AUTO_MUTE_DURATION_MS = 24 * 60 * 60 * 1000;
 const AUTO_MUTE_BY = "__auto-mod__";
+const COMPANION_GROUP_CHANNELS = new Set(["group", "updates", "suggestions"]);
 const SPAM_MUTE_DURATIONS = [
   { ms: 10_000, label: "10 seconds" },
   { ms: 30_000, label: "30 seconds" },
@@ -606,10 +607,7 @@ async function handleCompanionNotify(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
     const senderId = await verifyFirebaseIdToken(requireBearer(request));
-    const { type, channel, targetUserId, callKey } = await request.json();
-    if (typeof targetUserId !== "string") {
-      return json({ error: "invalid_notification_event" }, 400, corsHeaders);
-    }
+    const { type, channel, targetUserId, targetUserIds, messageId, callKey } = await request.json();
     const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
     if (type === "incoming_call") {
       if (typeof callKey !== "string" || callKey.length > 256) return json({ error: "invalid_notification_event" }, 400, corsHeaders);
@@ -621,18 +619,27 @@ async function handleCompanionNotify(request, env) {
       await relay.deliver({ type: "incoming_call", callKey, createdAt: Date.now() });
       return json({ delivered: true }, 200, corsHeaders);
     }
-    if (type !== "dm_message" || typeof channel !== "string" || !channel.startsWith("dm_")) {
+    if (type !== "message" || typeof channel !== "string" || typeof messageId !== "string" || messageId.length > 256 || !Array.isArray(targetUserIds) || targetUserIds.length < 1 || targetUserIds.length > 100 || targetUserIds.some((userId) => typeof userId !== "string" || userId.length > 256)) {
       return json({ error: "invalid_notification_event" }, 400, corsHeaders);
     }
-    const dm = await readFirestoreDoc(account, "dms", channel);
-    const participants = dm?.fields?.participants?.arrayValue?.values
-      ?.map((entry) => entry.stringValue)
-      .filter((value) => typeof value === "string") || [];
-    if (participants.length !== 2 || !participants.includes(senderId) || !participants.includes(targetUserId) || senderId === targetUserId) {
+    const message = await readFirestoreDoc(account, `messages/${channel}/messages`, messageId);
+    if (!message || message.fields?.userId?.stringValue !== senderId) {
       return json({ error: "notification_not_authorized" }, 403, corsHeaders);
     }
-    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(targetUserId));
-    await relay.deliver({ type: "dm_message", channel, createdAt: Date.now() });
+    const isDm = channel.startsWith("dm_");
+    if (!isDm && !COMPANION_GROUP_CHANNELS.has(channel)) return json({ error: "notification_not_authorized" }, 403, corsHeaders);
+    const participants = isDm ? (await readFirestoreDoc(account, "dms", channel))?.fields?.participants?.arrayValue?.values?.map((entry) => entry.stringValue).filter((value) => typeof value === "string") || [] : [];
+    const recipients = [...new Set(targetUserIds)].filter((userId) => userId !== senderId && (!isDm || participants.length === 2 && participants.includes(userId) && participants.includes(senderId)));
+    if (recipients.length === 0) return json({ error: "notification_not_authorized" }, 403, corsHeaders);
+    const senderProfile = await readFirestoreDoc(account, "users", senderId);
+    const senderName = senderProfile?.fields?.displayName?.stringValue || "Someone";
+    const text = message.fields?.text?.stringValue || (message.fields?.attachments?.arrayValue?.values?.length ? "Sent an attachment." : "Sent a message.");
+    await Promise.all(recipients.map(async (recipientId) => {
+      const browserOnline = await env.PRESENCE.get(env.PRESENCE.idFromName("global-presence")).isUserOnline(recipientId);
+      if (browserOnline) return;
+      const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(recipientId));
+      await relay.deliver({ type: "message", channel, senderName, text: text.slice(0, 500), createdAt: Date.now() });
+    }));
     return json({ delivered: true }, 200, corsHeaders);
   } catch {
     return json({ error: "authorization_required" }, 401, corsHeaders);
@@ -931,6 +938,10 @@ export class PresenceServer extends DurableObject {
         }
       }
     }, 15000);
+  }
+
+  isUserOnline(userId) {
+    return Array.from(this.sessions.values()).some((session) => session.userId === userId);
   }
 
   async recordMessage({ rateLimit, rateWindowMs, text, duplicateLimit, duplicateWindowMs }) {
