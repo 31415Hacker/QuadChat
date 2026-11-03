@@ -5,6 +5,15 @@ function relayBaseUrl() {
     .replace(/\/$/, "");
 }
 
+export async function syncCompanionSoundPreferences(firebaseUser, preferences) {
+  if (!firebaseUser || import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") return;
+  const baseUrl = relayBaseUrl();
+  if (!baseUrl) return;
+  try {
+    await fetch(`${baseUrl}/companion/preferences`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` }, body: JSON.stringify(preferences) });
+  } catch (error) { console.warn("[COMPANION] Sound preference sync unavailable:", error); }
+}
+
 export async function notifyPairedMessageDevices(firebaseUser, channel, messageId, targetUserIds) {
   if (!firebaseUser || !channel || !messageId || !Array.isArray(targetUserIds) || targetUserIds.length === 0 || import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") return;
   const baseUrl = relayBaseUrl();
@@ -39,6 +48,15 @@ export async function notifyPairedCallDevice(firebaseUser, callKey, targetUserId
   } catch (error) {
     console.warn("[COMPANION] Call relay unavailable:", error);
   }
+}
+
+export async function stopPairedCallRingtone(firebaseUser, callKey, targetUserId) {
+  if (!firebaseUser || !callKey || !targetUserId || import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") return;
+  const baseUrl = relayBaseUrl();
+  if (!baseUrl) return;
+  try {
+    await fetch(`${baseUrl}/companion/notify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` }, body: JSON.stringify({ type: "call_ended", callKey, targetUserId }) });
+  } catch (error) { console.warn("[COMPANION] Call ringtone stop unavailable:", error); }
 }
 
 export async function getCompanionCallAvailability(firebaseUser, userIds) {

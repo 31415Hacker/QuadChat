@@ -16,7 +16,7 @@ import { rtdb } from "../../firebase.js";
 import { notificationIcon, OPUS_BITRATE, rtcConfig } from "../constants.js";
 import { applyOpusBitrate, computeCapability } from "../utils/media.js";
 import { callApi } from "../utils/callApi.js";
-import { notifyPairedCallDevice } from "../utils/companionRelay.js";
+import { notifyPairedCallDevice, stopPairedCallRingtone } from "../utils/companionRelay.js";
 import {
   captureConstraintsForMode,
   createNoiseController,
@@ -691,6 +691,7 @@ export function useCalls({
     if (nodeRef) {
       console.log("[CALL-CLEANUP] cancelling onDisconnect + writing ended + removing node");
       onDisconnect(nodeRef).cancel();
+      stopPairedCallRingtone(user, nodeRef.key, isCallerRef.current ? callPartnerId : sessionUserId);
       update(nodeRef, { status: "ended" }).then(() => remove(nodeRef)).catch(() => {});
       if (!isCallerRef.current) {
         clearRing(sessionUserId, nodeRef.key);
@@ -1043,6 +1044,7 @@ export function useCalls({
       console.log("[CALL-ANSWER] local description set (answer)");
 
       await update(callRef, { answer: { type: answer.type, sdp: answer.sdp }, status: "connected" });
+      stopPairedCallRingtone(user, callRef.key, sessionUserId);
       console.log("[CALL-ANSWER] answer written to RTDB, status → connected");
 
       setCallStatus("connected");

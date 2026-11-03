@@ -40,7 +40,7 @@ import { onChildAdded, onValue, ref as rtdbRef, set, remove } from "firebase/dat
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
-import { getCompanionCallAvailability, notifyPairedMessageDevices } from "./utils/companionRelay.js";
+import { getCompanionCallAvailability, notifyPairedMessageDevices, syncCompanionSoundPreferences } from "./utils/companionRelay.js";
 
 import {
   CHANNELS,
@@ -383,6 +383,16 @@ export default function App() {
 
   const [onlineUsers, , presenceReady] = usePresence(user);
   const profileIdsKey = useMemo(() => Object.keys(profiles).sort().join("|"), [profiles]);
+
+  useEffect(() => {
+    if (!user) return;
+    syncCompanionSoundPreferences(user, {
+      messageSound: { kind: dmSoundType, ...(dmSoundType === "custom" ? { customDataUrl: localStorage.getItem("quadchat-dm-sound-custom") || "" } : {}) },
+      callSound: { kind: callSoundType, ...(callSoundType === "custom" ? { customDataUrl: localStorage.getItem("quadchat-call-sound-custom") || "" } : {}) },
+      messageVolume,
+      ringtoneVolume
+    });
+  }, [user, dmSoundType, callSoundType, messageVolume, ringtoneVolume]);
 
   useEffect(() => {
     if (!user || !profileIdsKey) {

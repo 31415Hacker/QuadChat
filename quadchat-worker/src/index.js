@@ -584,6 +584,19 @@ async function handleCompanionDevices(request, env) {
   }
 }
 
+async function handleCompanionPreferences(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const userId = await verifyFirebaseIdToken(requireBearer(request));
+    const preferences = await request.json();
+    const validSelection = (selection, allowed) => selection && allowed.includes(selection.kind) && (selection.kind !== "custom" || typeof selection.customDataUrl === "string" && selection.customDataUrl.length <= 2_000_000);
+    if (!validSelection(preferences.messageSound, ["android", "discord", "custom"]) || !validSelection(preferences.callSound, ["default", "samsung", "iphone", "custom"]) || !Number.isFinite(preferences.messageVolume) || !Number.isFinite(preferences.ringtoneVolume)) return json({ error: "invalid_preferences" }, 400, corsHeaders);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    await relay.setPreferences(preferences);
+    return json({ saved: true }, 200, corsHeaders);
+  } catch { return json({ error: "authorization_required" }, 401, corsHeaders); }
+}
+
 async function handleCompanionCallAvailability(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
@@ -609,6 +622,16 @@ async function handleCompanionNotify(request, env) {
     const senderId = await verifyFirebaseIdToken(requireBearer(request));
     const { type, channel, targetUserId, targetUserIds, messageId, callKey } = await request.json();
     const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    if (type === "call_ended") {
+      if (typeof callKey !== "string" || typeof targetUserId !== "string") return json({ error: "invalid_notification_event" }, 400, corsHeaders);
+      const accessToken = await getAccessToken(account);
+      const response = await fetch(`https://${account.project_id}-default-rtdb.firebaseio.com/calls/${encodeURIComponent(callKey)}.json`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const call = response.ok ? await response.json() : null;
+      if (!call || (call.callerId !== senderId && call.calleeId !== senderId) || call.calleeId !== targetUserId) return json({ error: "notification_not_authorized" }, 403, corsHeaders);
+      const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(targetUserId));
+      await relay.deliver({ type: "call_ended", callKey });
+      return json({ delivered: true }, 200, corsHeaders);
+    }
     if (type === "incoming_call") {
       if (typeof callKey !== "string" || callKey.length > 256) return json({ error: "invalid_notification_event" }, 400, corsHeaders);
       const accessToken = await getAccessToken(account);
@@ -791,6 +814,7 @@ export default {
     if (request.method === "POST" && url.pathname === "/companion/call-availability") {
       return handleCompanionCallAvailability(request, env);
     }
+    if (request.method === "PUT" && url.pathname === "/companion/preferences") return handleCompanionPreferences(request, env);
     if (request.method === "POST" && url.pathname === "/companion/notify") {
       return handleCompanionNotify(request, env);
     }
@@ -884,6 +908,12 @@ export class CompanionRelay extends DurableObject {
     return this.sessions.size > 0;
   }
 
+  async setPreferences(preferences) {
+    await this.ctx.storage.put("preferences", preferences);
+    const payload = JSON.stringify({ type: "preferences", preferences });
+    for (const [socket] of this.sessions) { try { socket.send(payload); } catch { this.sessions.delete(socket); } }
+  }
+
   async fetch(request) {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -904,6 +934,8 @@ export class CompanionRelay extends DurableObject {
         await this.ctx.storage.put("devices", devices);
         clearTimeout(timer);
         this.sessions.set(server, { deviceId });
+        const preferences = await this.ctx.storage.get("preferences");
+        if (preferences) server.send(JSON.stringify({ type: "preferences", preferences }));
         server.send(JSON.stringify({ type: "ready" }));
       } catch {
         server.close(1008, "Authentication failed");

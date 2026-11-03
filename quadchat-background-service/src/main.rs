@@ -1,6 +1,7 @@
 mod credentials;
 
 use std::collections::{HashMap, HashSet};
+use std::io::Cursor;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -8,6 +9,8 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use serde::Deserialize;
+use base64::{engine::general_purpose::STANDARD, Engine};
+use rodio::{Decoder, OutputStream, Sink, Source};
 use sha2::{Digest, Sha256};
 use tungstenite::{connect, Message};
 use keyring::Entry;
@@ -409,9 +412,66 @@ struct RelayEvent {
     sender_name: Option<String>,
     text: Option<String>,
     channel: Option<String>,
+    preferences: Option<SoundPreferences>,
 }
 
-fn show_relay_notification(event: &RelayEvent) {
+#[derive(Deserialize)]
+struct SoundSelection { kind: String, #[serde(rename = "customDataUrl")] custom_data_url: Option<String> }
+
+#[derive(Deserialize)]
+struct SoundPreferences {
+    #[serde(rename = "messageSound")] message_sound: Option<SoundSelection>,
+    #[serde(rename = "callSound")] call_sound: Option<SoundSelection>,
+    #[serde(rename = "messageVolume")] message_volume: Option<f32>,
+    #[serde(rename = "ringtoneVolume")] ringtone_volume: Option<f32>,
+}
+
+struct SoundPlayer {
+    message_audio: Vec<u8>,
+    ringtone_audio: Vec<u8>,
+    message_volume: f32,
+    ringtone_volume: f32,
+    ringtone_stream: Option<OutputStream>,
+    ringtone_sink: Option<Sink>,
+}
+
+impl SoundPlayer {
+    fn new() -> Self {
+        Self { message_audio: include_bytes!("../../public/sounds/android-sound-effect-meme_tcbuori.mp3").to_vec(), ringtone_audio: include_bytes!("../../public/sounds/normal-average-ringtone.mp3").to_vec(), message_volume: 0.2, ringtone_volume: 0.2, ringtone_stream: None, ringtone_sink: None }
+    }
+    fn audio_for(kind: &str, custom: Option<&str>, fallback: &[u8], is_call: bool) -> Vec<u8> {
+        if kind == "custom" {
+            if let Some(data_url) = custom.and_then(|value| value.split_once(',').map(|(_, data)| data)) {
+                if let Ok(bytes) = STANDARD.decode(data_url) { return bytes; }
+            }
+        }
+        match (is_call, kind) {
+            (false, "discord") => include_bytes!("../../public/sounds/discord-notification.mp3").to_vec(),
+            (true, "samsung") => include_bytes!("../../public/sounds/samsung-ringtone.mp3").to_vec(),
+            (true, "iphone") => include_bytes!("../../public/sounds/iphone_ringtone_trap_remixbigconverter.mp3").to_vec(),
+            _ => fallback.to_vec(),
+        }
+    }
+    fn apply_preferences(&mut self, preferences: SoundPreferences) {
+        if let Some(selection) = preferences.message_sound { self.message_audio = Self::audio_for(&selection.kind, selection.custom_data_url.as_deref(), include_bytes!("../../public/sounds/android-sound-effect-meme_tcbuori.mp3"), false); }
+        if let Some(selection) = preferences.call_sound { self.ringtone_audio = Self::audio_for(&selection.kind, selection.custom_data_url.as_deref(), include_bytes!("../../public/sounds/normal-average-ringtone.mp3"), true); }
+        if let Some(volume) = preferences.message_volume.filter(|value| (0.0..=1.0).contains(value)) { self.message_volume = volume; }
+        if let Some(volume) = preferences.ringtone_volume.filter(|value| (0.0..=1.0).contains(value)) { self.ringtone_volume = volume; }
+    }
+    fn play_message(&self) {
+        let bytes = self.message_audio.clone(); let volume = self.message_volume;
+        thread::spawn(move || if let Ok((stream, handle)) = OutputStream::try_default() { if let Ok(sink) = Sink::try_new(&handle) { if let Ok(audio) = Decoder::new(Cursor::new(bytes)) { sink.set_volume(volume); sink.append(audio); sink.sleep_until_end(); } } drop(stream); });
+    }
+    fn start_ringtone(&mut self) {
+        if self.ringtone_sink.is_some() { return; }
+        if let Ok((stream, handle)) = OutputStream::try_default() { if let Ok(sink) = Sink::try_new(&handle) { if let Ok(audio) = Decoder::new(Cursor::new(self.ringtone_audio.clone())) { sink.set_volume(self.ringtone_volume); sink.append(audio.repeat_infinite()); self.ringtone_stream = Some(stream); self.ringtone_sink = Some(sink); } } }
+    }
+    fn stop_ringtone(&mut self) { if let Some(sink) = self.ringtone_sink.take() { sink.stop(); } self.ringtone_stream = None; }
+}
+
+fn show_relay_notification(event: &mut RelayEvent, sound_player: &mut SoundPlayer) {
+    if let Some(preferences) = event.preferences.take() { sound_player.apply_preferences(preferences); return; }
+    if event.event_type == "call_ended" { sound_player.stop_ringtone(); return; }
     let (summary, body) = match event.event_type.as_str() {
         "message" => {
             let sender = event.sender_name.as_deref().unwrap_or("Someone");
@@ -432,6 +492,8 @@ fn show_relay_notification(event: &RelayEvent) {
     if let Err(error) = notification.show() {
         eprintln!("[COMPANION] Native notification failed: {error}");
     }
+    if event.event_type == "message" { sound_player.play_message(); }
+    if event.event_type == "incoming_call" { sound_player.start_ringtone(); }
     if event.event_type == "incoming_call" {
         if let Some(call_key) = &event.call_key {
             println!("[COMPANION] Incoming call alert for {call_key}");
@@ -511,6 +573,7 @@ fn run_companion_relay() -> Result<(), String> {
         .map_err(|_| "Set QUADCHAT_COMPANION_WORKER_URL to the HTTPS Cloudflare Worker URL".to_owned())?;
     let relay_url = format!("{}/companion/connect?user={}", worker_url.trim_end_matches('/').replace("https://", "wss://").replace("http://", "ws://"), percent_encode(&credential.subject));
     let mut retry_seconds = 1_u64;
+    let mut sound_player = SoundPlayer::new();
     loop {
         match connect(relay_url.as_str()) {
             Ok((mut socket, _)) => {
@@ -525,8 +588,8 @@ fn run_companion_relay() -> Result<(), String> {
                     match socket.read() {
                         Ok(Message::Text(text)) => {
                             println!("[COMPANION RELAY] {text}");
-                            if let Ok(event) = serde_json::from_str::<RelayEvent>(&text) {
-                                show_relay_notification(&event);
+                            if let Ok(mut event) = serde_json::from_str::<RelayEvent>(&text) {
+                                show_relay_notification(&mut event, &mut sound_player);
                             }
                         }
                         Ok(Message::Close(_)) => break,

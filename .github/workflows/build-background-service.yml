@@ -37,6 +37,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux audio build dependencies
+        if: matrix.package == 'deb'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - run: cargo build --release
       - name: Build Windows installer
         if: matrix.package == 'exe'
@@ -53,7 +56,7 @@ jobs:
         run: |
           mkdir -p package-root/usr/local/bin
           cp target/release/${{ matrix.binary }} package-root/usr/local/bin/quadchat-background-service
-          pkgbuild --root package-root --identifier com.quadchat.background-service --version 0.1.1 --install-location / quadchat-background-service-macos-arm64.pkg
+          pkgbuild --root package-root --identifier com.quadchat.background-service --version 0.1.2 --install-location / quadchat-background-service-macos-arm64.pkg
       - name: Build Linux package
         if: matrix.package == 'deb'
         shell: bash

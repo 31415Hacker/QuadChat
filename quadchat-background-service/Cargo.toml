@@ -1,6 +1,6 @@
 [package]
 name = "quadchat-background-service"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "QuadChat background companion service"
 
@@ -8,6 +8,8 @@ description = "QuadChat background companion service"
 getrandom = "0.2"
 keyring = "4.2"
 notify-rust = "4"
+base64 = "0.22"
+rodio = { version = "0.20", default-features = false, features = ["mp3"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
