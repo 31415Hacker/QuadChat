@@ -579,6 +579,25 @@ async function handleCompanionDevices(request, env) {
   }
 }
 
+async function handleCompanionCallAvailability(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    await verifyFirebaseIdToken(requireBearer(request));
+    const { userIds } = await request.json();
+    if (!Array.isArray(userIds) || userIds.length > 100 || userIds.some((userId) => typeof userId !== "string" || userId.length < 1 || userId.length > 256)) {
+      return json({ error: "invalid_user_ids" }, 400, corsHeaders);
+    }
+    const uniqueUserIds = [...new Set(userIds)];
+    const availability = await Promise.all(uniqueUserIds.map(async (userId) => {
+      const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+      return (await relay.hasConnectedDevice()) ? userId : null;
+    }));
+    return json({ connectedUserIds: availability.filter(Boolean) }, 200, corsHeaders);
+  } catch {
+    return json({ error: "authorization_required" }, 401, corsHeaders);
+  }
+}
+
 async function handleCompanionNotify(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
@@ -758,6 +777,9 @@ export default {
     if ((request.method === "GET" || request.method === "DELETE") && url.pathname === "/companion/devices") {
       return handleCompanionDevices(request, env);
     }
+    if (request.method === "POST" && url.pathname === "/companion/call-availability") {
+      return handleCompanionCallAvailability(request, env);
+    }
     if (request.method === "POST" && url.pathname === "/companion/notify") {
       return handleCompanionNotify(request, env);
     }
@@ -845,6 +867,10 @@ export class CompanionRelay extends DurableObject {
       }
     }
     return { delivered };
+  }
+
+  async hasConnectedDevice() {
+    return this.sessions.size > 0;
   }
 
   async fetch(request) {

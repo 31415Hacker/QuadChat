@@ -8,6 +8,7 @@ export default function UsersSidebar({
   profiles,
   sessionUserId,
   onlineUsers,
+  companionConnectedUserIds,
   openUserAnalytics,
   openDm,
   startCall,
@@ -85,6 +86,7 @@ export default function UsersSidebar({
           const theirMode = profile.status?.mode;
           const isSelf = profile.id === sessionUserId;
           const userActive = isSelf || onlineUsers.has(profile.id);
+          const canReceiveCall = userActive || companionConnectedUserIds.has(profile.id);
           const statusMode = userActive ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
           const isInGroupCall =
             (groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
@@ -149,7 +151,7 @@ export default function UsersSidebar({
                   <MessageCircle size={10} />
                 </button>
               ) : null}
-              {profile.id !== sessionUserId && userActive && callStatus === "idle" ? (
+              {profile.id !== sessionUserId && canReceiveCall && callStatus === "idle" ? (
                 <button
                   className="user-call-btn"
                   type="button"

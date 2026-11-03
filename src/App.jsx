@@ -40,7 +40,7 @@ import { onChildAdded, onValue, ref as rtdbRef, set, remove } from "firebase/dat
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
-import { notifyPairedDmDevice } from "./utils/companionRelay.js";
+import { getCompanionCallAvailability, notifyPairedDmDevice } from "./utils/companionRelay.js";
 
 import {
   CHANNELS,
@@ -152,6 +152,7 @@ export default function App() {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [messages, setMessages] = useState([]);
   const [profiles, setProfiles] = useState({});
+  const [companionConnectedUserIds, setCompanionConnectedUserIds] = useState(() => new Set());
   const [replyTo, setReplyTo] = useState(null);
   const [openMessageMenuId, setOpenMessageMenuId] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
@@ -381,6 +382,26 @@ export default function App() {
   };
 
   const [onlineUsers, , presenceReady] = usePresence(user);
+  const profileIdsKey = useMemo(() => Object.keys(profiles).sort().join("|"), [profiles]);
+
+  useEffect(() => {
+    if (!user || !profileIdsKey) {
+      setCompanionConnectedUserIds(new Set());
+      return undefined;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      const userIds = profileIdsKey.split("|").filter((userId) => userId && userId !== sessionUserId);
+      const connectedUserIds = await getCompanionCallAvailability(user, userIds);
+      if (!cancelled) setCompanionConnectedUserIds(new Set(connectedUserIds));
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [user, sessionUserId, profileIdsKey]);
 
   const { confirmState, ask, closeConfirm } = useConfirmDialog();
 
@@ -4053,6 +4074,7 @@ export default function App() {
                   profiles={profiles}
                   sessionUserId={sessionUserId}
                   onlineUsers={onlineUsers}
+                  companionConnectedUserIds={companionConnectedUserIds}
                   openUserAnalytics={openUserAnalytics}
                   openDm={openDm}
                   startCall={startCall}
