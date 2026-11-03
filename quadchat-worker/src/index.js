@@ -387,6 +387,8 @@ const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
 const MAX_SESSIONS_PER_USER = 3;
 const MAX_CONNECTION_ATTEMPTS_PER_MINUTE = 10;
 const MAX_MESSAGES_PER_MINUTE = 12;
+const COMPANION_CODE_TTL_MS = 60_000;
+const COMPANION_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000;
 
 let tokenCache = null;
 let jwksCache = { keys: null, fetchedAt: 0 };
@@ -468,6 +470,94 @@ async function verifyFirebaseIdToken(token) {
     throw new Error("Invalid signature");
   }
   return payload.sub;
+}
+
+function requireBearer(request) {
+  const value = request.headers.get("Authorization") || "";
+  if (!value.startsWith("Bearer ") || value.length <= 7) throw new Error("Missing bearer token");
+  return value.slice(7);
+}
+
+function randomSecret(bytes = 32) {
+  const data = crypto.getRandomValues(new Uint8Array(bytes));
+  return Array.from(data, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+export async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function safeEqual(left, right) {
+  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
+  let result = 0;
+  for (let index = 0; index < left.length; index += 1) result |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return result === 0;
+}
+
+function validLoopbackRedirect(uri) {
+  try {
+    const url = new URL(uri);
+    return url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost") && Boolean(url.port);
+  } catch {
+    return false;
+  }
+}
+
+async function handleCompanionAuthorize(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const userId = await verifyFirebaseIdToken(requireBearer(request));
+    const body = await request.json();
+    const { codeChallenge, codeChallengeMethod, redirectUri, state } = body || {};
+    if (
+      codeChallengeMethod !== "S256" ||
+      typeof codeChallenge !== "string" || codeChallenge.length < 43 || codeChallenge.length > 128 ||
+      typeof state !== "string" || state.length < 32 || state.length > 256 ||
+      typeof redirectUri !== "string" || !validLoopbackRedirect(redirectUri)
+    ) {
+      return json({ error: "invalid_authorization_request" }, 400, corsHeaders);
+    }
+    const code = randomSecret();
+    const stub = env.PAIRING_CODE.get(env.PAIRING_CODE.idFromName(code));
+    await stub.create({ userId, codeChallenge, redirectUri, state, expiresAt: Date.now() + COMPANION_CODE_TTL_MS });
+    return json({ redirectUrl: `${redirectUri}?code=${code}&state=${encodeURIComponent(state)}` }, 200, corsHeaders);
+  } catch (error) {
+    return json({ error: "authorization_required" }, 401, corsHeaders);
+  }
+}
+
+async function handleCompanionToken(request, env) {
+  try {
+    const { code, codeVerifier } = await request.json();
+    if (typeof code !== "string" || !/^[a-f0-9]{64}$/.test(code) || typeof codeVerifier !== "string" || codeVerifier.length < 43 || codeVerifier.length > 128) {
+      return json({ error: "invalid_grant" }, 400);
+    }
+    const codeStub = env.PAIRING_CODE.get(env.PAIRING_CODE.idFromName(code));
+    const pairing = await codeStub.redeem({ codeVerifier });
+    if (!pairing) return json({ error: "invalid_grant" }, 400);
+    const deviceId = crypto.randomUUID();
+    const token = randomSecret();
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(pairing.userId));
+    await relay.provision({ deviceId, tokenHash: await sha256Hex(token), expiresAt: Date.now() + COMPANION_TOKEN_TTL_MS });
+    return json({ access_token: token, token_type: "Bearer", expires_in: COMPANION_TOKEN_TTL_MS / 1000, device_id: deviceId, subject: pairing.userId });
+  } catch {
+    return json({ error: "invalid_grant" }, 400);
+  }
+}
+
+async function handleCompanionRevoke(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const userId = await verifyFirebaseIdToken(requireBearer(request));
+    const { deviceId } = await request.json();
+    if (typeof deviceId !== "string" || deviceId.length > 100) return json({ error: "invalid_device" }, 400, corsHeaders);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    await relay.revoke(deviceId);
+    return json({ revoked: true }, 200, corsHeaders);
+  } catch {
+    return json({ error: "authorization_required" }, 401, corsHeaders);
+  }
 }
 
 function pemToArrayBuffer(pem) {
@@ -597,6 +687,24 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    if (request.method === "OPTIONS" && url.pathname.startsWith("/companion/")) {
+      return new Response(null, { status: 204, headers: getCorsHeaders(request) });
+    }
+    if (request.method === "POST" && url.pathname === "/companion/authorize") {
+      return handleCompanionAuthorize(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/companion/token") {
+      return handleCompanionToken(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/companion/revoke") {
+      return handleCompanionRevoke(request, env);
+    }
+    if (url.pathname === "/companion/connect" && request.headers.get("Upgrade") === "websocket") {
+      const userId = url.searchParams.get("user");
+      if (!userId || userId.length > 256) return new Response("Missing user", { status: 400 });
+      return env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId)).fetch(request);
+    }
+
     if (url.pathname === "/moderate") {
       return handleModerate(request, env);
     }
@@ -609,6 +717,72 @@ export default {
     return new Response("QuadChat Presence Server running", { status: 200 });
   }
 };
+
+export class PairingCode extends DurableObject {
+  async create(pairing) {
+    await this.ctx.storage.put("pairing", pairing);
+  }
+
+  async redeem({ codeVerifier }) {
+    const pairing = await this.ctx.storage.get("pairing");
+    await this.ctx.storage.delete("pairing");
+    if (!pairing || pairing.expiresAt < Date.now()) return null;
+    const challenge = await sha256Hex(codeVerifier).then((hex) => {
+      const bytes = Uint8Array.from(hex.match(/.{2}/g), (value) => Number.parseInt(value, 16));
+      return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    });
+    return safeEqual(challenge, pairing.codeChallenge) ? { userId: pairing.userId } : null;
+  }
+}
+
+export class CompanionRelay extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sessions = new Map();
+  }
+
+  async provision(device) {
+    const devices = (await this.ctx.storage.get("devices")) || {};
+    devices[device.deviceId] = device;
+    await this.ctx.storage.put("devices", devices);
+  }
+
+  async revoke(deviceId) {
+    const devices = (await this.ctx.storage.get("devices")) || {};
+    delete devices[deviceId];
+    await this.ctx.storage.put("devices", devices);
+    for (const [socket, session] of this.sessions) {
+      if (session.deviceId === deviceId) socket.close(1008, "Device revoked");
+    }
+  }
+
+  async fetch(request) {
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    server.accept();
+    let authenticated = false;
+    const timer = setTimeout(() => { if (!authenticated) server.close(1008, "Authentication timeout"); }, 15_000);
+    server.addEventListener("message", async (event) => {
+      if (authenticated) return;
+      try {
+        const { type, deviceId, token } = JSON.parse(event.data);
+        if (type !== "auth" || typeof deviceId !== "string" || typeof token !== "string") throw new Error("Invalid auth");
+        const devices = (await this.ctx.storage.get("devices")) || {};
+        const device = devices[deviceId];
+        if (!device || device.expiresAt < Date.now() || !safeEqual(device.tokenHash, await sha256Hex(token))) throw new Error("Invalid device token");
+        authenticated = true;
+        clearTimeout(timer);
+        this.sessions.set(server, { deviceId });
+        server.send(JSON.stringify({ type: "ready" }));
+      } catch {
+        server.close(1008, "Authentication failed");
+      }
+    });
+    server.addEventListener("close", () => this.sessions.delete(server));
+    server.addEventListener("error", () => this.sessions.delete(server));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+}
 
 export class PresenceServer extends DurableObject {
   constructor(state, env) {

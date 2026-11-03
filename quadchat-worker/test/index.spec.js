@@ -11,6 +11,7 @@ import worker, {
 	buildSpamIncidentWrite,
 	findStandaloneProfanity,
 	getSpamMuteEscalation,
+	sha256Hex,
 } from "../src";
 
 describe("QuadChat Presence worker", () => {
@@ -96,6 +97,26 @@ describe("Moderation Firestore writes", () => {
 			expect(write.update.updateMask).toBeUndefined();
 			expect(write.update.updateTransforms).toBeUndefined();
 		}
+	});
+});
+
+describe("Companion pairing codes", () => {
+	it("redeems a PKCE code exactly once", async () => {
+		const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+		const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+		const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+			.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+		const code = `pairing-test-${crypto.randomUUID()}`;
+		const pairing = env.PAIRING_CODE.get(env.PAIRING_CODE.idFromName(code));
+		await pairing.create({ userId: "test-user", codeChallenge: challenge, expiresAt: Date.now() + 60_000 });
+		expect(await pairing.redeem({ codeVerifier: verifier })).toEqual({ userId: "test-user" });
+		expect(await pairing.redeem({ codeVerifier: verifier })).toBeNull();
+	});
+
+	it("hashes device secrets without retaining their plaintext", async () => {
+		const hash = await sha256Hex("device-secret");
+		expect(hash).toHaveLength(64);
+		expect(hash).not.toContain("device-secret");
 	});
 });
 
