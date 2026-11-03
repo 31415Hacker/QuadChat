@@ -399,6 +399,34 @@ struct ProductionTokenResponse {
     expires_in: u64,
 }
 
+#[derive(Deserialize)]
+struct RelayEvent {
+    #[serde(rename = "type")]
+    event_type: String,
+    #[serde(rename = "callKey")]
+    call_key: Option<String>,
+}
+
+fn show_relay_notification(event: &RelayEvent) {
+    let (summary, body) = match event.event_type.as_str() {
+        "dm_message" => ("QuadChat", "You have a new direct message."),
+        "incoming_call" => ("QuadChat incoming call", "Open QuadChat to answer your call."),
+        _ => return,
+    };
+    if let Err(error) = notify_rust::Notification::new()
+        .summary(summary)
+        .body(body)
+        .appname("QuadChat Service")
+        .show() {
+        eprintln!("[COMPANION] Native notification failed: {error}");
+    }
+    if event.event_type == "incoming_call" {
+        if let Some(call_key) = &event.call_key {
+            println!("[COMPANION] Incoming call alert for {call_key}");
+        }
+    }
+}
+
 fn run_production_pairing() -> Result<(), String> {
     let worker_url = std::env::var("QUADCHAT_COMPANION_WORKER_URL")
         .map_err(|_| "Set QUADCHAT_COMPANION_WORKER_URL to the HTTPS Cloudflare Worker URL".to_owned())?
@@ -483,7 +511,12 @@ fn run_companion_relay() -> Result<(), String> {
                 }
                 loop {
                     match socket.read() {
-                        Ok(Message::Text(text)) => println!("[COMPANION RELAY] {text}"),
+                        Ok(Message::Text(text)) => {
+                            println!("[COMPANION RELAY] {text}");
+                            if let Ok(event) = serde_json::from_str::<RelayEvent>(&text) {
+                                show_relay_notification(&event);
+                            }
+                        }
                         Ok(Message::Close(_)) => break,
                         Ok(_) => {},
                         Err(error) => { eprintln!("[COMPANION RELAY] Connection lost: {error}"); break; }
