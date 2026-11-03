@@ -9,6 +9,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use tungstenite::{connect, Message};
 use keyring::Entry;
 
 const SERVICE_PORT: u16 = 43721;
@@ -459,6 +460,43 @@ fn run_production_pairing() -> Result<(), String> {
     Ok(())
 }
 
+fn run_companion_relay() -> Result<(), String> {
+    let credential = credentials::load()?.ok_or_else(|| "Pair this companion first with --pair-companion".to_owned())?;
+    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_err(|error| error.to_string())?.as_millis() as u64;
+    if credential.expires_at_ms <= now {
+        credentials::clear()?;
+        return Err("The companion credential has expired. Pair again.".to_owned());
+    }
+    let worker_url = std::env::var("QUADCHAT_COMPANION_WORKER_URL")
+        .map_err(|_| "Set QUADCHAT_COMPANION_WORKER_URL to the HTTPS Cloudflare Worker URL".to_owned())?;
+    let relay_url = format!("{}/companion/connect?user={}", worker_url.trim_end_matches('/').replace("https://", "wss://").replace("http://", "ws://"), percent_encode(&credential.subject));
+    let mut retry_seconds = 1_u64;
+    loop {
+        match connect(relay_url.as_str()) {
+            Ok((mut socket, _)) => {
+                retry_seconds = 1;
+                let auth = serde_json::json!({ "type": "auth", "deviceId": credential.device_id, "token": credential.access_token }).to_string();
+                if socket.send(Message::Text(auth)).is_err() {
+                    thread::sleep(Duration::from_secs(retry_seconds));
+                    retry_seconds = (retry_seconds * 2).min(30);
+                    continue;
+                }
+                loop {
+                    match socket.read() {
+                        Ok(Message::Text(text)) => println!("[COMPANION RELAY] {text}"),
+                        Ok(Message::Close(_)) => break,
+                        Ok(_) => {},
+                        Err(error) => { eprintln!("[COMPANION RELAY] Connection lost: {error}"); break; }
+                    }
+                }
+            }
+            Err(error) => eprintln!("[COMPANION RELAY] Connection failed: {error}"),
+        }
+        thread::sleep(Duration::from_secs(retry_seconds));
+        retry_seconds = (retry_seconds * 2).min(30);
+    }
+}
+
 fn percent_encode(value: &str) -> String {
     value.bytes().map(|byte| if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') { (byte as char).to_string() } else { format!("%{byte:02X}") }).collect()
 }
@@ -478,6 +516,9 @@ fn main() {
     else if std::env::args().any(|arg| arg == "--forget-companion") {
         if let Err(error) = credentials::clear() { eprintln!("Could not clear OS credential store: {error}"); std::process::exit(1); }
         println!("QuadChat companion credential removed.");
+    }
+    else if std::env::args().any(|arg| arg == "--relay-companion") {
+        if let Err(error) = run_companion_relay() { eprintln!("Companion relay stopped: {error}"); std::process::exit(1); }
     }
     else { println!("Hello, World from the QuadChat Background Service!"); println!("Run with --local-connection-test to start the localhost OAuth + PKCE test harness."); }
 }
