@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
+const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const FIRESTORE_BASE = "https://firestore.googleapis.com/v1";
 const JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
@@ -564,11 +564,24 @@ async function handleCompanionNotify(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
     const senderId = await verifyFirebaseIdToken(requireBearer(request));
-    const { type, channel, targetUserId } = await request.json();
-    if (type !== "dm_message" || typeof channel !== "string" || !channel.startsWith("dm_") || typeof targetUserId !== "string") {
+    const { type, channel, targetUserId, callKey } = await request.json();
+    if (typeof targetUserId !== "string") {
       return json({ error: "invalid_notification_event" }, 400, corsHeaders);
     }
     const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    if (type === "incoming_call") {
+      if (typeof callKey !== "string" || callKey.length > 256) return json({ error: "invalid_notification_event" }, 400, corsHeaders);
+      const accessToken = await getAccessToken(account);
+      const response = await fetch(`https://${account.project_id}-default-rtdb.firebaseio.com/calls/${encodeURIComponent(callKey)}.json`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const call = response.ok ? await response.json() : null;
+      if (!call || call.callerId !== senderId || call.calleeId !== targetUserId || call.status !== "calling") return json({ error: "notification_not_authorized" }, 403, corsHeaders);
+      const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(targetUserId));
+      await relay.deliver({ type: "incoming_call", callKey, createdAt: Date.now() });
+      return json({ delivered: true }, 200, corsHeaders);
+    }
+    if (type !== "dm_message" || typeof channel !== "string" || !channel.startsWith("dm_")) {
+      return json({ error: "invalid_notification_event" }, 400, corsHeaders);
+    }
     const dm = await readFirestoreDoc(account, "dms", channel);
     const participants = dm?.fields?.participants?.arrayValue?.values
       ?.map((entry) => entry.stringValue)

@@ -24,3 +24,18 @@ export async function notifyPairedDmDevice(firebaseUser, channel, targetUserId) 
     console.warn("[COMPANION] DM relay unavailable:", error);
   }
 }
+
+export async function notifyPairedCallDevice(firebaseUser, callKey, targetUserId) {
+  if (!firebaseUser || !callKey || !targetUserId || import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") return;
+  const baseUrl = relayBaseUrl();
+  if (!baseUrl) return;
+  try {
+    await fetch(`${baseUrl}/companion/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+      body: JSON.stringify({ type: "incoming_call", callKey, targetUserId })
+    });
+  } catch (error) {
+    console.warn("[COMPANION] Call relay unavailable:", error);
+  }
+}

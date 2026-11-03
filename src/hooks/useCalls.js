@@ -16,6 +16,7 @@ import { rtdb } from "../../firebase.js";
 import { notificationIcon, OPUS_BITRATE, rtcConfig } from "../constants.js";
 import { applyOpusBitrate, computeCapability } from "../utils/media.js";
 import { callApi } from "../utils/callApi.js";
+import { notifyPairedCallDevice } from "../utils/companionRelay.js";
 import {
   captureConstraintsForMode,
   createNoiseController,
@@ -843,6 +844,7 @@ export function useCalls({
         callKey: callRef.key
       }).catch(() => {});
       console.log("[CALL-START] ring written for callee");
+      notifyPairedCallDevice(user, callRef.key, calleeId);
 
       setCallStatus("calling");
       setCallPartnerId(calleeId);
