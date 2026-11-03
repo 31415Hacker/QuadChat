@@ -30,11 +30,12 @@ export async function notifyPairedCallDevice(firebaseUser, callKey, targetUserId
   const baseUrl = relayBaseUrl();
   if (!baseUrl) return;
   try {
-    await fetch(`${baseUrl}/companion/notify`, {
+    const response = await fetch(`${baseUrl}/companion/notify`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
       body: JSON.stringify({ type: "incoming_call", callKey, targetUserId })
     });
+    if (!response.ok) console.warn("[COMPANION] Call relay rejected:", response.status);
   } catch (error) {
     console.warn("[COMPANION] Call relay unavailable:", error);
   }

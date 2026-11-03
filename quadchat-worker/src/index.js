@@ -1,7 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+const FIREBASE_SERVER_SCOPES = [
+  "https://www.googleapis.com/auth/cloud-platform",
+  "https://www.googleapis.com/auth/firebase.database",
+  "https://www.googleapis.com/auth/userinfo.email"
+].join(" ");
 const FIRESTORE_BASE = "https://firestore.googleapis.com/v1";
 const JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
@@ -668,7 +672,7 @@ async function getAccessToken(account) {
   const header = { alg: "RS256", typ: "JWT" };
   const claims = {
     iss: account.client_email,
-    scope: FIRESTORE_SCOPE,
+    scope: FIREBASE_SERVER_SCOPES,
     aud: TOKEN_URL,
     iat: now,
     exp: now + 3600
