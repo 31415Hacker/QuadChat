@@ -153,6 +153,34 @@ export default function SettingsPage({
 }) {
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
   const [copiedInviteCode, setCopiedInviteCode] = useState("");
+  const [companionDevices, setCompanionDevices] = useState([]);
+  const [companionDeviceError, setCompanionDeviceError] = useState("");
+
+  const companionWorkerUrl = (import.meta.env.VITE_PRESENCE_WORKER_URL || "")
+    .replace(/^wss:/, "https:")
+    .replace(/^ws:/, "http:")
+    .replace(/\/$/, "");
+
+  const refreshCompanionDevices = async () => {
+    if (!user || !companionWorkerUrl || import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") return;
+    try {
+      const response = await fetch(`${companionWorkerUrl}/companion/devices`, { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load devices");
+      setCompanionDevices(data.devices || []);
+      setCompanionDeviceError("");
+    } catch (error) { setCompanionDeviceError(error.message); }
+  };
+
+  const revokeCompanionDevice = async (body) => {
+    try {
+      const response = await fetch(`${companionWorkerUrl}/companion/devices`, { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` }, body: JSON.stringify(body) });
+      if (!response.ok) throw new Error("Could not revoke device");
+      refreshCompanionDevices();
+    } catch (error) { setCompanionDeviceError(error.message); }
+  };
+
+  useEffect(() => { if (settingsTab === "advanced") refreshCompanionDevices(); }, [settingsTab]);
 
   useEffect(() => {
     if (!copiedInviteCode) return undefined;
@@ -866,6 +894,12 @@ export default function SettingsPage({
                     const file = navigator.userAgent.includes("CrOS") ? "quadchat-background-service-linux-x64.deb" : navigator.userAgent.includes("Win") ? "quadchat-background-service-windows-x64-setup.exe" : navigator.userAgent.includes("Mac") ? "quadchat-background-service-macos-arm64.pkg" : "quadchat-background-service-linux-x64.deb";
                     return `https://github.com/31415Hacker/QuadChat/releases/download/background-service-latest/${file}`;
                   })()}>Install QuadChat Service</a>
+                </section>
+                <section className="settings-section-box">
+                  <div><h3>Paired service devices</h3><p>Only these devices can receive companion alerts for your account.</p></div>
+                  {companionDevices.length ? companionDevices.map((device) => <div className="admin-account-row" key={device.deviceId}><span>Device {device.deviceId.slice(0, 8)} · last connected {device.lastConnectedAt ? new Date(device.lastConnectedAt).toLocaleString() : "never"}</span><button type="button" onClick={() => revokeCompanionDevice({ deviceId: device.deviceId })}>Revoke</button></div>) : <p>No paired devices.</p>}
+                  {companionDevices.length ? <button type="button" onClick={() => revokeCompanionDevice({ all: true })}>Revoke all devices</button> : null}
+                  {companionDeviceError ? <p className="error-banner inline-error">{companionDeviceError}</p> : null}
                 </section>
               </>
             ) : null}
