@@ -40,6 +40,7 @@ import { onChildAdded, onValue, ref as rtdbRef, set, remove } from "firebase/dat
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
+import { notifyPairedDmDevice } from "./utils/companionRelay.js";
 
 import {
   CHANNELS,
@@ -3396,6 +3397,7 @@ export default function App() {
         ...data,
         createdAt: serverTimestamp()
       });
+      return messageRef.id;
     } catch (error) {
       setMessages((prev) => prev.filter((message) => message.id !== messageRef.id));
       throw error;
@@ -3537,6 +3539,10 @@ export default function App() {
           ...(attachmentCount > 0 ? { attachments: uploadedAttachments } : {}),
           userId: sessionUserId
         });
+        if (isDmChannelId(activeChannel)) {
+          const targetUserId = dmPartnerId(activeChannel, sessionUserId);
+          notifyPairedDmDevice(user, activeChannel, targetUserId);
+        }
       }
 
       setMessage("");
