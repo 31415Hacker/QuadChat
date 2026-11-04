@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=QuadChat Companion
+Comment=Manage QuadChat background notifications
+Exec=/usr/local/bin/quadchat-background-service
+Terminal=false
+Categories=Network;Chat;

@@ -56,7 +56,10 @@ jobs:
         run: |
           mkdir -p package-root/usr/local/bin
           cp target/release/${{ matrix.binary }} package-root/usr/local/bin/quadchat-background-service
-          pkgbuild --root package-root --identifier com.quadchat.background-service --version 0.1.4 --install-location / quadchat-background-service-macos-arm64.pkg
+          mkdir -p "package-root/Applications/QuadChat Companion.app/Contents/MacOS"
+          cp target/release/${{ matrix.binary }} "package-root/Applications/QuadChat Companion.app/Contents/MacOS/QuadChat Companion"
+          printf '%s' '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>QuadChat Companion</string><key>CFBundleIdentifier</key><string>com.quadchat.background-service</string><key>CFBundleName</key><string>QuadChat Companion</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>' > "package-root/Applications/QuadChat Companion.app/Contents/Info.plist"
+          pkgbuild --root package-root --identifier com.quadchat.background-service --version 1.5.0 --install-location / quadchat-background-service-macos-arm64.pkg
       - name: Build Linux package
         if: matrix.package == 'deb'
         shell: bash
@@ -64,6 +67,8 @@ jobs:
           mkdir -p package-root/usr/local/bin package-root/DEBIAN
           cp target/release/${{ matrix.binary }} package-root/usr/local/bin/quadchat-background-service
           cp installers/DEBIAN/control package-root/DEBIAN/control
+          mkdir -p package-root/usr/share/applications
+          cp installers/quadchat-companion.desktop package-root/usr/share/applications/quadchat-companion.desktop
           dpkg-deb --build package-root quadchat-background-service-linux-x64.deb
       - name: Collect installer
         shell: bash

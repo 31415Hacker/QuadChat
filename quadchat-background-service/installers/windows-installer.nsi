@@ -14,6 +14,7 @@ Section "Install"
   File "quadchat-background-service.exe"
   CreateShortcut "$DESKTOP\QuadChat Background Service.lnk" "$INSTDIR\${EXE}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
+  Exec '"$INSTDIR\${EXE}"'
 SectionEnd
 
 Section "Uninstall"

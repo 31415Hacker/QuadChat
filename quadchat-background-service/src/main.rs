@@ -6,6 +6,7 @@ use std::io::Cursor;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use std::process::Command;
@@ -25,6 +26,8 @@ const CODE_TTL: Duration = Duration::from_secs(60);
 const TOKEN_TTL: Duration = Duration::from_secs(600);
 const AUTH_EMULATOR_PORT: u16 = 19099;
 const AUTH_EMULATOR_API_KEY: &str = "emulator-api-key";
+const DEFAULT_WORKER_URL: &str = "https://quadchat-worker.ariqipraditya.workers.dev";
+const DEFAULT_AUTHORIZE_URL: &str = "https://quad-chat.com/companion-authorize.html";
 const KEYRING_SERVICE: &str = "QuadChat Local OAuth Test";
 const KEYRING_ACCOUNT: &str = "local-device-token";
 
@@ -502,11 +505,9 @@ fn show_relay_notification(event: &mut RelayEvent, sound_player: &mut SoundPlaye
 }
 
 fn run_production_pairing() -> Result<(), String> {
-    let worker_url = std::env::var("QUADCHAT_COMPANION_WORKER_URL")
-        .map_err(|_| "Set QUADCHAT_COMPANION_WORKER_URL to the HTTPS Cloudflare Worker URL".to_owned())?
+    let worker_url = std::env::var("QUADCHAT_COMPANION_WORKER_URL").unwrap_or_else(|_| DEFAULT_WORKER_URL.to_owned())
         .trim_end_matches('/').to_owned();
-    let authorize_url = std::env::var("QUADCHAT_COMPANION_AUTHORIZE_URL")
-        .map_err(|_| "Set QUADCHAT_COMPANION_AUTHORIZE_URL to QuadChat's companion-authorize.html URL".to_owned())?;
+    let authorize_url = std::env::var("QUADCHAT_COMPANION_AUTHORIZE_URL").unwrap_or_else(|_| DEFAULT_AUTHORIZE_URL.to_owned());
     if !worker_url.starts_with("https://") || !authorize_url.starts_with("https://") {
         return Err("Production pairing requires HTTPS URLs".to_owned());
     }
@@ -617,6 +618,15 @@ fn install_persistent_relay(executable: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn remove_persistent_relay() -> Result<(), String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
+    let _ = Command::new("systemctl").args(["--user", "disable", "--now", "quadchat-background-service.service"]).status();
+    fs::remove_file(format!("{home}/.config/systemd/user/quadchat-background-service.service")).ok();
+    let _ = Command::new("systemctl").args(["--user", "daemon-reload"]).status();
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 fn install_persistent_relay(executable: &str) -> Result<(), String> {
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
@@ -628,14 +638,67 @@ fn install_persistent_relay(executable: &str) -> Result<(), String> {
     if status.success() { Ok(()) } else { Err("launchctl could not enable QuadChat Background Service".to_owned()) }
 }
 
+#[cfg(target_os = "macos")]
+fn remove_persistent_relay() -> Result<(), String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
+    let path = format!("{home}/Library/LaunchAgents/com.quadchat.background-service.plist");
+    let _ = Command::new("launchctl").args(["bootout", &path]).status();
+    fs::remove_file(path).ok(); Ok(())
+}
+
 #[cfg(target_os = "windows")]
 fn install_persistent_relay(executable: &str) -> Result<(), String> {
     let status = Command::new("schtasks").args(["/Create", "/TN", "QuadChat Background Service", "/SC", "ONLOGON", "/TR", &format!("\"{executable}\" --relay-companion"), "/F"]).status().map_err(|error| error.to_string())?;
     if status.success() { Ok(()) } else { Err("schtasks could not enable QuadChat Background Service".to_owned()) }
 }
 
+#[cfg(target_os = "windows")]
+fn remove_persistent_relay() -> Result<(), String> {
+    let status = Command::new("schtasks").args(["/Delete", "/TN", "QuadChat Background Service", "/F"]).status().map_err(|error| error.to_string())?;
+    if status.success() { Ok(()) } else { Err("schtasks could not remove QuadChat Background Service".to_owned()) }
+}
+
 fn percent_encode(value: &str) -> String {
     value.bytes().map(|byte| if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') { (byte as char).to_string() } else { format!("%{byte:02X}") }).collect()
+}
+
+struct CompanionGui { status: String, result: Option<Receiver<String>> }
+
+impl CompanionGui {
+    fn run_action(&mut self, action: fn() -> Result<(), String>, label: &str) {
+        let (sender, receiver) = mpsc::channel();
+        self.status = format!("{label}…");
+        self.result = Some(receiver);
+        thread::spawn(move || { let _ = sender.send(match action() { Ok(()) => "Done.".to_owned(), Err(error) => format!("Error: {error}") }); });
+    }
+}
+
+fn install_from_gui() -> Result<(), String> {
+    if credentials::load()?.is_none() { return Err("Pair this companion first.".to_owned()); }
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?.into_os_string().into_string().map_err(|_| "Service path is not valid UTF-8".to_owned())?;
+    install_persistent_relay(&executable)
+}
+
+impl eframe::App for CompanionGui {
+    fn update(&mut self, context: &eframe::egui::Context, _: &mut eframe::Frame) {
+        if let Some(receiver) = &self.result { if let Ok(result) = receiver.try_recv() { self.status = result; self.result = None; } }
+        eframe::egui::CentralPanel::default().show(context, |ui| {
+            ui.heading("QuadChat Companion");
+            ui.label("Pair this device to receive QuadChat notifications when your browser is closed.");
+            ui.separator();
+            if ui.button("Pair companion").clicked() { self.run_action(run_production_pairing, "Opening QuadChat authorization"); }
+            if ui.button("Enable persistent background service").clicked() { self.run_action(install_from_gui, "Enabling background service"); }
+            if ui.button("Disable persistent background service").clicked() { self.run_action(remove_persistent_relay, "Disabling background service"); }
+            if ui.button("Remove paired companion").clicked() { self.run_action(credentials::clear, "Removing paired companion"); }
+            ui.separator();
+            ui.label(&self.status);
+        });
+    }
+}
+
+fn run_gui() -> Result<(), String> {
+    let status = match credentials::load() { Ok(Some(_)) => "Paired. You can enable persistent background notifications.".to_owned(), Ok(None) => "Not paired yet.".to_owned(), Err(error) => format!("Credential-store error: {error}") };
+    eframe::run_native("QuadChat Companion", eframe::NativeOptions::default(), Box::new(|_| Ok(Box::new(CompanionGui { status, result: None })))).map_err(|error| error.to_string())
 }
 
 fn main() {
@@ -665,7 +728,7 @@ fn main() {
             Err(error) => { eprintln!("Could not enable persistent service: {error}"); std::process::exit(1); }
         }
     }
-    else { println!("Hello, World from the QuadChat Background Service!"); println!("Run with --local-connection-test to start the localhost OAuth + PKCE test harness."); }
+    else if let Err(error) = run_gui() { eprintln!("Could not open QuadChat Companion: {error}"); std::process::exit(1); }
 }
 
 #[cfg(test)]

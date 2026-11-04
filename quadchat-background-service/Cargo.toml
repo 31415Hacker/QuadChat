@@ -1,6 +1,6 @@
 [package]
 name = "quadchat-background-service"
-version = "0.1.4"
+version = "1.5.0"
 edition = "2021"
 description = "QuadChat background companion service"
 
@@ -10,6 +10,7 @@ keyring = "4.2"
 notify-rust = "4"
 base64 = "0.22"
 rodio = { version = "0.20", default-features = false, features = ["mp3"] }
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
