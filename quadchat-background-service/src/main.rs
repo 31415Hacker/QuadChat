@@ -487,8 +487,6 @@ fn show_relay_notification(event: &mut RelayEvent, sound_player: &mut SoundPlaye
     };
     let mut notification = notify_rust::Notification::new();
     notification.summary(&summary).body(&body).appname("QuadChat Service");
-    #[cfg(target_os = "linux")]
-    notification.sound_name(if event.event_type == "incoming_call" { "phone-incoming-call" } else { "message-new-instant" });
     if let Err(error) = notification.show() {
         eprintln!("[COMPANION] Native notification failed: {error}");
     }
