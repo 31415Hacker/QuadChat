@@ -1,5 +1,5 @@
 Package: quadchat-background-service
-Version: 1.5.0
+Version: 1.5.1
 Section: utils
 Priority: optional
 Architecture: amd64

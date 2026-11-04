@@ -514,18 +514,19 @@ async function handleCompanionAuthorize(request, env) {
   try {
     const userId = await verifyFirebaseIdToken(requireBearer(request));
     const body = await request.json();
-    const { codeChallenge, codeChallengeMethod, redirectUri, state } = body || {};
+    const { codeChallenge, codeChallengeMethod, redirectUri, state, deviceName } = body || {};
     if (
       codeChallengeMethod !== "S256" ||
       typeof codeChallenge !== "string" || codeChallenge.length < 43 || codeChallenge.length > 128 ||
       typeof state !== "string" || state.length < 32 || state.length > 256 ||
-      typeof redirectUri !== "string" || !validLoopbackRedirect(redirectUri)
+      typeof redirectUri !== "string" || !validLoopbackRedirect(redirectUri) ||
+      typeof deviceName !== "string" || deviceName.trim().length < 1 || deviceName.length > 80
     ) {
       return json({ error: "invalid_authorization_request" }, 400, corsHeaders);
     }
     const code = randomSecret();
     const stub = env.PAIRING_CODE.get(env.PAIRING_CODE.idFromName(code));
-    await stub.create({ userId, codeChallenge, redirectUri, state, expiresAt: Date.now() + COMPANION_CODE_TTL_MS });
+    await stub.create({ userId, codeChallenge, redirectUri, state, deviceName: deviceName.trim(), expiresAt: Date.now() + COMPANION_CODE_TTL_MS });
     return json({ redirectUrl: `${redirectUri}?code=${code}&state=${encodeURIComponent(state)}` }, 200, corsHeaders);
   } catch (error) {
     return json({ error: "authorization_required" }, 401, corsHeaders);
@@ -544,7 +545,7 @@ async function handleCompanionToken(request, env) {
     const deviceId = crypto.randomUUID();
     const token = randomSecret();
     const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(pairing.userId));
-    await relay.provision({ deviceId, tokenHash: await sha256Hex(token), expiresAt: Date.now() + COMPANION_TOKEN_TTL_MS });
+    await relay.provision({ deviceId, tokenHash: await sha256Hex(token), deviceName: pairing.deviceName || "QuadChat Companion", expiresAt: Date.now() + COMPANION_TOKEN_TTL_MS });
     return json({ access_token: token, token_type: "Bearer", expires_in: COMPANION_TOKEN_TTL_MS / 1000, device_id: deviceId, subject: pairing.userId });
   } catch {
     return json({ error: "invalid_grant" }, 400);
@@ -885,6 +886,7 @@ export class CompanionRelay extends DurableObject {
     const devices = (await this.ctx.storage.get("devices")) || {};
     return Object.entries(devices).map(([deviceId, device]) => ({
       deviceId,
+      deviceName: device.deviceName || "QuadChat Companion",
       expiresAt: device.expiresAt,
       lastConnectedAt: device.lastConnectedAt || null
     }));

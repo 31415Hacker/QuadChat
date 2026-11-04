@@ -516,10 +516,11 @@ fn run_production_pairing() -> Result<(), String> {
     let callback_uri = format!("http://127.0.0.1:{}/callback", listener.local_addr().map_err(|error| error.to_string())?.port());
     let verifier = random_hex(48);
     let state = random_hex(32);
+    let device_name = format!("QuadChat Companion ({})", std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_else(|_| "This device".to_owned()));
     let authorization_url = format!(
-        "{authorize_url}?code_challenge={}&state={state}&redirect_uri={}&device_name=QuadChat%20Service",
+        "{authorize_url}?code_challenge={}&state={state}&redirect_uri={}&device_name={}",
         pkce_challenge(&verifier),
-        percent_encode(&callback_uri)
+        percent_encode(&callback_uri), percent_encode(&device_name)
     );
     println!("Opening QuadChat approval page. Approve the service in your browser.");
     webbrowser::open(&authorization_url).map_err(|error| format!("Could not open browser: {error}"))?;
@@ -627,6 +628,9 @@ fn remove_persistent_relay() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn persistent_enabled() -> bool { std::env::var("HOME").ok().is_some_and(|home| std::path::Path::new(&format!("{home}/.config/systemd/user/quadchat-background-service.service")).exists()) }
+
 #[cfg(target_os = "macos")]
 fn install_persistent_relay(executable: &str) -> Result<(), String> {
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
@@ -646,6 +650,9 @@ fn remove_persistent_relay() -> Result<(), String> {
     fs::remove_file(path).ok(); Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn persistent_enabled() -> bool { std::env::var("HOME").ok().is_some_and(|home| std::path::Path::new(&format!("{home}/Library/LaunchAgents/com.quadchat.background-service.plist")).exists()) }
+
 #[cfg(target_os = "windows")]
 fn install_persistent_relay(executable: &str) -> Result<(), String> {
     let status = Command::new("schtasks").args(["/Create", "/TN", "QuadChat Background Service", "/SC", "ONLOGON", "/TR", &format!("\"{executable}\" --relay-companion"), "/F"]).status().map_err(|error| error.to_string())?;
@@ -657,6 +664,9 @@ fn remove_persistent_relay() -> Result<(), String> {
     let status = Command::new("schtasks").args(["/Delete", "/TN", "QuadChat Background Service", "/F"]).status().map_err(|error| error.to_string())?;
     if status.success() { Ok(()) } else { Err("schtasks could not remove QuadChat Background Service".to_owned()) }
 }
+
+#[cfg(target_os = "windows")]
+fn persistent_enabled() -> bool { Command::new("schtasks").args(["/Query", "/TN", "QuadChat Background Service"]).status().is_ok_and(|status| status.success()) }
 
 fn percent_encode(value: &str) -> String {
     value.bytes().map(|byte| if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') { (byte as char).to_string() } else { format!("%{byte:02X}") }).collect()
@@ -684,12 +694,19 @@ impl eframe::App for CompanionGui {
         if let Some(receiver) = &self.result { if let Ok(result) = receiver.try_recv() { self.status = result; self.result = None; } }
         eframe::egui::CentralPanel::default().show(context, |ui| {
             ui.heading("QuadChat Companion");
-            ui.label("Pair this device to receive QuadChat notifications when your browser is closed.");
+            ui.label("Notifications for this device when your browser is closed.");
             ui.separator();
-            if ui.button("Pair companion").clicked() { self.run_action(run_production_pairing, "Opening QuadChat authorization"); }
-            if ui.button("Enable persistent background service").clicked() { self.run_action(install_from_gui, "Enabling background service"); }
-            if ui.button("Disable persistent background service").clicked() { self.run_action(remove_persistent_relay, "Disabling background service"); }
-            if ui.button("Remove paired companion").clicked() { self.run_action(credentials::clear, "Removing paired companion"); }
+            let credential = credentials::load().ok().flatten();
+            let device_name = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_else(|_| "This device".to_owned());
+            ui.label(format!("Device: {device_name}"));
+            ui.label(match &credential { Some(value) => format!("Paired device ID: {}", &value.device_id[..8]), None => "Not paired".to_owned() });
+            if ui.add(eframe::egui::Button::new(if credential.is_some() { "Paired — click to unpair" } else { "Pair this device" })).clicked() {
+                if credential.is_some() { self.run_action(credentials::clear, "Removing paired companion"); } else { self.run_action(run_production_pairing, "Opening QuadChat authorization"); }
+            }
+            let enabled = persistent_enabled();
+            if ui.add(eframe::egui::Button::new(if enabled { "Persistent service enabled — click to disable" } else { "Enable persistent background service" })).clicked() {
+                if enabled { self.run_action(remove_persistent_relay, "Disabling background service"); } else { self.run_action(install_from_gui, "Enabling background service"); }
+            }
             ui.separator();
             ui.label(&self.status);
         });
