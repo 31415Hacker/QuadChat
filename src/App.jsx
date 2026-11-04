@@ -389,10 +389,10 @@ export default function App() {
     syncCompanionSoundPreferences(user, {
       messageSound: { kind: dmSoundType, ...(dmSoundType === "custom" ? { customDataUrl: localStorage.getItem("quadchat-dm-sound-custom") || "" } : {}) },
       callSound: { kind: callSoundType, ...(callSoundType === "custom" ? { customDataUrl: localStorage.getItem("quadchat-call-sound-custom") || "" } : {}) },
-      messageVolume,
+      messageVolume: messageSoundVolume,
       ringtoneVolume
     });
-  }, [user, dmSoundType, callSoundType, messageVolume, ringtoneVolume]);
+  }, [user, dmSoundType, callSoundType, messageSoundVolume, ringtoneVolume]);
 
   useEffect(() => {
     if (!user || !profileIdsKey) {
