@@ -2,6 +2,7 @@ use keyring::Entry;
 
 const SERVICE: &str = "QuadChat Companion";
 const ACCOUNT: &str = "device-credential";
+const DEFAULT_WORKER_URL: &str = "https://quadchat-worker.ariqipraditya.workers.dev";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceCredential {
@@ -9,6 +10,7 @@ pub struct DeviceCredential {
     pub access_token: String,
     pub subject: String,
     pub expires_at_ms: u64,
+    pub worker_url: String,
 }
 
 fn entry() -> Result<Entry, String> {
@@ -20,19 +22,20 @@ fn valid_field(value: &str) -> bool {
 }
 
 fn encode(credential: &DeviceCredential) -> Result<String, String> {
-    if !valid_field(&credential.device_id) || !valid_field(&credential.access_token) || !valid_field(&credential.subject) || credential.expires_at_ms == 0 {
+    if !valid_field(&credential.device_id) || !valid_field(&credential.access_token) || !valid_field(&credential.subject) || !valid_field(&credential.worker_url) || credential.expires_at_ms == 0 {
         return Err("Invalid companion credential".to_owned());
     }
-    Ok(format!("v1|{}|{}|{}|{}", credential.device_id, credential.access_token, credential.subject, credential.expires_at_ms))
+    Ok(format!("v2|{}|{}|{}|{}|{}", credential.device_id, credential.access_token, credential.subject, credential.expires_at_ms, credential.worker_url))
 }
 
 fn decode(value: &str) -> Result<DeviceCredential, String> {
     let parts: Vec<_> = value.split('|').collect();
-    if parts.len() != 5 || parts[0] != "v1" {
-        return Err("Unsupported companion credential format".to_owned());
-    }
-    let expires_at_ms = parts[4].parse().map_err(|_| "Invalid companion credential expiry".to_owned())?;
-    let credential = DeviceCredential { device_id: parts[1].to_owned(), access_token: parts[2].to_owned(), subject: parts[3].to_owned(), expires_at_ms };
+    let (expires_at_ms, worker_url) = match parts.as_slice() {
+        ["v1", _, _, _, expires_at] => (expires_at.parse().map_err(|_| "Invalid companion credential expiry".to_owned())?, DEFAULT_WORKER_URL.to_owned()),
+        ["v2", _, _, _, expires_at, worker_url] => (expires_at.parse().map_err(|_| "Invalid companion credential expiry".to_owned())?, (*worker_url).to_owned()),
+        _ => return Err("Unsupported companion credential format".to_owned())
+    };
+    let credential = DeviceCredential { device_id: parts[1].to_owned(), access_token: parts[2].to_owned(), subject: parts[3].to_owned(), expires_at_ms, worker_url };
     encode(&credential)?;
     Ok(credential)
 }
@@ -62,7 +65,7 @@ mod tests {
     use super::*;
 
     fn sample() -> DeviceCredential {
-        DeviceCredential { device_id: "device".into(), access_token: "token".into(), subject: "uid".into(), expires_at_ms: 123 }
+        DeviceCredential { device_id: "device".into(), access_token: "token".into(), subject: "uid".into(), expires_at_ms: 123, worker_url: "https://worker.example".into() }
     }
 
     #[test]

@@ -56,7 +56,7 @@ jobs:
         run: |
           mkdir -p package-root/usr/local/bin
           cp target/release/${{ matrix.binary }} package-root/usr/local/bin/quadchat-background-service
-          pkgbuild --root package-root --identifier com.quadchat.background-service --version 0.1.3 --install-location / quadchat-background-service-macos-arm64.pkg
+          pkgbuild --root package-root --identifier com.quadchat.background-service --version 0.1.4 --install-location / quadchat-background-service-macos-arm64.pkg
       - name: Build Linux package
         if: matrix.package == 'deb'
         shell: bash
