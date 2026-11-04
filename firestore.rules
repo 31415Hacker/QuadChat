@@ -200,6 +200,15 @@ service cloud.firestore {
                     .affectedKeys()
                     .hasOnly([request.auth.uid]))
           )
+          || (
+            (isAdmin() || isDeveloper())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["pinned", "pinnedBy", "pinnedByName", "pinnedAt"])
+            && request.resource.data.pinned is bool
+            && (request.resource.data.pinned == false || (
+              request.resource.data.pinnedBy == request.auth.uid
+              && request.resource.data.pinnedByName is string
+            ))
+          )
         );
 
       allow delete: if signedIn()

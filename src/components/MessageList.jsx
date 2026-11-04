@@ -7,6 +7,7 @@ import {
   Lightbulb,
   Megaphone,
   MessageCircle,
+  Pin,
   Mic,
   MoreVertical,
   Paperclip,
@@ -39,6 +40,7 @@ const MessageItem = memo(function MessageItem({
   startEditMessage,
   handleDeleteMessage,
   handleToggleReaction,
+  handleTogglePin,
   isCurrentUserAdmin,
   isCurrentUserDeveloper,
   profiles,
@@ -136,6 +138,7 @@ const MessageItem = memo(function MessageItem({
     >
       <div className="message-meta">
         <strong>{senderName}</strong>
+        {item.pinned ? <Pin className="message-pinned-icon" size={13} aria-label="Pinned message" /> : null}
         <span>
           {formatTime(item.createdAt)}
           {item.edited ? <span className="edited-tag"> · edited</span> : null}
@@ -208,6 +211,18 @@ const MessageItem = memo(function MessageItem({
               >
                 <Info size={16} />
                 <span>Message info</span>
+              </button>
+            ) : null}
+            {isCurrentUserAdmin ? (
+              <button
+                onClick={() => {
+                  setOpenMessageMenuId("");
+                  handleTogglePin(item);
+                }}
+                type="button"
+              >
+                <Pin size={16} />
+                <span>{item.pinned ? "Unpin" : "Pin"}</span>
               </button>
             ) : null}
             {(isMine || isCurrentUserAdmin) &&
@@ -435,6 +450,7 @@ const MessageList = memo(function MessageList({
   handleRsvp,
   handlePollVote,
   handleToggleReaction,
+  handleTogglePin,
   joinGroupCall,
   onJumpToMessage,
   onPreviewFile,
@@ -521,6 +537,7 @@ const MessageList = memo(function MessageList({
                   startEditMessage={startEditMessage}
                   handleDeleteMessage={handleDeleteMessage}
                   handleToggleReaction={handleToggleReaction}
+                  handleTogglePin={handleTogglePin}
                   isCurrentUserAdmin={isCurrentUserAdmin}
                   isCurrentUserDeveloper={isCurrentUserDeveloper}
                   profiles={profiles}

@@ -3301,6 +3301,17 @@ export default function App() {
     }
   }, [sessionUserId, activeChannel]);
 
+  const handleTogglePin = useCallback(async (item) => {
+    if (!isCurrentUserAdmin || !sessionUserId || !activeChannel || !item?.id) return;
+    try {
+      await updateDoc(doc(db, "messages", activeChannel, "messages", item.id), item.pinned
+        ? { pinned: false, pinnedBy: deleteField(), pinnedByName: deleteField(), pinnedAt: deleteField() }
+        : { pinned: true, pinnedBy: sessionUserId, pinnedByName: activeName, pinnedAt: serverTimestamp() });
+    } catch (firebaseError) {
+      setError(firebaseError.message);
+    }
+  }, [isCurrentUserAdmin, sessionUserId, activeChannel, activeName]);
+
   const handleDeleteMessage = useCallback(async (messageId) => {
     const confirmed = await ask("Are you sure you want to delete this message?", {
       title: "Delete message?",
@@ -4065,6 +4076,7 @@ export default function App() {
                     handleRsvp={handleRsvp}
                     handlePollVote={handlePollVote}
                     handleToggleReaction={handleToggleReaction}
+                    handleTogglePin={handleTogglePin}
                     joinGroupCall={joinSessionGroupCallStable}
                     onJumpToMessage={jumpToReply}
                     onPreviewFile={setFilePreview}
