@@ -37,7 +37,7 @@ import {
   where
 } from "firebase/firestore";
 import { onChildAdded, onValue, ref as rtdbRef, set, remove } from "firebase/database";
-import { AlertCircle, AlertTriangle } from "lucide-react";
+import { AlertCircle, AlertTriangle, Pin } from "lucide-react";
 import { auth, db, rtdb } from "../firebase.js";
 import { uploadToCloudinary } from "../cloudinary.js";
 import { getCompanionCallAvailability, notifyPairedMessageDevices, syncCompanionSoundPreferences } from "./utils/companionRelay.js";
@@ -151,6 +151,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [pendingFiles, setPendingFiles] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [companionConnectedUserIds, setCompanionConnectedUserIds] = useState(() => new Set());
   const [replyTo, setReplyTo] = useState(null);
@@ -1105,6 +1106,22 @@ export default function App() {
 
     return unsubscribe;
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !activeChannel) {
+      setPinnedMessages([]);
+      return undefined;
+    }
+    return onSnapshot(
+      query(messagesRef(activeChannel), where("pinned", "==", true)),
+      (snapshot) => setPinnedMessages(
+        snapshot.docs
+          .map((messageDoc) => ({ id: messageDoc.id, ...messageDoc.data() }))
+          .sort((left, right) => (right.pinnedAt?.toMillis?.() || 0) - (left.pinnedAt?.toMillis?.() || 0))
+      ),
+      () => setPinnedMessages([])
+    );
+  }, [user, activeChannel]);
 
   // Kick users whose profile document no longer exists (deleted accounts,
   // never-registered sessions). The 10s grace covers fresh signups whose
@@ -4057,6 +4074,17 @@ export default function App() {
                 />
               ) : (
                 <div className="messages" ref={messagesContainerRef} role="log" aria-live="polite">
+                  {pinnedMessages.length ? (
+                    <div className="pinned-messages" aria-label="Pinned messages">
+                      {pinnedMessages.map((item) => (
+                        <button key={item.id} className="pinned-message" onClick={() => jumpToReply({ id: item.id })} type="button">
+                          <Pin size={14} />
+                          <strong>{getProfileName(profiles[item.userId], "Someone")}</strong>
+                          <span>{item.text || "Attachment or shared content"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   <MessageList
                     activeChannel={activeChannel}
                     isCurrentUserDeveloper={isCurrentUserDeveloper}
