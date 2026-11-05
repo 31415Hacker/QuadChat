@@ -1,6 +1,6 @@
 [package]
 name = "quadchat-background-service"
-version = "1.5.7"
+version = "1.5.8"
 edition = "2021"
 description = "QuadChat background companion service"
 

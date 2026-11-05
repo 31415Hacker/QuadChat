@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 use tungstenite::{connect, Message};
 use keyring::Entry;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::{Code, HotKey, Modifiers}};
-use sysinfo::{ProcessesToUpdate, System};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 
 const SERVICE_PORT: u16 = 43721;
 const AUTH_PORT: u16 = 43722;
@@ -634,7 +634,14 @@ fn game_version(command: &str) -> Option<String> {
 }
 
 fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
-    system.refresh_processes(ProcessesToUpdate::All, true);
+    // The normal refresh omits command lines for newly launched processes.
+    // Minecraft is a Java process, so its command line is how we distinguish
+    // it from other Java applications and read its version.
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::everything(),
+    );
     for process in system.processes().values() {
         let executable = process.name().to_string_lossy().to_ascii_lowercase();
         let command = process.cmd().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>().join(" ");
