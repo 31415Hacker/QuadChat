@@ -92,7 +92,7 @@ export default function UsersSidebar({
             (groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
              (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]);
            const game = richPresence?.[profile.id];
-           const gameDetails = game ? `${game.name}${game.version ? ` ${game.version}` : ""}` : "";
+           const gameDetails = game ? [game.name, game.version, game.detail].filter(Boolean).join(" · ") : "";
           return (
             <div
               className={`user-item ${userActive ? "online" : ""}`}

@@ -3,7 +3,7 @@ mod credentials;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Cursor;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{self, Receiver};
@@ -32,6 +32,7 @@ const DEFAULT_WORKER_URL: &str = "https://quadchat-worker.ariqipraditya.workers.
 const DEFAULT_AUTHORIZE_URL: &str = "https://quad-chat.com/companion-authorize.html";
 const KEYRING_SERVICE: &str = "QuadChat Local OAuth Test";
 const KEYRING_ACCOUNT: &str = "local-device-token";
+const RICH_PRESENCE_INTERVAL: Duration = Duration::from_secs(20);
 const COMPANION_RELEASE_API: &str = "https://api.github.com/repos/31415Hacker/QuadChat/releases/tags/background-service-latest";
 
 #[derive(Clone)]
@@ -625,12 +626,33 @@ fn run_companion_relay() -> Result<(), String> {
 }
 
 #[derive(Clone, PartialEq)]
-struct GameActivity { name: &'static str, logo: &'static str, version: Option<String> }
+struct GameActivity { name: &'static str, logo: &'static str, version: Option<String>, detail: Option<String> }
 
 fn game_version(command: &str) -> Option<String> {
     command.split(|character: char| !character.is_ascii_digit() && character != '.')
         .find(|token| token.matches('.').count() >= 1 && token.split('.').all(|part| !part.is_empty() && part.parse::<u16>().is_ok()))
         .map(str::to_owned)
+}
+
+fn minecraft_activity_detail() -> Option<String> {
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok()?;
+    let path = std::path::Path::new(&home).join(".minecraft/logs/latest.log");
+    let mut log = fs::File::open(path).ok()?;
+    let start = log.metadata().ok()?.len().saturating_sub(64 * 1024);
+    log.seek(SeekFrom::Start(start)).ok()?;
+    let mut tail = String::new();
+    log.read_to_string(&mut tail).ok()?;
+    for line in tail.lines().rev() {
+        if let Some(server) = line.split_once("Connecting to ").map(|(_, value)| value.trim()) {
+            let server = server.split_whitespace().next().unwrap_or("");
+            if !server.is_empty() { return Some(format!("Server: {}", server.chars().take(100).collect::<String>())); }
+        }
+        let lowercase = line.to_ascii_lowercase();
+        if lowercase.contains("starting integrated minecraft server") || lowercase.contains("preparing level") {
+            return Some("Singleplayer".to_owned());
+        }
+    }
+    None
 }
 
 fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
@@ -647,7 +669,7 @@ fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
         let command = process.cmd().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>().join(" ");
         let command_lower = command.to_ascii_lowercase();
         if (executable == "java" || executable == "javaw" || executable == "java.exe" || executable == "javaw.exe") && command_lower.contains("minecraft") {
-            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command) });
+            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command), detail: minecraft_activity_detail() });
         }
         let game = match executable.as_str() {
             "minecraft.windows.exe" => Some(("Minecraft Bedrock Edition", "minecraft")),
@@ -659,13 +681,13 @@ fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
             "overwatch.exe" | "overwatch" => Some(("Overwatch", "overwatch")),
             _ => None
         };
-        if let Some((name, logo)) = game { return Some(GameActivity { name, logo, version: None }); }
+        if let Some((name, logo)) = game { return Some(GameActivity { name, logo, version: None, detail: None }); }
     }
     None
 }
 
 fn report_rich_presence(credential: &credentials::DeviceCredential, game: Option<&GameActivity>) -> Result<(), String> {
-    let game = game.map(|activity| serde_json::json!({ "name": activity.name, "logo": activity.logo, "version": activity.version }));
+    let game = game.map(|activity| serde_json::json!({ "name": activity.name, "logo": activity.logo, "version": activity.version, "detail": activity.detail }));
     let response = reqwest::blocking::Client::new()
         .post(format!("{}/companion/rich-presence", credential.worker_url.trim_end_matches('/')))
         .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "game": game }))
@@ -684,7 +706,7 @@ fn start_rich_presence_reporter(credential: credentials::DeviceCredential) {
                 if let Err(error) = report_rich_presence(&credential, game.as_ref()) { eprintln!("[RICH PRESENCE] {error}"); }
             }
             was_shared = enabled;
-            thread::sleep(Duration::from_secs(20));
+            thread::sleep(RICH_PRESENCE_INTERVAL);
         }
     });
 }
