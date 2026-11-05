@@ -2,6 +2,7 @@ use keyring::Entry;
 
 const SERVICE: &str = "QuadChat Companion";
 const ACCOUNT: &str = "device-credential";
+const RICH_PRESENCE_ACCOUNT: &str = "rich-presence-enabled";
 const DEFAULT_WORKER_URL: &str = "https://quadchat-worker.ariqipraditya.workers.dev";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -15,6 +16,22 @@ pub struct DeviceCredential {
 
 fn entry() -> Result<Entry, String> {
     Entry::new(SERVICE, ACCOUNT).map_err(|error| error.to_string())
+}
+
+fn rich_presence_entry() -> Result<Entry, String> {
+    Entry::new(SERVICE, RICH_PRESENCE_ACCOUNT).map_err(|error| error.to_string())
+}
+
+pub fn rich_presence_enabled() -> Result<bool, String> {
+    match rich_presence_entry()?.get_password() {
+        Ok(value) => Ok(value == "true"),
+        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => Ok(false),
+        Err(error) => Err(error.to_string())
+    }
+}
+
+pub fn set_rich_presence_enabled(enabled: bool) -> Result<(), String> {
+    rich_presence_entry()?.set_password(if enabled { "true" } else { "false" }).map_err(|error| error.to_string())
 }
 
 fn valid_field(value: &str) -> bool {
@@ -54,8 +71,14 @@ pub fn load() -> Result<Option<DeviceCredential>, String> {
 
 pub fn clear() -> Result<(), String> {
     match entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => Ok(()),
+        Ok(()) => {
+            let _ = rich_presence_entry()?.delete_credential();
+            Ok(())
+        },
+        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => {
+            let _ = rich_presence_entry()?.delete_credential();
+            Ok(())
+        },
         Err(error) => Err(error.to_string()),
     }
 }

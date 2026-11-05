@@ -649,6 +649,20 @@ async function handleCompanionAction(request, env) {
   } catch (error) { console.error("[COMPANION] action failed", error); return json({ error: "action_failed" }, 500, corsHeaders); }
 }
 
+async function handleCompanionRichPresence(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const { userId, deviceId, token, game } = await request.json();
+    if (typeof userId !== "string" || typeof deviceId !== "string" || typeof token !== "string") return json({ error: "invalid_presence" }, 400, corsHeaders);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    if (!(await relay.validateDevice(deviceId, token))) return json({ error: "authorization_required" }, 401, corsHeaders);
+    if (game !== null && (!game || typeof game.name !== "string" || game.name.length > 100 || typeof game.logo !== "string" || !["minecraft", "roblox", "fortnite", "cs2", "valorant", "league", "overwatch"].includes(game.logo) || (game.version !== undefined && (typeof game.version !== "string" || game.version.length > 48)))) return json({ error: "invalid_presence" }, 400, corsHeaders);
+    const presence = env.PRESENCE.get(env.PRESENCE.idFromName("global-presence"));
+    await presence.setRichPresence(userId, game && { name: game.name, logo: game.logo, ...(game.version ? { version: game.version } : {}) });
+    return json({ saved: true }, 200, corsHeaders);
+  } catch (error) { console.error("[COMPANION] rich presence failed", error); return json({ error: "presence_failed" }, 500, corsHeaders); }
+}
+
 async function handleCompanionCallAvailability(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
@@ -868,6 +882,7 @@ export default {
     }
     if (request.method === "PUT" && url.pathname === "/companion/preferences") return handleCompanionPreferences(request, env);
     if (request.method === "POST" && url.pathname === "/companion/action") return handleCompanionAction(request, env);
+    if (request.method === "POST" && url.pathname === "/companion/rich-presence") return handleCompanionRichPresence(request, env);
     if (request.method === "POST" && url.pathname === "/companion/notify") {
       return handleCompanionNotify(request, env);
     }
@@ -1029,7 +1044,37 @@ export class PresenceServer extends DurableObject {
           this.handleDisconnect(webSocket);
         }
       }
+      this.pruneRichPresence();
     }, 15000);
+  }
+
+  async activeRichPresence() {
+    const entries = (await this.ctx.storage.get("richPresence")) || {};
+    const now = Date.now();
+    const active = {};
+    let changed = false;
+    for (const [userId, entry] of Object.entries(entries)) {
+      if (!entry || entry.expiresAt <= now) { delete entries[userId]; changed = true; continue; }
+      active[userId] = entry.game;
+    }
+    if (changed) await this.ctx.storage.put("richPresence", entries);
+    return active;
+  }
+
+  async pruneRichPresence() {
+    const before = (await this.ctx.storage.get("richPresence")) || {};
+    const active = await this.activeRichPresence();
+    for (const userId of Object.keys(before)) {
+      if (!(userId in active)) this.broadcast({ type: "rich_presence", userId, game: null });
+    }
+  }
+
+  async setRichPresence(userId, game) {
+    const entries = (await this.ctx.storage.get("richPresence")) || {};
+    if (game) entries[userId] = { game, expiresAt: Date.now() + 45_000 };
+    else delete entries[userId];
+    await this.ctx.storage.put("richPresence", entries);
+    this.broadcast({ type: "rich_presence", userId, game: game || null });
   }
 
   isUserOnline(userId) {
@@ -1139,7 +1184,7 @@ export class PresenceServer extends DurableObject {
         const onlineUsers = Array.from(
           new Set(Array.from(this.sessions.values()).map((session) => session.userId))
         );
-        webSocket.send(JSON.stringify({ type: "sync", onlineUsers }));
+        webSocket.send(JSON.stringify({ type: "sync", onlineUsers, richPresence: await this.activeRichPresence() }));
       } catch (err) {
         try { webSocket.close(1008, "Authentication failed"); } catch {}
       }

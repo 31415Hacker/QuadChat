@@ -382,7 +382,7 @@ export default function App() {
     }
   };
 
-  const [onlineUsers, , presenceReady] = usePresence(user);
+  const [onlineUsers, , presenceReady, richPresence] = usePresence(user);
   const profileIdsKey = useMemo(() => Object.keys(profiles).sort().join("|"), [profiles]);
 
   const processedCompanionCommandIdsRef = useRef(new Set());
@@ -4172,6 +4172,7 @@ export default function App() {
                   profiles={profiles}
                   sessionUserId={sessionUserId}
                   onlineUsers={onlineUsers}
+                  richPresence={richPresence}
                   companionConnectedUserIds={companionConnectedUserIds}
                   openUserAnalytics={openUserAnalytics}
                   openDm={openDm}

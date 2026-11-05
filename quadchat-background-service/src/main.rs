@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use tungstenite::{connect, Message};
 use keyring::Entry;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::{Code, HotKey, Modifiers}};
+use sysinfo::{ProcessesToUpdate, System};
 
 const SERVICE_PORT: u16 = 43721;
 const AUTH_PORT: u16 = 43722;
@@ -591,6 +592,7 @@ fn run_companion_relay() -> Result<(), String> {
     let mut retry_seconds = 1_u64;
     let mut sound_player = SoundPlayer::new();
     start_gaming_overlay_hotkey();
+    start_rich_presence_reporter(credential.clone());
     loop {
         match connect(relay_url.as_str()) {
             Ok((mut socket, _)) => {
@@ -620,6 +622,64 @@ fn run_companion_relay() -> Result<(), String> {
         thread::sleep(Duration::from_secs(retry_seconds));
         retry_seconds = (retry_seconds * 2).min(30);
     }
+}
+
+#[derive(Clone, PartialEq)]
+struct GameActivity { name: &'static str, logo: &'static str, version: Option<String> }
+
+fn game_version(command: &str) -> Option<String> {
+    command.split(|character: char| !character.is_ascii_digit() && character != '.')
+        .find(|token| token.matches('.').count() >= 1 && token.split('.').all(|part| !part.is_empty() && part.parse::<u16>().is_ok()))
+        .map(str::to_owned)
+}
+
+fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    for process in system.processes().values() {
+        let executable = process.name().to_string_lossy().to_ascii_lowercase();
+        let command = process.cmd().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>().join(" ");
+        let command_lower = command.to_ascii_lowercase();
+        if (executable == "java" || executable == "javaw" || executable == "java.exe" || executable == "javaw.exe") && command_lower.contains("minecraft") {
+            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command) });
+        }
+        let game = match executable.as_str() {
+            "minecraft.windows.exe" => Some(("Minecraft Bedrock Edition", "minecraft")),
+            "robloxplayerbeta.exe" | "robloxplayerbeta" => Some(("Roblox", "roblox")),
+            "fortniteclient-win64-shipping.exe" | "fortniteclient-win64-shipping" => Some(("Fortnite", "fortnite")),
+            "cs2.exe" | "cs2" => Some(("Counter-Strike 2", "cs2")),
+            "valorant-win64-shipping.exe" | "valorant-win64-shipping" => Some(("VALORANT", "valorant")),
+            "leagueclientux.exe" | "leagueclientux" => Some(("League of Legends", "league")),
+            "overwatch.exe" | "overwatch" => Some(("Overwatch", "overwatch")),
+            _ => None
+        };
+        if let Some((name, logo)) = game { return Some(GameActivity { name, logo, version: None }); }
+    }
+    None
+}
+
+fn report_rich_presence(credential: &credentials::DeviceCredential, game: Option<&GameActivity>) -> Result<(), String> {
+    let game = game.map(|activity| serde_json::json!({ "name": activity.name, "logo": activity.logo, "version": activity.version }));
+    let response = reqwest::blocking::Client::new()
+        .post(format!("{}/companion/rich-presence", credential.worker_url.trim_end_matches('/')))
+        .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "game": game }))
+        .send().map_err(|error| error.to_string())?;
+    if response.status().is_success() { Ok(()) } else { Err(format!("Presence update failed ({})", response.status())) }
+}
+
+fn start_rich_presence_reporter(credential: credentials::DeviceCredential) {
+    thread::spawn(move || {
+        let mut system = System::new_all();
+        let mut was_shared = false;
+        loop {
+            let enabled = credentials::rich_presence_enabled().unwrap_or(false);
+            let game = enabled.then(|| detect_game_activity(&mut system)).flatten();
+            if enabled || was_shared {
+                if let Err(error) = report_rich_presence(&credential, game.as_ref()) { eprintln!("[RICH PRESENCE] {error}"); }
+            }
+            was_shared = enabled;
+            thread::sleep(Duration::from_secs(20));
+        }
+    });
 }
 
 fn start_gaming_overlay_hotkey() {
@@ -858,6 +918,11 @@ fn install_from_gui() -> Result<(), String> {
     install_persistent_relay(&executable)
 }
 
+fn toggle_rich_presence_from_gui() -> Result<(), String> {
+    let enabled = credentials::rich_presence_enabled()?;
+    credentials::set_rich_presence_enabled(!enabled)
+}
+
 impl eframe::App for CompanionGui {
     fn update(&mut self, context: &eframe::egui::Context, _: &mut eframe::Frame) {
         if let Some(receiver) = &self.result { if let Ok(result) = receiver.try_recv() { self.status = result; self.result = None; } }
@@ -875,6 +940,10 @@ impl eframe::App for CompanionGui {
             let enabled = persistent_enabled();
             if ui.add(eframe::egui::Button::new(if enabled { "Persistent service enabled — click to disable" } else { "Enable persistent background service" })).clicked() {
                 if enabled { self.run_action(remove_persistent_relay, "Disabling background service"); } else { self.run_action(install_from_gui, "Enabling background service"); }
+            }
+            let sharing_game = credentials::rich_presence_enabled().unwrap_or(false);
+            if ui.add(eframe::egui::Button::new(if sharing_game { "Sharing recognized game activity — click to disable" } else { "Share recognized game activity" })).clicked() {
+                self.run_action(toggle_rich_presence_from_gui, if sharing_game { "Stopping game activity sharing" } else { "Enabling game activity sharing" });
             }
             if ui.add_enabled(self.result.is_none(), eframe::egui::Button::new("Check for updates")).clicked() {
                 self.check_for_updates();

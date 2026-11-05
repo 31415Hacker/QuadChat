@@ -3,11 +3,13 @@ import { useEffect, useState } from "react";
 export function usePresence(user) {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [presenceReady, setPresenceReady] = useState(false);
+  const [richPresence, setRichPresence] = useState({});
 
   useEffect(() => {
     if (!user) {
       setOnlineUsers(new Set());
       setPresenceReady(false);
+      setRichPresence({});
       return;
     }
 
@@ -59,6 +61,7 @@ export function usePresence(user) {
             reconnectAttempt = 0;
             clearPingInterval();
             setOnlineUsers(new Set(data.onlineUsers));
+            setRichPresence(data.richPresence && typeof data.richPresence === "object" ? data.richPresence : {});
             setPresenceReady(true);
             pingInterval = setInterval(() => {
               if (ws?.readyState !== WebSocket.OPEN || !authenticated) {
@@ -76,6 +79,14 @@ export function usePresence(user) {
               } else {
                 next.delete(data.userId);
               }
+              return next;
+            });
+          } else if (data.type === "rich_presence") {
+            if (!authenticated || typeof data.userId !== "string") return;
+            setRichPresence((previous) => {
+              const next = { ...previous };
+              if (data.game && typeof data.game === "object") next[data.userId] = data.game;
+              else delete next[data.userId];
               return next;
             });
           }
@@ -109,5 +120,5 @@ export function usePresence(user) {
     };
   }, [user]);
 
-  return [onlineUsers, setOnlineUsers, presenceReady];
+  return [onlineUsers, setOnlineUsers, presenceReady, richPresence];
 }

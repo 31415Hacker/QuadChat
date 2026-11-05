@@ -8,6 +8,7 @@ export default function UsersSidebar({
   profiles,
   sessionUserId,
   onlineUsers,
+  richPresence,
   companionConnectedUserIds,
   openUserAnalytics,
   openDm,
@@ -27,6 +28,7 @@ export default function UsersSidebar({
   refreshForUpdate
 }) {
   const [now, setNow] = useState(() => new Date());
+  const [openGameUserId, setOpenGameUserId] = useState(null);
 
   useEffect(() => {
     if (!showSidebarClock) return undefined;
@@ -88,9 +90,11 @@ export default function UsersSidebar({
           const userActive = isSelf || onlineUsers.has(profile.id);
           const canReceiveCall = userActive || companionConnectedUserIds.has(profile.id);
           const statusMode = userActive ? "active" : (theirMode === "busy" || theirMode === "away" ? theirMode : "offline");
-          const isInGroupCall =
+           const isInGroupCall =
             (groupCallStatus === "connected" && groupCallParticipants[profile.id]) ||
-            (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]);
+             (p2pGroupCallStatus === "connected" && p2pGroupCallParticipants[profile.id]);
+           const game = richPresence?.[profile.id];
+           const gameDetails = game ? `${game.name}${game.version ? ` ${game.version}` : ""}` : "";
           return (
             <div
               className={`user-item ${userActive ? "online" : ""}`}
@@ -119,15 +123,29 @@ export default function UsersSidebar({
                 >
                    <span className="user-name-text" title={name}>{name}</span>
                    <span className={`user-role-marker user-role-marker--${roleMarker.toLowerCase()}`}>
-                     {roleMarker}
-                   </span>
-                  {isInGroupCall ? (
+                      {roleMarker}
+                    </span>
+                   {isInGroupCall ? (
                     <span className="group-call-indicator" title="In group call">
                       <Users size={11} />
                     </span>
                   ) : null}
-                </button>
-                {isInGroupCall && !isProfileAdmin && isCurrentUserAdmin ? (
+                 </button>
+                 {game ? (
+                   <span className="user-game-presence">
+                     <button
+                       className="user-game-badge"
+                       type="button"
+                       onClick={() => setOpenGameUserId((current) => current === profile.id ? null : profile.id)}
+                       title={`Playing ${gameDetails}`}
+                       aria-label={`Playing ${gameDetails}`}
+                     >
+                       <img src={`/game-icons/${game.logo}.svg`} alt="" />
+                     </button>
+                     {openGameUserId === profile.id ? <span className="user-game-details">Playing {gameDetails}</span> : null}
+                   </span>
+                 ) : null}
+                 {isInGroupCall && !isProfileAdmin && isCurrentUserAdmin ? (
                   <button
                     className="user-voice-mic-btn"
                     type="button"
