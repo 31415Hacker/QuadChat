@@ -31,6 +31,7 @@ const DEFAULT_WORKER_URL: &str = "https://quadchat-worker.ariqipraditya.workers.
 const DEFAULT_AUTHORIZE_URL: &str = "https://quad-chat.com/companion-authorize.html";
 const KEYRING_SERVICE: &str = "QuadChat Local OAuth Test";
 const KEYRING_ACCOUNT: &str = "local-device-token";
+const COMPANION_RELEASE_API: &str = "https://api.github.com/repos/31415Hacker/QuadChat/releases/tags/background-service-latest";
 
 #[derive(Clone)]
 struct PendingAuthorization {
@@ -51,6 +52,18 @@ struct DeviceToken {
     expires_at: Instant,
     account_id: String,
     account_email: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubRelease {
+    name: Option<String>,
+    assets: Vec<GitHubReleaseAsset>,
+}
+
+#[derive(Deserialize)]
+struct GitHubReleaseAsset {
+    name: String,
+    browser_download_url: String,
 }
 
 struct LocalAuthStore {
@@ -765,6 +778,62 @@ fn percent_encode(value: &str) -> String {
     value.bytes().map(|byte| if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') { (byte as char).to_string() } else { format!("%{byte:02X}") }).collect()
 }
 
+fn parse_version(value: &str) -> Option<Vec<u32>> {
+    let parts = value.trim().trim_start_matches('v').split('.').map(str::parse::<u32>).collect::<Result<Vec<_>, _>>().ok()?;
+    (!parts.is_empty() && parts.len() <= 4).then_some(parts)
+}
+
+fn is_newer_version(available: &str, installed: &str) -> bool {
+    let (Some(mut available), Some(mut installed)) = (parse_version(available), parse_version(installed)) else { return false; };
+    let length = available.len().max(installed.len());
+    available.resize(length, 0);
+    installed.resize(length, 0);
+    available > installed
+}
+
+fn companion_installer_asset_name() -> Result<&'static str, String> {
+    #[cfg(target_os = "windows")]
+    { Ok("quadchat-background-service-windows-x64-setup.exe") }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    { Ok("quadchat-background-service-macos-arm64.pkg") }
+    #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+    { Err("Automatic updates are currently available for Apple Silicon Macs only.".to_owned()) }
+    #[cfg(target_os = "linux")]
+    { Ok("quadchat-background-service-linux-x64.deb") }
+}
+
+fn launch_companion_installer(installer: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    { Command::new(installer).spawn().map_err(|error| error.to_string())?; }
+    #[cfg(target_os = "macos")]
+    { Command::new("open").arg(installer).spawn().map_err(|error| error.to_string())?; }
+    #[cfg(target_os = "linux")]
+    {
+        let installer = installer.to_str().ok_or_else(|| "Updater path is not valid UTF-8".to_owned())?;
+        if Command::new("pkexec").args(["dpkg", "-i", installer]).spawn().is_err() {
+            Command::new("xdg-open").arg(installer).spawn().map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn check_for_companion_update() -> Result<String, String> {
+    let client = reqwest::blocking::Client::builder().user_agent("QuadChat-Companion-Updater").build().map_err(|error| error.to_string())?;
+    let response = client.get(COMPANION_RELEASE_API).send().map_err(|error| format!("Could not check for updates: {error}"))?;
+    if !response.status().is_success() { return Err(format!("Could not check for updates ({})", response.status())); }
+    let release: GitHubRelease = response.json().map_err(|error| format!("Could not read update details: {error}"))?;
+    let available = release.name.as_deref().and_then(|name| name.split_whitespace().find_map(|word| parse_version(word).map(|_| word.trim_start_matches('v')))).ok_or_else(|| "The update release does not include a version.".to_owned())?;
+    let installed = env!("CARGO_PKG_VERSION");
+    if !is_newer_version(available, installed) { return Ok("This app is at the latest version.".to_owned()); }
+    let asset_name = companion_installer_asset_name()?;
+    let asset = release.assets.iter().find(|asset| asset.name == asset_name).ok_or_else(|| "No installer is available for this platform yet.".to_owned())?;
+    let bytes = client.get(&asset.browser_download_url).send().map_err(|error| format!("Could not download the update: {error}"))?.error_for_status().map_err(|error| format!("Could not download the update: {error}"))?.bytes().map_err(|error| error.to_string())?;
+    let installer = std::env::temp_dir().join(asset_name);
+    fs::write(&installer, bytes).map_err(|error| format!("Could not save the update: {error}"))?;
+    launch_companion_installer(&installer)?;
+    Ok(format!("Version {available} is ready to install."))
+}
+
 struct CompanionGui { status: String, result: Option<Receiver<String>> }
 
 impl CompanionGui {
@@ -773,6 +842,13 @@ impl CompanionGui {
         self.status = format!("{label}…");
         self.result = Some(receiver);
         thread::spawn(move || { let _ = sender.send(match action() { Ok(()) => "Done.".to_owned(), Err(error) => format!("Error: {error}") }); });
+    }
+
+    fn check_for_updates(&mut self) {
+        let (sender, receiver) = mpsc::channel();
+        self.status = "Checking for updates…".to_owned();
+        self.result = Some(receiver);
+        thread::spawn(move || { let _ = sender.send(match check_for_companion_update() { Ok(status) => status, Err(error) => format!("Error: {error}") }); });
     }
 }
 
@@ -799,6 +875,9 @@ impl eframe::App for CompanionGui {
             let enabled = persistent_enabled();
             if ui.add(eframe::egui::Button::new(if enabled { "Persistent service enabled — click to disable" } else { "Enable persistent background service" })).clicked() {
                 if enabled { self.run_action(remove_persistent_relay, "Disabling background service"); } else { self.run_action(install_from_gui, "Enabling background service"); }
+            }
+            if ui.add_enabled(self.result.is_none(), eframe::egui::Button::new("Check for updates")).clicked() {
+                self.check_for_updates();
             }
             ui.separator();
             ui.label(&self.status);

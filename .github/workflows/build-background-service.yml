@@ -59,7 +59,7 @@ jobs:
           mkdir -p "package-root/Applications/QuadChat Companion.app/Contents/MacOS"
           cp target/release/${{ matrix.binary }} "package-root/Applications/QuadChat Companion.app/Contents/MacOS/QuadChat Companion"
           printf '%s' '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>QuadChat Companion</string><key>CFBundleIdentifier</key><string>com.quadchat.background-service</string><key>CFBundleName</key><string>QuadChat Companion</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>' > "package-root/Applications/QuadChat Companion.app/Contents/Info.plist"
-          pkgbuild --root package-root --identifier com.quadchat.background-service --version 1.5.4 --install-location / quadchat-background-service-macos-arm64.pkg
+          pkgbuild --root package-root --identifier com.quadchat.background-service --version 1.5.5 --install-location / quadchat-background-service-macos-arm64.pkg
       - name: Build Linux package
         if: matrix.package == 'deb'
         shell: bash
@@ -86,6 +86,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - id: companion-version
+        run: echo "value=$(awk -F'"' '/^version = / { print $2; exit }' quadchat-background-service/Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -93,7 +96,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: background-service-latest
-          name: QuadChat Background Service (latest)
+          name: QuadChat Background Service v${{ steps.companion-version.outputs.value }}
           prerelease: true
           make_latest: false
           overwrite_files: true
