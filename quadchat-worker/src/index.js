@@ -617,6 +617,20 @@ async function handleCompanionAction(request, env) {
       })).filter((contact) => contact.userId && contact.userId !== userId && !contact.banned);
       return json({ contacts }, 200, corsHeaders);
     }
+    if (action === "toggle_call_mute") {
+      const accessToken = await getAccessToken(account);
+      const commandId = crypto.randomUUID();
+      const response = await fetch(
+        `https://${account.project_id}-default-rtdb.firebaseio.com/companion-actions/${encodeURIComponent(userId)}/${encodeURIComponent(commandId)}.json`,
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "toggle_call_mute", createdAt: Date.now(), expiresAt: Date.now() + 60_000 })
+        }
+      );
+      if (!response.ok) throw new Error("call_action_unavailable");
+      return json({ queued: true }, 200, corsHeaders);
+    }
     if (action !== "send_message" || typeof channel !== "string" || typeof text !== "string" || !text.trim() || text.length > 500) return json({ error: "invalid_action" }, 400, corsHeaders);
     const sender = await readFirestoreDoc(account, "users", userId);
     if (!sender || sender.fields?.banned?.booleanValue === true || sender.fields?.muted?.booleanValue === true) return json({ error: "message_not_allowed" }, 403, corsHeaders);

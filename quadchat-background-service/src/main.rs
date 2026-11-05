@@ -641,6 +641,14 @@ fn send_overlay_message(channel: &str, text: &str) -> Result<(), String> {
     if response.status().is_success() { Ok(()) } else { Err(format!("Message was not sent ({})", response.status())) }
 }
 
+fn queue_overlay_call_mute_toggle() -> Result<(), String> {
+    let credential = credentials::load()?.ok_or_else(|| "Pair this companion first.".to_owned())?;
+    let response = reqwest::blocking::Client::new().post(format!("{}/companion/action", credential.worker_url.trim_end_matches('/')))
+        .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "action": "toggle_call_mute" }))
+        .send().map_err(|error| error.to_string())?;
+    if response.status().is_success() { Ok(()) } else { Err(format!("Call control was not sent ({})", response.status())) }
+}
+
 fn load_overlay_contacts() -> Result<Vec<OverlayContact>, String> {
     let credential = credentials::load()?.ok_or_else(|| "Pair this companion first.".to_owned())?;
     let response = reqwest::blocking::Client::new().post(format!("{}/companion/action", credential.worker_url.trim_end_matches('/')))
@@ -675,6 +683,13 @@ impl eframe::App for GamingOverlay {
                 }
                 if ui.button("Unfocus overlay").clicked() { context.send_viewport_cmd(eframe::egui::ViewportCommand::Close); }
             });
+            ui.separator();
+            if ui.button("Toggle active-call mute").clicked() {
+                self.status = match queue_overlay_call_mute_toggle() {
+                    Ok(()) => "Mute control sent to your QuadChat browser.".to_owned(),
+                    Err(error) => format!("Error: {error}")
+                };
+            }
             ui.label(&self.status);
         });
     }

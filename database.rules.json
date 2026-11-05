@@ -22,6 +22,19 @@
       }
     },
 
+    // One-time commands written by the paired companion through the Worker.
+    // The owner can read and remove their own commands; a forged command can
+    // only affect that same owner's local browser session.
+    "companion-actions": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$commandId": {
+          ".validate": "!newData.exists() || (newData.hasChildren(['action', 'createdAt', 'expiresAt']) && newData.numChildren() === 3 && newData.child('action').val() === 'toggle_call_mute' && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber())"
+        }
+      }
+    },
+
     // -----------------------------------------------------------------
     // ONE-ON-ONE WEBRTC CALLS
     // -----------------------------------------------------------------

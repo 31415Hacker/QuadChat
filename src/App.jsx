@@ -385,6 +385,7 @@ export default function App() {
   const [onlineUsers, , presenceReady] = usePresence(user);
   const profileIdsKey = useMemo(() => Object.keys(profiles).sort().join("|"), [profiles]);
 
+  const processedCompanionCommandIdsRef = useRef(new Set());
   useEffect(() => {
     if (!user) return;
     syncCompanionSoundPreferences(user, {
@@ -604,6 +605,46 @@ export default function App() {
     noiseMode,
     setNoiseMode
   });
+
+  useEffect(() => {
+    if (!sessionUserId) return undefined;
+    const commandsRef = rtdbRef(rtdb, `companion-actions/${sessionUserId}`);
+    const unsubscribe = onChildAdded(commandsRef, (snapshot) => {
+      if (processedCompanionCommandIdsRef.current.has(snapshot.key)) return;
+      processedCompanionCommandIdsRef.current.add(snapshot.key);
+      if (processedCompanionCommandIdsRef.current.size > 100) {
+        processedCompanionCommandIdsRef.current.clear();
+        processedCompanionCommandIdsRef.current.add(snapshot.key);
+      }
+      const command = snapshot.val();
+      const isFresh = Number(command?.expiresAt) > Date.now();
+      const removeCommand = () => remove(snapshot.ref).catch(() => {});
+      if (!isFresh || command?.action !== "toggle_call_mute") {
+        removeCommand();
+        return;
+      }
+      try {
+        if (callStatus === "connected" || callStatus === "calling") {
+          toggleCallMute();
+        } else if (groupCallStatus === "connected") {
+          toggleGroupCallMute();
+        } else if (p2pGroupCallStatus === "connected") {
+          toggleP2PGroupCallMute();
+        }
+      } finally {
+        removeCommand();
+      }
+    });
+    return unsubscribe;
+  }, [
+    sessionUserId,
+    callStatus,
+    groupCallStatus,
+    p2pGroupCallStatus,
+    toggleCallMute,
+    toggleGroupCallMute,
+    toggleP2PGroupCallMute
+  ]);
 
   const cycleNoiseMode = useCallback(() => {
     setNoiseMode((current) => {
