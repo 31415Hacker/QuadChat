@@ -17,6 +17,7 @@ use rodio::{Decoder, OutputStream, Sink, Source};
 use sha2::{Digest, Sha256};
 use tungstenite::{connect, Message};
 use keyring::Entry;
+use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::{Code, HotKey, Modifiers}};
 
 const SERVICE_PORT: u16 = 43721;
 const AUTH_PORT: u16 = 43722;
@@ -576,6 +577,7 @@ fn run_companion_relay() -> Result<(), String> {
     let relay_url = format!("{}/companion/connect?user={}", worker_url.trim_end_matches('/').replace("https://", "wss://").replace("http://", "ws://"), percent_encode(&credential.subject));
     let mut retry_seconds = 1_u64;
     let mut sound_player = SoundPlayer::new();
+    start_gaming_overlay_hotkey();
     loop {
         match connect(relay_url.as_str()) {
             Ok((mut socket, _)) => {
@@ -605,6 +607,59 @@ fn run_companion_relay() -> Result<(), String> {
         thread::sleep(Duration::from_secs(retry_seconds));
         retry_seconds = (retry_seconds * 2).min(30);
     }
+}
+
+fn start_gaming_overlay_hotkey() {
+    thread::spawn(|| {
+        let Ok(manager) = GlobalHotKeyManager::new() else { eprintln!("[OVERLAY] Global hotkeys are unavailable on this desktop session."); return; };
+        let hotkey = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+        if manager.register(hotkey).is_err() { eprintln!("[OVERLAY] Could not register Ctrl+Alt+Space."); return; }
+        let receiver = GlobalHotKeyEvent::receiver();
+        while let Ok(event) = receiver.recv() {
+            if event.id == hotkey.id() {
+                if let Ok(executable) = std::env::current_exe() {
+                    let _ = Command::new(executable).arg("--gaming-overlay").spawn();
+                }
+            }
+        }
+    });
+}
+
+struct GamingOverlay { text: String, channel: String, status: String }
+
+fn send_overlay_message(channel: &str, text: &str) -> Result<(), String> {
+    let credential = credentials::load()?.ok_or_else(|| "Pair this companion first.".to_owned())?;
+    let response = reqwest::blocking::Client::new().post(format!("{}/companion/action", credential.worker_url.trim_end_matches('/')))
+        .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "action": "send_message", "channel": channel, "text": text }))
+        .send().map_err(|error| error.to_string())?;
+    if response.status().is_success() { Ok(()) } else { Err(format!("Message was not sent ({})", response.status())) }
+}
+
+impl eframe::App for GamingOverlay {
+    fn update(&mut self, context: &eframe::egui::Context, _: &mut eframe::Frame) {
+        eframe::egui::CentralPanel::default().show(context, |ui| {
+            ui.heading("QuadChat Overlay");
+            ui.label("Quick message without leaving your game.");
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.channel, "group".to_owned(), "Group");
+                ui.selectable_value(&mut self.channel, "suggestions".to_owned(), "Suggestions");
+            });
+            ui.add(eframe::egui::TextEdit::singleline(&mut self.text).hint_text("Message"));
+            ui.horizontal(|ui| {
+                if ui.button("Send").clicked() && !self.text.trim().is_empty() {
+                    self.status = match send_overlay_message(&self.channel, &self.text) { Ok(()) => { self.text.clear(); "Sent.".to_owned() }, Err(error) => format!("Error: {error}") };
+                }
+                if ui.button("Unfocus overlay").clicked() { context.send_viewport_cmd(eframe::egui::ViewportCommand::Close); }
+            });
+            ui.label(&self.status);
+        });
+    }
+}
+
+fn run_gaming_overlay() -> Result<(), String> {
+    let options = eframe::NativeOptions { viewport: eframe::egui::ViewportBuilder::default().with_always_on_top(), ..Default::default() };
+    eframe::run_native("QuadChat Overlay", options, Box::new(|_| Ok(Box::new(GamingOverlay { text: String::new(), channel: "group".to_owned(), status: String::new() })))).map_err(|error| error.to_string())
 }
 
 #[cfg(target_os = "linux")]
@@ -736,6 +791,9 @@ fn main() {
     }
     else if std::env::args().any(|arg| arg == "--relay-companion") {
         if let Err(error) = run_companion_relay() { eprintln!("Companion relay stopped: {error}"); std::process::exit(1); }
+    }
+    else if std::env::args().any(|arg| arg == "--gaming-overlay") {
+        if let Err(error) = run_gaming_overlay() { eprintln!("Could not open gaming overlay: {error}"); std::process::exit(1); }
     }
     else if std::env::args().any(|arg| arg == "--install-persistent") {
         if credentials::load().ok().flatten().is_none() { eprintln!("Pair this companion first with --pair-companion"); std::process::exit(1); }

@@ -598,6 +598,31 @@ async function handleCompanionPreferences(request, env) {
   } catch { return json({ error: "authorization_required" }, 401, corsHeaders); }
 }
 
+async function handleCompanionAction(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const { userId, deviceId, token, action, channel, text } = await request.json();
+    if (typeof userId !== "string" || typeof deviceId !== "string" || typeof token !== "string" || action !== "send_message" || typeof channel !== "string" || typeof text !== "string" || !text.trim() || text.length > 500) return json({ error: "invalid_action" }, 400, corsHeaders);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    if (!(await relay.validateDevice(deviceId, token))) return json({ error: "authorization_required" }, 401, corsHeaders);
+    const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    const sender = await readFirestoreDoc(account, "users", userId);
+    if (!sender || sender.fields?.banned?.booleanValue === true || sender.fields?.muted?.booleanValue === true) return json({ error: "message_not_allowed" }, 403, corsHeaders);
+    if (channel.startsWith("dm_")) {
+      const dm = await readFirestoreDoc(account, "dms", channel);
+      const participants = dm?.fields?.participants?.arrayValue?.values?.map((entry) => entry.stringValue) || [];
+      if (participants.length !== 2 || !participants.includes(userId)) return json({ error: "message_not_allowed" }, 403, corsHeaders);
+    } else if (!COMPANION_GROUP_CHANNELS.has(channel)) return json({ error: "message_not_allowed" }, 403, corsHeaders);
+    const messageId = crypto.randomUUID();
+    await commitFirestoreWrites(account, [{
+      update: { name: `${databasePath(account)}/documents/messages/${channel}/messages/${messageId}`, fields: { text: { stringValue: text.trim() }, userId: { stringValue: userId } } },
+      updateMask: { fieldPaths: ["text", "userId"] },
+      updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }]
+    }]);
+    return json({ sent: true, messageId }, 200, corsHeaders);
+  } catch (error) { console.error("[COMPANION] action failed", error); return json({ error: "action_failed" }, 500, corsHeaders); }
+}
+
 async function handleCompanionCallAvailability(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
@@ -816,6 +841,7 @@ export default {
       return handleCompanionCallAvailability(request, env);
     }
     if (request.method === "PUT" && url.pathname === "/companion/preferences") return handleCompanionPreferences(request, env);
+    if (request.method === "POST" && url.pathname === "/companion/action") return handleCompanionAction(request, env);
     if (request.method === "POST" && url.pathname === "/companion/notify") {
       return handleCompanionNotify(request, env);
     }
@@ -914,6 +940,12 @@ export class CompanionRelay extends DurableObject {
     await this.ctx.storage.put("preferences", preferences);
     const payload = JSON.stringify({ type: "preferences", preferences });
     for (const [socket] of this.sessions) { try { socket.send(payload); } catch { this.sessions.delete(socket); } }
+  }
+
+  async validateDevice(deviceId, token) {
+    const devices = (await this.ctx.storage.get("devices")) || {};
+    const device = devices[deviceId];
+    return Boolean(device && device.expiresAt > Date.now() && safeEqual(device.tokenHash, await sha256Hex(token)));
   }
 
   async fetch(request) {
