@@ -34,6 +34,7 @@ const KEYRING_SERVICE: &str = "QuadChat Local OAuth Test";
 const KEYRING_ACCOUNT: &str = "local-device-token";
 const RICH_PRESENCE_INTERVAL: Duration = Duration::from_secs(20);
 const COMPANION_RELEASE_API: &str = "https://api.github.com/repos/31415Hacker/QuadChat/releases/tags/background-service-latest";
+const COMPANION_BUILD_API: &str = "https://api.github.com/repos/31415Hacker/QuadChat/actions/workflows/build-background-service.yml/runs?branch=main&per_page=1";
 
 #[derive(Clone)]
 struct PendingAuthorization {
@@ -66,6 +67,16 @@ struct GitHubRelease {
 struct GitHubReleaseAsset {
     name: String,
     browser_download_url: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubWorkflowRuns {
+    workflow_runs: Vec<GitHubWorkflowRun>,
+}
+
+#[derive(Deserialize)]
+struct GitHubWorkflowRun {
+    status: String,
 }
 
 struct LocalAuthStore {
@@ -957,6 +968,17 @@ fn report_update_progress(sender: &mpsc::Sender<GuiTaskEvent>, status: impl Into
 fn check_for_companion_update(sender: &mpsc::Sender<GuiTaskEvent>) -> Result<String, String> {
     report_update_progress(sender, "Checking for updates…", None);
     let client = reqwest::blocking::Client::builder().user_agent("QuadChat-Companion-Updater").build().map_err(|error| error.to_string())?;
+    let build_status = client
+        .get(COMPANION_BUILD_API)
+        .send()
+        .ok()
+        .and_then(|response| response.error_for_status().ok())
+        .and_then(|response| response.json::<GitHubWorkflowRuns>().ok())
+        .and_then(|runs| runs.workflow_runs.into_iter().next())
+        .map(|run| run.status);
+    if matches!(build_status.as_deref(), Some("queued") | Some("in_progress") | Some("waiting") | Some("requested")) {
+        return Ok("Deploying new Companion version… Check again shortly.".to_owned());
+    }
     let response = client.get(COMPANION_RELEASE_API).send().map_err(|error| format!("Could not check for updates: {error}"))?;
     if !response.status().is_success() { return Err(format!("Could not check for updates ({})", response.status())); }
     let release: GitHubRelease = response.json().map_err(|error| format!("Could not read update details: {error}"))?;
