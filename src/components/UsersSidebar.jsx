@@ -136,13 +136,7 @@ export default function UsersSidebar({
                        title={`Playing ${gameDetails}`}
                        aria-label={`Playing ${gameDetails}`}
                       >
-                        <img
-                          src={game.logo === "minecraft"
-                            ? "https://www.minecraft.net/etc.clientlibs/minecraft/clientlibs/main/resources/favicon.ico"
-                            : `/game-icons/${game.logo}.svg`}
-                          alt=""
-                          onError={(event) => { event.currentTarget.src = `/game-icons/${game.logo}.svg`; }}
-                        />
+                        <img src={`/game-icons/${game.logo}.svg`} alt="" />
                      </button>
                      {openGameUserId === profile.id ? <span className="user-game-details">Playing {gameDetails}</span> : null}
                     </span>
