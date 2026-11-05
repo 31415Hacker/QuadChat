@@ -884,7 +884,17 @@ fn launch_companion_installer(installer: &std::path::Path) -> Result<(), String>
     Ok(())
 }
 
-fn check_for_companion_update() -> Result<String, String> {
+enum GuiTaskEvent {
+    Progress { status: String, progress: Option<f32> },
+    Finished(String),
+}
+
+fn report_update_progress(sender: &mpsc::Sender<GuiTaskEvent>, status: impl Into<String>, progress: Option<f32>) {
+    let _ = sender.send(GuiTaskEvent::Progress { status: status.into(), progress });
+}
+
+fn check_for_companion_update(sender: &mpsc::Sender<GuiTaskEvent>) -> Result<String, String> {
+    report_update_progress(sender, "Checking for updates…", None);
     let client = reqwest::blocking::Client::builder().user_agent("QuadChat-Companion-Updater").build().map_err(|error| error.to_string())?;
     let response = client.get(COMPANION_RELEASE_API).send().map_err(|error| format!("Could not check for updates: {error}"))?;
     if !response.status().is_success() { return Err(format!("Could not check for updates ({})", response.status())); }
@@ -894,28 +904,53 @@ fn check_for_companion_update() -> Result<String, String> {
     if !is_newer_version(available, installed) { return Ok("This app is at the latest version.".to_owned()); }
     let asset_name = companion_installer_asset_name()?;
     let asset = release.assets.iter().find(|asset| asset.name == asset_name).ok_or_else(|| "No installer is available for this platform yet.".to_owned())?;
-    let bytes = client.get(&asset.browser_download_url).send().map_err(|error| format!("Could not download the update: {error}"))?.error_for_status().map_err(|error| format!("Could not download the update: {error}"))?.bytes().map_err(|error| error.to_string())?;
+    report_update_progress(sender, format!("Downloading version {available}…"), Some(0.0));
+    let mut response = client.get(&asset.browser_download_url).send().map_err(|error| format!("Could not download the update: {error}"))?.error_for_status().map_err(|error| format!("Could not download the update: {error}"))?;
+    let total_bytes = response.content_length();
     let installer = std::env::temp_dir().join(asset_name);
-    fs::write(&installer, bytes).map_err(|error| format!("Could not save the update: {error}"))?;
+    let mut file = fs::File::create(&installer).map_err(|error| format!("Could not save the update: {error}"))?;
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut downloaded = 0_u64;
+    let mut last_percent = None;
+    loop {
+        let count = response.read(&mut buffer).map_err(|error| format!("Could not download the update: {error}"))?;
+        if count == 0 { break; }
+        file.write_all(&buffer[..count]).map_err(|error| format!("Could not save the update: {error}"))?;
+        downloaded += count as u64;
+        if let Some(total) = total_bytes {
+            let progress = (downloaded as f32 / total as f32).clamp(0.0, 1.0);
+            let percent = (progress * 100.0).floor() as u8;
+            if last_percent != Some(percent) {
+                report_update_progress(sender, format!("Downloading version {available}… {percent}%"), Some(progress));
+                last_percent = Some(percent);
+            }
+        } else {
+            report_update_progress(sender, format!("Downloading version {available}… {} MB", downloaded / 1_000_000), None);
+        }
+    }
+    file.flush().map_err(|error| format!("Could not save the update: {error}"))?;
+    report_update_progress(sender, "Download complete. Launching installer…", Some(1.0));
     launch_companion_installer(&installer)?;
-    Ok(format!("Version {available} is ready to install."))
+    Ok(format!("Installer opened for version {available}. Follow its steps to finish updating."))
 }
 
-struct CompanionGui { status: String, result: Option<Receiver<String>> }
+struct CompanionGui { status: String, result: Option<Receiver<GuiTaskEvent>>, update_progress: Option<f32> }
 
 impl CompanionGui {
     fn run_action(&mut self, action: fn() -> Result<(), String>, label: &str) {
         let (sender, receiver) = mpsc::channel();
         self.status = format!("{label}…");
+        self.update_progress = None;
         self.result = Some(receiver);
-        thread::spawn(move || { let _ = sender.send(match action() { Ok(()) => "Done.".to_owned(), Err(error) => format!("Error: {error}") }); });
+        thread::spawn(move || { let _ = sender.send(GuiTaskEvent::Finished(match action() { Ok(()) => "Done.".to_owned(), Err(error) => format!("Error: {error}") })); });
     }
 
     fn check_for_updates(&mut self) {
         let (sender, receiver) = mpsc::channel();
         self.status = "Checking for updates…".to_owned();
+        self.update_progress = None;
         self.result = Some(receiver);
-        thread::spawn(move || { let _ = sender.send(match check_for_companion_update() { Ok(status) => status, Err(error) => format!("Error: {error}") }); });
+        thread::spawn(move || { let result = match check_for_companion_update(&sender) { Ok(status) => status, Err(error) => format!("Error: {error}") }; let _ = sender.send(GuiTaskEvent::Finished(result)); });
     }
 }
 
@@ -932,7 +967,17 @@ fn toggle_rich_presence_from_gui() -> Result<(), String> {
 
 impl eframe::App for CompanionGui {
     fn update(&mut self, context: &eframe::egui::Context, _: &mut eframe::Frame) {
-        if let Some(receiver) = &self.result { if let Ok(result) = receiver.try_recv() { self.status = result; self.result = None; } }
+        let mut finished = None;
+        if let Some(receiver) = &self.result {
+            while let Ok(event) = receiver.try_recv() {
+                match event {
+                    GuiTaskEvent::Progress { status, progress } => { self.status = status; self.update_progress = progress; }
+                    GuiTaskEvent::Finished(status) => finished = Some(status),
+                }
+            }
+        }
+        if let Some(status) = finished { self.status = status; self.update_progress = None; self.result = None; }
+        if self.result.is_some() { context.request_repaint_after(Duration::from_millis(100)); }
         eframe::egui::CentralPanel::default().show(context, |ui| {
             ui.heading("QuadChat Companion");
             ui.label("Notifications for this device when your browser is closed.");
@@ -957,13 +1002,14 @@ impl eframe::App for CompanionGui {
             }
             ui.separator();
             ui.label(&self.status);
+            if let Some(progress) = self.update_progress { ui.add(eframe::egui::ProgressBar::new(progress).show_percentage()); }
         });
     }
 }
 
 fn run_gui() -> Result<(), String> {
     let status = match credentials::load() { Ok(Some(_)) => "Paired. You can enable persistent background notifications.".to_owned(), Ok(None) => "Not paired yet.".to_owned(), Err(error) => format!("Credential-store error: {error}") };
-    eframe::run_native("QuadChat Companion", eframe::NativeOptions::default(), Box::new(|_| Ok(Box::new(CompanionGui { status, result: None })))).map_err(|error| error.to_string())
+    eframe::run_native("QuadChat Companion", eframe::NativeOptions::default(), Box::new(|_| Ok(Box::new(CompanionGui { status, result: None, update_progress: None })))).map_err(|error| error.to_string())
 }
 
 fn main() {
