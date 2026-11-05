@@ -22,10 +22,15 @@ fn rich_presence_entry() -> Result<Entry, String> {
     Entry::new(SERVICE, RICH_PRESENCE_ACCOUNT).map_err(|error| error.to_string())
 }
 
+fn is_missing_credential(error: &keyring::Error) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("no entry") || message.contains("no matching credential")
+}
+
 pub fn rich_presence_enabled() -> Result<bool, String> {
     match rich_presence_entry()?.get_password() {
         Ok(value) => Ok(value == "true"),
-        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => Ok(false),
+        Err(error) if is_missing_credential(&error) => Ok(false),
         Err(error) => Err(error.to_string())
     }
 }
@@ -64,7 +69,7 @@ pub fn save(credential: &DeviceCredential) -> Result<(), String> {
 pub fn load() -> Result<Option<DeviceCredential>, String> {
     match entry()?.get_password() {
         Ok(value) => decode(&value).map(Some),
-        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => Ok(None),
+        Err(error) if is_missing_credential(&error) => Ok(None),
         Err(error) => Err(error.to_string()),
     }
 }
@@ -75,7 +80,7 @@ pub fn clear() -> Result<(), String> {
             let _ = rich_presence_entry()?.delete_credential();
             Ok(())
         },
-        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => {
+        Err(error) if is_missing_credential(&error) => {
             let _ = rich_presence_entry()?.delete_credential();
             Ok(())
         },
