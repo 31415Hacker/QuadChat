@@ -981,6 +981,7 @@ impl eframe::App for CompanionGui {
         eframe::egui::CentralPanel::default().show(context, |ui| {
             ui.heading("QuadChat Companion");
             ui.label("Notifications for this device when your browser is closed.");
+            ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
             ui.separator();
             let credential = credentials::load().ok().flatten();
             let device_name = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_else(|_| "This device".to_owned());
