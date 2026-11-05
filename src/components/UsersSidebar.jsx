@@ -135,8 +135,14 @@ export default function UsersSidebar({
                        onClick={() => setOpenGameUserId((current) => current === profile.id ? null : profile.id)}
                        title={`Playing ${gameDetails}`}
                        aria-label={`Playing ${gameDetails}`}
-                     >
-                       <img src={`/game-icons/${game.logo}.svg`} alt="" />
+                      >
+                        <img
+                          src={game.logo === "minecraft"
+                            ? "https://www.minecraft.net/etc.clientlibs/minecraft/clientlibs/main/resources/favicon.ico"
+                            : `/game-icons/${game.logo}.svg`}
+                          alt=""
+                          onError={(event) => { event.currentTarget.src = `/game-icons/${game.logo}.svg`; }}
+                        />
                      </button>
                      {openGameUserId === profile.id ? <span className="user-game-details">Playing {gameDetails}</span> : null}
                     </span>
