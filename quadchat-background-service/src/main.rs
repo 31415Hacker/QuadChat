@@ -634,10 +634,28 @@ fn game_version(command: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn minecraft_activity_detail() -> Option<String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok()?;
-    let path = std::path::Path::new(&home).join(".minecraft/logs/latest.log");
-    let mut log = fs::File::open(path).ok()?;
+fn minecraft_log_directories(command: &str) -> Vec<std::path::PathBuf> {
+    let mut directories = Vec::new();
+    let arguments = command.split_whitespace().collect::<Vec<_>>();
+    for (index, argument) in arguments.iter().enumerate() {
+        if *argument == "--gameDir" {
+            if let Some(path) = arguments.get(index + 1) { directories.push(std::path::PathBuf::from(path.trim_matches('"'))); }
+        }
+        if let Some(start) = argument.find(".minecraft") {
+            let directory = &argument[..start + ".minecraft".len()];
+            if directory.starts_with('/') || directory.starts_with("C:") { directories.push(std::path::PathBuf::from(directory)); }
+        }
+    }
+    if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) { directories.push(std::path::PathBuf::from(home).join(".minecraft")); }
+    let mut unique = Vec::new();
+    for directory in directories {
+        if !unique.contains(&directory) { unique.push(directory); }
+    }
+    unique
+}
+
+fn minecraft_detail_from_log(path: &std::path::Path) -> Option<String> {
+    let mut log = fs::File::open(path.join("logs/latest.log")).ok()?;
     let start = log.metadata().ok()?.len().saturating_sub(64 * 1024);
     log.seek(SeekFrom::Start(start)).ok()?;
     let mut tail = String::new();
@@ -655,6 +673,10 @@ fn minecraft_activity_detail() -> Option<String> {
     None
 }
 
+fn minecraft_activity_detail(command: &str) -> Option<String> {
+    minecraft_log_directories(command).into_iter().find_map(|directory| minecraft_detail_from_log(&directory))
+}
+
 fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
     // The normal refresh omits command lines for newly launched processes.
     // Minecraft is a Java process, so its command line is how we distinguish
@@ -669,7 +691,7 @@ fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
         let command = process.cmd().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>().join(" ");
         let command_lower = command.to_ascii_lowercase();
         if (executable == "java" || executable == "javaw" || executable == "java.exe" || executable == "javaw.exe") && command_lower.contains("minecraft") {
-            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command), detail: minecraft_activity_detail() });
+            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command), detail: minecraft_activity_detail(&command) });
         }
         let game = match executable.as_str() {
             "minecraft.windows.exe" => Some(("Minecraft Bedrock Edition", "minecraft")),
