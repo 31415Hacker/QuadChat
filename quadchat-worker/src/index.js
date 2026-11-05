@@ -602,10 +602,22 @@ async function handleCompanionAction(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
     const { userId, deviceId, token, action, channel, text } = await request.json();
-    if (typeof userId !== "string" || typeof deviceId !== "string" || typeof token !== "string" || action !== "send_message" || typeof channel !== "string" || typeof text !== "string" || !text.trim() || text.length > 500) return json({ error: "invalid_action" }, 400, corsHeaders);
+    if (typeof userId !== "string" || typeof deviceId !== "string" || typeof token !== "string") return json({ error: "invalid_action" }, 400, corsHeaders);
     const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
     if (!(await relay.validateDevice(deviceId, token))) return json({ error: "authorization_required" }, 401, corsHeaders);
     const account = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    if (action === "list_contacts") {
+      const response = await fetch(`${FIRESTORE_BASE}/${databasePath(account)}/documents/users?pageSize=100`, { headers: { Authorization: `Bearer ${await getAccessToken(account)}` } });
+      if (!response.ok) throw new Error("contacts_unavailable");
+      const data = await response.json();
+      const contacts = (data.documents || []).map((document) => ({
+        userId: document.name.split("/").pop(),
+        name: document.fields?.displayName?.stringValue || "QuadChat member",
+        banned: document.fields?.banned?.booleanValue === true
+      })).filter((contact) => contact.userId && contact.userId !== userId && !contact.banned);
+      return json({ contacts }, 200, corsHeaders);
+    }
+    if (action !== "send_message" || typeof channel !== "string" || typeof text !== "string" || !text.trim() || text.length > 500) return json({ error: "invalid_action" }, 400, corsHeaders);
     const sender = await readFirestoreDoc(account, "users", userId);
     if (!sender || sender.fields?.banned?.booleanValue === true || sender.fields?.muted?.booleanValue === true) return json({ error: "message_not_allowed" }, 403, corsHeaders);
     if (channel.startsWith("dm_")) {

@@ -625,7 +625,13 @@ fn start_gaming_overlay_hotkey() {
     });
 }
 
-struct GamingOverlay { text: String, channel: String, status: String }
+#[derive(Deserialize)]
+struct OverlayContact { #[serde(rename = "userId")] user_id: String, name: String }
+
+#[derive(Deserialize)]
+struct OverlayContactsResponse { contacts: Vec<OverlayContact> }
+
+struct GamingOverlay { text: String, channel: String, status: String, contacts: Vec<OverlayContact>, selected_contact: String }
 
 fn send_overlay_message(channel: &str, text: &str) -> Result<(), String> {
     let credential = credentials::load()?.ok_or_else(|| "Pair this companion first.".to_owned())?;
@@ -633,6 +639,15 @@ fn send_overlay_message(channel: &str, text: &str) -> Result<(), String> {
         .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "action": "send_message", "channel": channel, "text": text }))
         .send().map_err(|error| error.to_string())?;
     if response.status().is_success() { Ok(()) } else { Err(format!("Message was not sent ({})", response.status())) }
+}
+
+fn load_overlay_contacts() -> Result<Vec<OverlayContact>, String> {
+    let credential = credentials::load()?.ok_or_else(|| "Pair this companion first.".to_owned())?;
+    let response = reqwest::blocking::Client::new().post(format!("{}/companion/action", credential.worker_url.trim_end_matches('/')))
+        .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "action": "list_contacts" }))
+        .send().map_err(|error| error.to_string())?;
+    if !response.status().is_success() { return Err("Could not load contacts.".to_owned()); }
+    Ok(response.json::<OverlayContactsResponse>().map_err(|error| error.to_string())?.contacts)
 }
 
 impl eframe::App for GamingOverlay {
@@ -644,11 +659,19 @@ impl eframe::App for GamingOverlay {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.channel, "group".to_owned(), "Group");
                 ui.selectable_value(&mut self.channel, "suggestions".to_owned(), "Suggestions");
+                ui.selectable_value(&mut self.channel, "dm".to_owned(), "DM");
             });
+            if self.channel == "dm" {
+                if self.contacts.is_empty() && ui.button("Load contacts").clicked() { self.contacts = load_overlay_contacts().unwrap_or_default(); }
+                eframe::egui::ComboBox::from_label("Recipient").selected_text(self.contacts.iter().find(|contact| contact.user_id == self.selected_contact).map(|contact| contact.name.as_str()).unwrap_or("Choose contact")).show_ui(ui, |ui| {
+                    for contact in &self.contacts { ui.selectable_value(&mut self.selected_contact, contact.user_id.clone(), &contact.name); }
+                });
+            }
             ui.add(eframe::egui::TextEdit::singleline(&mut self.text).hint_text("Message"));
             ui.horizontal(|ui| {
                 if ui.button("Send").clicked() && !self.text.trim().is_empty() {
-                    self.status = match send_overlay_message(&self.channel, &self.text) { Ok(()) => { self.text.clear(); "Sent.".to_owned() }, Err(error) => format!("Error: {error}") };
+                    let channel = if self.channel == "dm" { let mut participants = vec![credentials::load().ok().flatten().map(|value| value.subject).unwrap_or_default(), self.selected_contact.clone()]; participants.sort(); format!("dm_{}", participants.into_iter().filter(|value| !value.is_empty()).collect::<Vec<_>>().join("_")) } else { self.channel.clone() };
+                    self.status = if self.channel == "dm" && self.selected_contact.is_empty() { "Choose a DM recipient first.".to_owned() } else { match send_overlay_message(&channel, &self.text) { Ok(()) => { self.text.clear(); "Sent.".to_owned() }, Err(error) => format!("Error: {error}") } };
                 }
                 if ui.button("Unfocus overlay").clicked() { context.send_viewport_cmd(eframe::egui::ViewportCommand::Close); }
             });
@@ -659,7 +682,7 @@ impl eframe::App for GamingOverlay {
 
 fn run_gaming_overlay() -> Result<(), String> {
     let options = eframe::NativeOptions { viewport: eframe::egui::ViewportBuilder::default().with_always_on_top(), ..Default::default() };
-    eframe::run_native("QuadChat Overlay", options, Box::new(|_| Ok(Box::new(GamingOverlay { text: String::new(), channel: "group".to_owned(), status: String::new() })))).map_err(|error| error.to_string())
+    eframe::run_native("QuadChat Overlay", options, Box::new(|_| Ok(Box::new(GamingOverlay { text: String::new(), channel: "group".to_owned(), status: String::new(), contacts: Vec::new(), selected_contact: String::new() })))).map_err(|error| error.to_string())
 }
 
 #[cfg(target_os = "linux")]
