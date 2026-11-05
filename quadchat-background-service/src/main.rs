@@ -1018,19 +1018,21 @@ fn companion_installer_asset_name() -> Result<&'static str, String> {
     { Ok("quadchat-background-service-linux-x64.deb") }
 }
 
-fn launch_companion_installer(installer: &std::path::Path) -> Result<(), String> {
+fn launch_companion_installer(installer: &std::path::Path) -> Result<&'static str, String> {
     #[cfg(target_os = "windows")]
-    { Command::new(installer).spawn().map_err(|error| error.to_string())?; }
+    { Command::new(installer).spawn().map_err(|error| error.to_string())?; Ok("Installer opened. Follow its steps to finish updating.") }
     #[cfg(target_os = "macos")]
-    { Command::new("open").arg(installer).spawn().map_err(|error| error.to_string())?; }
+    { Command::new("open").arg(installer).spawn().map_err(|error| error.to_string())?; Ok("Installer opened. Follow its steps to finish updating.") }
     #[cfg(target_os = "linux")]
     {
         let installer = installer.to_str().ok_or_else(|| "Updater path is not valid UTF-8".to_owned())?;
         if Command::new("pkexec").args(["dpkg", "-i", installer]).spawn().is_err() {
             Command::new("xdg-open").arg(installer).spawn().map_err(|error| error.to_string())?;
+            Ok("The package file opened. Install it with your system package manager, then restart Companion.")
+        } else {
+            Ok("The system package command is running with administrator permission. Restart Companion after it completes.")
         }
     }
-    Ok(())
 }
 
 enum GuiTaskEvent {
@@ -1089,9 +1091,9 @@ fn check_for_companion_update(sender: &mpsc::Sender<GuiTaskEvent>) -> Result<Str
         }
     }
     file.flush().map_err(|error| format!("Could not save the update: {error}"))?;
-    report_update_progress(sender, "Download complete. Launching installer…", Some(1.0));
-    launch_companion_installer(&installer)?;
-    Ok(format!("Installer opened for version {available}. Follow its steps to finish updating."))
+    report_update_progress(sender, "Download complete. Starting update…", Some(1.0));
+    let status = launch_companion_installer(&installer)?;
+    Ok(format!("Version {available}: {status}"))
 }
 
 struct CompanionGui { status: String, result: Option<Receiver<GuiTaskEvent>>, update_progress: Option<f32> }
