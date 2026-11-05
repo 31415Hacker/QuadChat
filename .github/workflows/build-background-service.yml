@@ -37,6 +37,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Cargo build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: quadchat-background-service -> target
       - name: Install Linux audio build dependencies
         if: matrix.package == 'deb'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
