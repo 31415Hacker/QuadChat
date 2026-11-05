@@ -673,6 +673,77 @@ fn minecraft_log_directories(command: &str) -> Vec<std::path::PathBuf> {
     unique
 }
 
+struct NbtReader<'a> { bytes: &'a [u8], position: usize }
+
+impl<'a> NbtReader<'a> {
+    fn take(&mut self, count: usize) -> Option<&'a [u8]> {
+        let end = self.position.checked_add(count)?;
+        let value = self.bytes.get(self.position..end)?;
+        self.position = end;
+        Some(value)
+    }
+    fn byte(&mut self) -> Option<u8> { Some(*self.take(1)?.first()?) }
+    fn short(&mut self) -> Option<usize> { Some(u16::from_be_bytes(self.take(2)?.try_into().ok()?) as usize) }
+    fn int(&mut self) -> Option<usize> { usize::try_from(i32::from_be_bytes(self.take(4)?.try_into().ok()?)).ok() }
+    fn string(&mut self) -> Option<String> {
+        let length = self.short()?;
+        String::from_utf8(self.take(length)?.to_vec()).ok()
+    }
+    fn skip_payload(&mut self, tag: u8) -> Option<()> {
+        match tag {
+            0 => Some(()),
+            1 => { self.take(1)?; Some(()) },
+            2 => { self.take(2)?; Some(()) },
+            3 | 5 => { self.take(4)?; Some(()) },
+            4 | 6 => { self.take(8)?; Some(()) },
+            7 => { let length = self.int()?; self.take(length)?; Some(()) },
+            8 => { self.string()?; Some(()) },
+            9 => { let item_type = self.byte()?; for _ in 0..self.int()? { self.skip_payload(item_type)?; } Some(()) },
+            10 => { loop { let tag = self.byte()?; if tag == 0 { return Some(()); } self.string()?; self.skip_payload(tag)?; } },
+            11 => { let length = self.int()?.checked_mul(4)?; self.take(length)?; Some(()) },
+            12 => { let length = self.int()?.checked_mul(8)?; self.take(length)?; Some(()) },
+            _ => None,
+        }
+    }
+}
+
+fn minecraft_address_key(address: &str) -> String {
+    let normalized = address.trim().to_ascii_lowercase();
+    normalized.strip_suffix(":25565").unwrap_or(&normalized).to_owned()
+}
+
+fn minecraft_saved_server_name(path: &std::path::Path, address: &str) -> Option<String> {
+    let bytes = fs::read(path.join("servers.dat")).ok()?;
+    let mut reader = NbtReader { bytes: &bytes, position: 0 };
+    if reader.byte()? != 10 { return None; }
+    reader.string()?;
+    loop {
+        let tag = reader.byte()?;
+        if tag == 0 { return None; }
+        let field = reader.string()?;
+        if tag != 9 || field != "servers" { reader.skip_payload(tag)?; continue; }
+        if reader.byte()? != 10 { return None; }
+        for _ in 0..reader.int()? {
+            let mut server_name = None;
+            let mut server_address = None;
+            loop {
+                let entry_tag = reader.byte()?;
+                if entry_tag == 0 { break; }
+                let entry_name = reader.string()?;
+                if entry_tag == 8 {
+                    let value = reader.string()?;
+                    if entry_name == "name" { server_name = Some(value); }
+                    else if entry_name == "ip" { server_address = Some(value); }
+                } else { reader.skip_payload(entry_tag)?; }
+            }
+            if server_address.as_deref().is_some_and(|saved| minecraft_address_key(saved) == minecraft_address_key(address)) {
+                return server_name.filter(|name| !name.trim().is_empty()).map(|name| name.chars().take(100).collect());
+            }
+        }
+        return None;
+    }
+}
+
 fn minecraft_detail_from_log(path: &std::path::Path) -> Option<(String, Option<String>)> {
     let mut log = fs::File::open(path.join("logs/latest.log")).ok()?;
     let start = log.metadata().ok()?.len().saturating_sub(64 * 1024);
@@ -684,7 +755,10 @@ fn minecraft_detail_from_log(path: &std::path::Path) -> Option<(String, Option<S
             let server = server.split_once(", ")
                 .map(|(host, port)| format!("{}:{}", host.trim_end_matches(','), port.split_whitespace().next().unwrap_or("")))
                 .unwrap_or_else(|| server.split_whitespace().next().unwrap_or("").trim_end_matches(',').to_owned());
-            if !server.is_empty() { return Some(("Multiplayer server".to_owned(), Some(server.chars().take(253).collect()))); }
+            if !server.is_empty() {
+                let detail = minecraft_saved_server_name(path, &server).unwrap_or_else(|| "Multiplayer server".to_owned());
+                return Some((detail, Some(server.chars().take(253).collect())));
+            }
         }
         let lowercase = line.to_ascii_lowercase();
         if lowercase.contains("starting integrated minecraft server") || lowercase.contains("preparing level") {

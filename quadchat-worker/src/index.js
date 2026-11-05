@@ -658,7 +658,7 @@ async function handleCompanionRichPresence(request, env) {
     if (!(await relay.validateDevice(deviceId, token))) return json({ error: "authorization_required" }, 401, corsHeaders);
     if (game !== null && (!game || typeof game.name !== "string" || game.name.length > 100 || typeof game.logo !== "string" || !["minecraft", "roblox", "fortnite", "cs2", "valorant", "league", "overwatch"].includes(game.logo) || (game.version !== undefined && game.version !== null && (typeof game.version !== "string" || game.version.length > 48)) || (game.detail !== undefined && game.detail !== null && (typeof game.detail !== "string" || game.detail.length > 120)) || (game.serverAddress !== undefined && game.serverAddress !== null && (typeof game.serverAddress !== "string" || game.serverAddress.length > 253)))) return json({ error: "invalid_presence" }, 400, corsHeaders);
     const presence = env.PRESENCE.get(env.PRESENCE.idFromName("global-presence"));
-    await presence.setRichPresence(userId, game && { name: game.name, logo: game.logo, ...(game.version ? { version: game.version } : {}), ...(game.detail ? { detail: game.detail } : {}), ...(game.serverAddress ? { serverAddress: game.serverAddress } : {}) });
+    await presence.setRichPresence(userId, game && { name: game.name, logo: game.logo, ...(game.version ? { version: game.version } : {}), ...(game.detail ? { detail: game.detail } : {}), ...(game.serverAddress ? { serverAddress: game.serverAddress, hasServer: true } : {}) });
     return json({ saved: true }, 200, corsHeaders);
   } catch (error) { console.error("[COMPANION] rich presence failed", error); return json({ error: "presence_failed" }, 500, corsHeaders); }
 }

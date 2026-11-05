@@ -216,7 +216,7 @@ export function AnalyticsModal({
             {analyticsTarget.status.text ? ` — ${analyticsTarget.status.text}` : ""}
           </div>
         ) : null}
-        {minecraftPresence?.logo === "minecraft" && minecraftPresence.detail === "Multiplayer server" ? (
+        {minecraftPresence?.logo === "minecraft" && minecraftPresence.hasServer === true ? (
           <section className="profile-server-address">
             <h3>Minecraft server address</h3>
             <p>
