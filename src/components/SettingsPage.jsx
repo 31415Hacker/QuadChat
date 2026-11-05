@@ -62,6 +62,8 @@ export default function SettingsPage({
   setSettingsBio,
   settingsSchedule,
   setSettingsSchedule,
+  serverAddressPrivacy,
+  setServerAddressPrivacy,
   settingsPhotoPreview,
   settingsPhotoFile,
   handlePhotoFileChange,
@@ -398,6 +400,44 @@ export default function SettingsPage({
                 <p className="settings-section-desc">
                   Manage your password and connected sign-in methods.
                 </p>
+
+                <section className="settings-section-box">
+                  <div>
+                    <h3>Server address visibility</h3>
+                    <p>Allow people to view the Minecraft server address from your profile. It is never shown in the public sidebar.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      checked={serverAddressPrivacy.enabled}
+                      onChange={(event) => setServerAddressPrivacy((current) => ({ ...current, enabled: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    <span>{serverAddressPrivacy.enabled ? "Profile address visibility on" : "Profile address visibility off"}</span>
+                  </label>
+                </section>
+
+                <section className="settings-section-box settings-section-box--stacked">
+                  <div>
+                    <h3>Server address list</h3>
+                    <p>{serverAddressPrivacy.mode === "blocklist" ? "Blocked addresses cannot be viewed from your profile." : "Only listed addresses can be viewed from your profile."}</p>
+                  </div>
+                  <label className="dm-sound-option">
+                    <input checked={serverAddressPrivacy.mode === "blocklist"} name="server-address-mode" onChange={() => setServerAddressPrivacy((current) => ({ ...current, mode: "blocklist" }))} type="radio" />
+                    <span>Blocklist — allow addresses except those listed</span>
+                  </label>
+                  <label className="dm-sound-option">
+                    <input checked={serverAddressPrivacy.mode === "allowlist"} name="server-address-mode" onChange={() => setServerAddressPrivacy((current) => ({ ...current, mode: "allowlist" }))} type="radio" />
+                    <span>Allowlist — block addresses except those listed</span>
+                  </label>
+                  <textarea
+                    aria-label="Server addresses"
+                    maxLength={25400}
+                    onChange={(event) => setServerAddressPrivacy((current) => ({ ...current, addresses: [...new Set(event.target.value.split(/[\n,]+/).map((address) => address.trim().toLowerCase()).filter(Boolean))].slice(0, 100) }))}
+                    placeholder="play.example.com:25565&#10;example.net"
+                    rows={4}
+                    value={serverAddressPrivacy.addresses.join("\n")}
+                  />
+                </section>
 
                 <label htmlFor="settings-current-password">
                   <KeyRound size={18} />

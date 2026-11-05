@@ -637,7 +637,7 @@ fn run_companion_relay() -> Result<(), String> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct GameActivity { name: &'static str, logo: &'static str, version: Option<String>, detail: Option<String> }
+struct GameActivity { name: &'static str, logo: &'static str, version: Option<String>, detail: Option<String>, server_address: Option<String> }
 
 fn game_version(command: &str) -> Option<String> {
     command.split(|character: char| !character.is_ascii_digit() && character != '.')
@@ -673,7 +673,7 @@ fn minecraft_log_directories(command: &str) -> Vec<std::path::PathBuf> {
     unique
 }
 
-fn minecraft_detail_from_log(path: &std::path::Path) -> Option<String> {
+fn minecraft_detail_from_log(path: &std::path::Path) -> Option<(String, Option<String>)> {
     let mut log = fs::File::open(path.join("logs/latest.log")).ok()?;
     let start = log.metadata().ok()?.len().saturating_sub(64 * 1024);
     log.seek(SeekFrom::Start(start)).ok()?;
@@ -681,18 +681,20 @@ fn minecraft_detail_from_log(path: &std::path::Path) -> Option<String> {
     log.read_to_string(&mut tail).ok()?;
     for line in tail.lines().rev() {
         if let Some(server) = line.split_once("Connecting to ").map(|(_, value)| value.trim()) {
-            let server = server.split_whitespace().next().unwrap_or("");
-            if !server.is_empty() { return Some(format!("Server: {}", server.chars().take(100).collect::<String>())); }
+            let server = server.split_once(", ")
+                .map(|(host, port)| format!("{}:{}", host.trim_end_matches(','), port.split_whitespace().next().unwrap_or("")))
+                .unwrap_or_else(|| server.split_whitespace().next().unwrap_or("").trim_end_matches(',').to_owned());
+            if !server.is_empty() { return Some(("Multiplayer server".to_owned(), Some(server.chars().take(253).collect()))); }
         }
         let lowercase = line.to_ascii_lowercase();
         if lowercase.contains("starting integrated minecraft server") || lowercase.contains("preparing level") {
-            return Some("Singleplayer".to_owned());
+            return Some(("Singleplayer".to_owned(), None));
         }
     }
     None
 }
 
-fn minecraft_activity_detail(command: &str) -> Option<String> {
+fn minecraft_activity_detail(command: &str) -> Option<(String, Option<String>)> {
     minecraft_log_directories(command).into_iter().find_map(|directory| minecraft_detail_from_log(&directory))
 }
 
@@ -710,7 +712,8 @@ fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
         let command = process.cmd().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>().join(" ");
         let command_lower = command.to_ascii_lowercase();
         if (executable == "java" || executable == "javaw" || executable == "java.exe" || executable == "javaw.exe") && command_lower.contains("minecraft") {
-            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command), detail: minecraft_activity_detail(&command) });
+            let (detail, server_address) = minecraft_activity_detail(&command).map_or((None, None), |(detail, server_address)| (Some(detail), server_address));
+            return Some(GameActivity { name: "Minecraft Java Edition", logo: "minecraft", version: game_version(&command), detail, server_address });
         }
         let game = match executable.as_str() {
             "minecraft.windows.exe" => Some(("Minecraft Bedrock Edition", "minecraft")),
@@ -722,13 +725,13 @@ fn detect_game_activity(system: &mut System) -> Option<GameActivity> {
             "overwatch.exe" | "overwatch" => Some(("Overwatch", "overwatch")),
             _ => None
         };
-        if let Some((name, logo)) = game { return Some(GameActivity { name, logo, version: None, detail: None }); }
+        if let Some((name, logo)) = game { return Some(GameActivity { name, logo, version: None, detail: None, server_address: None }); }
     }
     None
 }
 
 fn report_rich_presence(credential: &credentials::DeviceCredential, game: Option<&GameActivity>) -> Result<(), String> {
-    let game = game.map(|activity| serde_json::json!({ "name": activity.name, "logo": activity.logo, "version": activity.version, "detail": activity.detail }));
+    let game = game.map(|activity| serde_json::json!({ "name": activity.name, "logo": activity.logo, "version": activity.version, "detail": activity.detail, "serverAddress": activity.server_address }));
     let response = reqwest::blocking::Client::new()
         .post(format!("{}/companion/rich-presence", credential.worker_url.trim_end_matches('/')))
         .json(&serde_json::json!({ "userId": credential.subject, "deviceId": credential.device_id, "token": credential.access_token, "game": game }))

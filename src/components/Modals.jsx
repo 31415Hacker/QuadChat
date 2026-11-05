@@ -187,7 +187,9 @@ export function AnalyticsModal({
   analyticsTarget,
   onClose,
   analyticsData,
-  analyticsLoading
+  analyticsLoading,
+  minecraftPresence,
+  serverAddress
 }) {
   if (!analyticsTarget) return null;
   const schedule = normalizeSchedule(analyticsTarget.schedule);
@@ -213,6 +215,17 @@ export function AnalyticsModal({
             {analyticsTarget.status?.mode === "busy" ? "⚠️" : analyticsTarget.status?.mode === "away" ? "🟡" : "🟢"} Currently <strong>{getStatusLabel(analyticsTarget.status?.mode || "active")}</strong>
             {analyticsTarget.status.text ? ` — ${analyticsTarget.status.text}` : ""}
           </div>
+        ) : null}
+        {minecraftPresence?.logo === "minecraft" && minecraftPresence.detail === "Multiplayer server" ? (
+          <section className="profile-server-address">
+            <h3>Minecraft server address</h3>
+            <p>
+              {serverAddress?.status === "available" ? serverAddress.address
+                : serverAddress?.status === "blocked" ? "Server address blocked by user."
+                  : serverAddress?.status === "unavailable" ? "No server address available."
+                    : "Checking server address privacy…"}
+            </p>
+          </section>
         ) : null}
         <div className="analytics-body">
           {analyticsLoading ? (

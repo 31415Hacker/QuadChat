@@ -138,6 +138,11 @@ function AppLoadingScreen({ message }) {
   );
 }
 
+function richPresenceApiUrl(path) {
+  const workerUrl = import.meta.env.VITE_PRESENCE_WORKER_URL || "";
+  return `${workerUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/$/, "")}${path}`;
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [sessionUserId, setSessionUserId] = useState(readSessionUserId);
@@ -194,6 +199,7 @@ export default function App() {
   const [settingsName, setSettingsName] = useState("");
   const [settingsBio, setSettingsBio] = useState("");
   const [settingsSchedule, setSettingsSchedule] = useState(createDefaultSchedule);
+  const [serverAddressPrivacy, setServerAddressPrivacy] = useState({ enabled: true, mode: "blocklist", addresses: [] });
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
   const [settingsPassword, setSettingsPassword] = useState("");
   const [settingsPhotoFile, setSettingsPhotoFile] = useState(null);
@@ -266,6 +272,7 @@ export default function App() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [analyticsTarget, setAnalyticsTarget] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsServerAddress, setAnalyticsServerAddress] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [filePreview, setFilePreview] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -770,6 +777,21 @@ export default function App() {
     setAnalyticsTarget(profile);
     setAnalyticsLoading(true);
     setAnalyticsData(null);
+    setAnalyticsServerAddress(null);
+
+    if (richPresence?.[profile.id]?.logo === "minecraft") {
+      try {
+        const token = await user?.getIdToken();
+        const response = await fetch(richPresenceApiUrl("/rich-presence/server-address"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ userId: profile.id })
+        });
+        if (response.ok) setAnalyticsServerAddress(await response.json());
+      } catch {
+        setAnalyticsServerAddress({ status: "unavailable" });
+      }
+    }
 
     try {
       const thirtyDaysAgo = new Date();
@@ -1106,6 +1128,18 @@ export default function App() {
       setSettingsName(activeName || "");
     }
   }, [activeName, user]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    user.getIdToken().then(async (token) => {
+      const response = await fetch(richPresenceApiUrl("/rich-presence/privacy"), { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!cancelled && data.privacy) setServerAddressPrivacy(data.privacy);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
 
   useEffect(() => {
     if (isSettingsOpen) {
@@ -2376,6 +2410,15 @@ export default function App() {
         { bio: settingsBio.trim(), schedule: settingsSchedule },
         { merge: true }
       );
+      const privacyToken = await user.getIdToken();
+      const privacyResponse = await fetch(richPresenceApiUrl("/rich-presence/privacy"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${privacyToken}` },
+        body: JSON.stringify({ privacy: serverAddressPrivacy })
+      });
+      if (!privacyResponse.ok) throw new Error("Could not save server address privacy settings.");
+      const privacyData = await privacyResponse.json();
+      if (privacyData.privacy) setServerAddressPrivacy(privacyData.privacy);
 
       if (cleanPassword) {
         if (hasEmailProvider) {
@@ -4006,9 +4049,11 @@ export default function App() {
 
             <AnalyticsModal
               analyticsTarget={analyticsTarget}
-              onClose={() => { setAnalyticsTarget(null); setAnalyticsData(null); }}
+              onClose={() => { setAnalyticsTarget(null); setAnalyticsData(null); setAnalyticsServerAddress(null); }}
               analyticsData={analyticsData}
               analyticsLoading={analyticsLoading}
+              minecraftPresence={analyticsTarget ? richPresence?.[analyticsTarget.id] : null}
+              serverAddress={analyticsServerAddress}
             />
 
             <IncomingCallModal
@@ -4249,8 +4294,10 @@ export default function App() {
           setSettingsName={setSettingsName}
           settingsBio={settingsBio}
           setSettingsBio={setSettingsBio}
-          settingsSchedule={settingsSchedule}
-          setSettingsSchedule={setSettingsSchedule}
+           settingsSchedule={settingsSchedule}
+           setSettingsSchedule={setSettingsSchedule}
+           serverAddressPrivacy={serverAddressPrivacy}
+           setServerAddressPrivacy={setServerAddressPrivacy}
           settingsPhotoPreview={settingsPhotoPreview}
           settingsPhotoFile={settingsPhotoFile}
           handlePhotoFileChange={handlePhotoFileChange}

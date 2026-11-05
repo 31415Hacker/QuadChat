@@ -656,11 +656,48 @@ async function handleCompanionRichPresence(request, env) {
     if (typeof userId !== "string" || typeof deviceId !== "string" || typeof token !== "string") return json({ error: "invalid_presence" }, 400, corsHeaders);
     const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
     if (!(await relay.validateDevice(deviceId, token))) return json({ error: "authorization_required" }, 401, corsHeaders);
-    if (game !== null && (!game || typeof game.name !== "string" || game.name.length > 100 || typeof game.logo !== "string" || !["minecraft", "roblox", "fortnite", "cs2", "valorant", "league", "overwatch"].includes(game.logo) || (game.version !== undefined && game.version !== null && (typeof game.version !== "string" || game.version.length > 48)) || (game.detail !== undefined && game.detail !== null && (typeof game.detail !== "string" || game.detail.length > 120)))) return json({ error: "invalid_presence" }, 400, corsHeaders);
+    if (game !== null && (!game || typeof game.name !== "string" || game.name.length > 100 || typeof game.logo !== "string" || !["minecraft", "roblox", "fortnite", "cs2", "valorant", "league", "overwatch"].includes(game.logo) || (game.version !== undefined && game.version !== null && (typeof game.version !== "string" || game.version.length > 48)) || (game.detail !== undefined && game.detail !== null && (typeof game.detail !== "string" || game.detail.length > 120)) || (game.serverAddress !== undefined && game.serverAddress !== null && (typeof game.serverAddress !== "string" || game.serverAddress.length > 253)))) return json({ error: "invalid_presence" }, 400, corsHeaders);
     const presence = env.PRESENCE.get(env.PRESENCE.idFromName("global-presence"));
-    await presence.setRichPresence(userId, game && { name: game.name, logo: game.logo, ...(game.version ? { version: game.version } : {}), ...(game.detail ? { detail: game.detail } : {}) });
+    await presence.setRichPresence(userId, game && { name: game.name, logo: game.logo, ...(game.version ? { version: game.version } : {}), ...(game.detail ? { detail: game.detail } : {}), ...(game.serverAddress ? { serverAddress: game.serverAddress } : {}) });
     return json({ saved: true }, 200, corsHeaders);
   } catch (error) { console.error("[COMPANION] rich presence failed", error); return json({ error: "presence_failed" }, 500, corsHeaders); }
+}
+
+function normalizeServerAddressPrivacy(value) {
+  const mode = value?.mode === "allowlist" ? "allowlist" : "blocklist";
+  const addresses = Array.isArray(value?.addresses)
+    ? [...new Set(value.addresses.map((address) => typeof address === "string" ? address.trim().toLowerCase() : "").filter((address) => address && address.length <= 253))].slice(0, 100)
+    : [];
+  return { enabled: value?.enabled !== false, mode, addresses };
+}
+
+async function handleRichPresencePrivacy(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const userId = await verifyFirebaseIdToken(requireBearer(request));
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    if (request.method === "GET") return json({ privacy: await relay.getServerAddressPrivacy() }, 200, corsHeaders);
+    const { privacy } = await request.json();
+    const normalized = normalizeServerAddressPrivacy(privacy);
+    await relay.setServerAddressPrivacy(normalized);
+    return json({ privacy: normalized }, 200, corsHeaders);
+  } catch { return json({ error: "authorization_required" }, 401, corsHeaders); }
+}
+
+async function handleRichPresenceServerAddress(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    await verifyFirebaseIdToken(requireBearer(request));
+    const { userId } = await request.json();
+    if (typeof userId !== "string" || !userId || userId.length > 256) return json({ error: "invalid_user" }, 400, corsHeaders);
+    const presence = env.PRESENCE.get(env.PRESENCE.idFromName("global-presence"));
+    const serverAddress = await presence.getServerAddress(userId);
+    if (!serverAddress) return json({ status: "unavailable" }, 200, corsHeaders);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    const privacy = await relay.getServerAddressPrivacy();
+    const addressAllowed = privacy.enabled && (privacy.mode === "allowlist" ? privacy.addresses.includes(serverAddress.toLowerCase()) : !privacy.addresses.includes(serverAddress.toLowerCase()));
+    return json(addressAllowed ? { status: "available", address: serverAddress } : { status: "blocked" }, 200, corsHeaders);
+  } catch { return json({ error: "authorization_required" }, 401, corsHeaders); }
 }
 
 async function handleCompanionCallAvailability(request, env) {
@@ -862,7 +899,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    if (request.method === "OPTIONS" && url.pathname.startsWith("/companion/")) {
+    if (request.method === "OPTIONS" && (url.pathname.startsWith("/companion/") || url.pathname.startsWith("/rich-presence/"))) {
       return new Response(null, { status: 204, headers: getCorsHeaders(request) });
     }
     if (request.method === "POST" && url.pathname === "/companion/authorize") {
@@ -883,6 +920,8 @@ export default {
     if (request.method === "PUT" && url.pathname === "/companion/preferences") return handleCompanionPreferences(request, env);
     if (request.method === "POST" && url.pathname === "/companion/action") return handleCompanionAction(request, env);
     if (request.method === "POST" && url.pathname === "/companion/rich-presence") return handleCompanionRichPresence(request, env);
+    if ((request.method === "GET" || request.method === "PUT") && url.pathname === "/rich-presence/privacy") return handleRichPresencePrivacy(request, env);
+    if (request.method === "POST" && url.pathname === "/rich-presence/server-address") return handleRichPresenceServerAddress(request, env);
     if (request.method === "POST" && url.pathname === "/companion/notify") {
       return handleCompanionNotify(request, env);
     }
@@ -983,6 +1022,14 @@ export class CompanionRelay extends DurableObject {
     for (const [socket] of this.sessions) { try { socket.send(payload); } catch { this.sessions.delete(socket); } }
   }
 
+  async getServerAddressPrivacy() {
+    return normalizeServerAddressPrivacy(await this.ctx.storage.get("serverAddressPrivacy"));
+  }
+
+  async setServerAddressPrivacy(privacy) {
+    await this.ctx.storage.put("serverAddressPrivacy", privacy);
+  }
+
   async validateDevice(deviceId, token) {
     const devices = (await this.ctx.storage.get("devices")) || {};
     const device = devices[deviceId];
@@ -1055,7 +1102,8 @@ export class PresenceServer extends DurableObject {
     let changed = false;
     for (const [userId, entry] of Object.entries(entries)) {
       if (!entry || entry.expiresAt <= now) { delete entries[userId]; changed = true; continue; }
-      active[userId] = entry.game;
+      const { serverAddress, ...publicGame } = entry.game;
+      active[userId] = publicGame;
     }
     if (changed) await this.ctx.storage.put("richPresence", entries);
     return active;
@@ -1074,7 +1122,14 @@ export class PresenceServer extends DurableObject {
     if (game) entries[userId] = { game, expiresAt: Date.now() + 45_000 };
     else delete entries[userId];
     await this.ctx.storage.put("richPresence", entries);
-    this.broadcast({ type: "rich_presence", userId, game: game || null });
+    const { serverAddress, ...publicGame } = game || {};
+    this.broadcast({ type: "rich_presence", userId, game: game ? publicGame : null });
+  }
+
+  async getServerAddress(userId) {
+    const entries = (await this.ctx.storage.get("richPresence")) || {};
+    const entry = entries[userId];
+    return entry?.expiresAt > Date.now() && typeof entry.game?.serverAddress === "string" ? entry.game.serverAddress : null;
   }
 
   isUserOnline(userId) {
