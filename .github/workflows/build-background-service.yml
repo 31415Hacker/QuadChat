@@ -59,7 +59,7 @@ jobs:
           mkdir -p "package-root/Applications/QuadChat Companion.app/Contents/MacOS"
           cp target/release/${{ matrix.binary }} "package-root/Applications/QuadChat Companion.app/Contents/MacOS/QuadChat Companion"
           printf '%s' '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>QuadChat Companion</string><key>CFBundleIdentifier</key><string>com.quadchat.background-service</string><key>CFBundleName</key><string>QuadChat Companion</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>' > "package-root/Applications/QuadChat Companion.app/Contents/Info.plist"
-          pkgbuild --root package-root --identifier com.quadchat.background-service --version 1.5.12 --install-location / quadchat-background-service-macos-arm64.pkg
+          pkgbuild --root package-root --identifier com.quadchat.background-service --version 1.5.13 --install-location / quadchat-background-service-macos-arm64.pkg
       - name: Build Linux package
         if: matrix.package == 'deb'
         shell: bash

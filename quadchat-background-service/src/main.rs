@@ -625,7 +625,7 @@ fn run_companion_relay() -> Result<(), String> {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct GameActivity { name: &'static str, logo: &'static str, version: Option<String>, detail: Option<String> }
 
 fn game_version(command: &str) -> Option<String> {
@@ -644,6 +644,14 @@ fn minecraft_log_directories(command: &str) -> Vec<std::path::PathBuf> {
         if let Some(start) = argument.find(".minecraft") {
             let directory = &argument[..start + ".minecraft".len()];
             if directory.starts_with('/') || directory.starts_with("C:") { directories.push(std::path::PathBuf::from(directory)); }
+        }
+        if let Some(path) = argument.strip_prefix("-Djava.library.path=") {
+            let native_path = std::path::Path::new(path);
+            if native_path.file_name().is_some_and(|name| name == "natives") {
+                if let Some(instance_directory) = native_path.parent() {
+                    directories.push(instance_directory.join("minecraft"));
+                }
+            }
         }
     }
     if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) { directories.push(std::path::PathBuf::from(home).join(".minecraft")); }
@@ -721,9 +729,18 @@ fn start_rich_presence_reporter(credential: credentials::DeviceCredential) {
     thread::spawn(move || {
         let mut system = System::new_all();
         let mut was_shared = false;
+        let mut last_activity = None;
         loop {
             let enabled = credentials::rich_presence_enabled().unwrap_or(false);
             let game = enabled.then(|| detect_game_activity(&mut system)).flatten();
+            if game != last_activity {
+                match &game {
+                    Some(activity) => eprintln!("[RICH PRESENCE] Detected {}{}", activity.name, activity.detail.as_ref().map(|detail| format!(" — {detail}")).unwrap_or_default()),
+                    None if last_activity.is_some() => eprintln!("[RICH PRESENCE] No recognized game activity."),
+                    None => {}
+                }
+                last_activity = game.clone();
+            }
             if enabled || was_shared {
                 if let Err(error) = report_rich_presence(&credential, game.as_ref()) { eprintln!("[RICH PRESENCE] {error}"); }
             }
