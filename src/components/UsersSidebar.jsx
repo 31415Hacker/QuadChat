@@ -1,7 +1,7 @@
 import { Check, LoaderCircle, MessageCircle, Mic, MicOff, Phone, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import RelativeTime from "./RelativeTime.jsx";
-import { getInitials, getProfileName, isAdminEmail, isDeveloperEmail } from "../utils/names.js";
+import { getInitials, getProfileName, isAdminEmail } from "../utils/names.js";
 import { getStatusColor, isProfileMuted, isProfileVoiceMuted } from "../utils/profile.js";
 
 export default function UsersSidebar({
@@ -83,8 +83,6 @@ export default function UsersSidebar({
           const muted = isProfileMuted(profile);
           const voiceMuted = isProfileVoiceMuted(profile);
           const isProfileAdmin = profile.isAdmin === true || isAdminEmail(profile.email);
-          const isProfileDeveloper = profile.isDeveloper === true || isDeveloperEmail(profile.email);
-          const roleMarker = isProfileDeveloper ? "DEV" : isProfileAdmin ? "ADMIN" : "USER";
           const theirMode = profile.status?.mode;
           const isSelf = profile.id === sessionUserId;
           const userActive = isSelf || onlineUsers.has(profile.id);
@@ -116,22 +114,20 @@ export default function UsersSidebar({
               )}
               <span className="user-dot" style={statusMode !== "offline" ? { background: getStatusColor(statusMode) } : undefined} />
               <div className="user-info">
-                <button
-                  className="user-name"
-                  type="button"
-                  onClick={() => openUserAnalytics(profile)}
-                >
-                   <span className="user-name-text" title={name}>{name}</span>
-                   <span className={`user-role-marker user-role-marker--${roleMarker.toLowerCase()}`}>
-                      {roleMarker}
-                    </span>
-                   {isInGroupCall ? (
-                    <span className="group-call-indicator" title="In group call">
-                      <Users size={11} />
-                    </span>
-                  ) : null}
-                 </button>
-                 {game ? (
+                <div className="user-name-row">
+                  <button
+                    className="user-name"
+                    type="button"
+                    onClick={() => openUserAnalytics(profile)}
+                  >
+                    <span className="user-name-text" title={name}>{name}</span>
+                    {isInGroupCall ? (
+                      <span className="group-call-indicator" title="In group call">
+                        <Users size={11} />
+                      </span>
+                    ) : null}
+                  </button>
+                  {game ? (
                    <span className="user-game-presence">
                      <button
                        className="user-game-badge"
@@ -143,8 +139,9 @@ export default function UsersSidebar({
                        <img src={`/game-icons/${game.logo}.svg`} alt="" />
                      </button>
                      {openGameUserId === profile.id ? <span className="user-game-details">Playing {gameDetails}</span> : null}
-                   </span>
-                 ) : null}
+                    </span>
+                  ) : null}
+                </div>
                  {isInGroupCall && !isProfileAdmin && isCurrentUserAdmin ? (
                   <button
                     className="user-voice-mic-btn"
