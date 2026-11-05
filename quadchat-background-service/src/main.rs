@@ -752,9 +752,11 @@ fn minecraft_detail_from_log(path: &std::path::Path) -> Option<(String, Option<S
     log.read_to_string(&mut tail).ok()?;
     for line in tail.lines().rev() {
         if let Some(server) = line.split_once("Connecting to ").map(|(_, value)| value.trim()) {
-            let server = server.split_once(", ")
-                .map(|(host, port)| format!("{}:{}", host.trim_end_matches(','), port.split_whitespace().next().unwrap_or("")))
-                .unwrap_or_else(|| server.split_whitespace().next().unwrap_or("").trim_end_matches(',').to_owned());
+            // Minecraft's own connection line is "Connecting to host, port".
+            // Mods such as Simple Voice Chat also log a connection but use a
+            // different format; those must not replace the game server label.
+            let Some((host, port)) = server.split_once(", ") else { continue; };
+            let server = format!("{}:{}", host.trim_end_matches(','), port.split_whitespace().next().unwrap_or(""));
             if !server.is_empty() {
                 let detail = minecraft_saved_server_name(path, &server).unwrap_or_else(|| "Multiplayer server".to_owned());
                 return Some((detail, Some(server.chars().take(253).collect())));
