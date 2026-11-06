@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "QuadChat Browser Activity",
+  "version": "1.0.0",
+  "description": "Optional browser-game Rich Presence for QuadChat.",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": ["https://*.blooket.com/*", "https://bloxd.io/*", "https://*.bloxd.io/*", "https://*.crazygames.com/*", "https://crazygames.com/*", "https://*.hotgames.com/*", "https://hotgames.com/*", "https://quadchat-worker.ariqipraditya.workers.dev/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "QuadChat Browser Activity", "default_popup": "popup.html" }
+}

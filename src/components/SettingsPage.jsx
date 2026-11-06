@@ -157,6 +157,7 @@ export default function SettingsPage({
   const [copiedInviteCode, setCopiedInviteCode] = useState("");
   const [companionDevices, setCompanionDevices] = useState([]);
   const [companionDeviceError, setCompanionDeviceError] = useState("");
+  const [browserExtensionCode, setBrowserExtensionCode] = useState("");
 
   const companionWorkerUrl = (import.meta.env.VITE_PRESENCE_WORKER_URL || "")
     .replace(/^wss:/, "https:")
@@ -179,6 +180,15 @@ export default function SettingsPage({
       const response = await fetch(`${companionWorkerUrl}/companion/devices`, { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` }, body: JSON.stringify(body) });
       if (!response.ok) throw new Error("Could not revoke device");
       refreshCompanionDevices();
+    } catch (error) { setCompanionDeviceError(error.message); }
+  };
+
+  const createBrowserExtensionLink = async () => {
+    try {
+      const response = await fetch(`${companionWorkerUrl}/browser-extension/link`, { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not create link code");
+      setBrowserExtensionCode(data.code);
     } catch (error) { setCompanionDeviceError(error.message); }
   };
 
@@ -934,6 +944,12 @@ export default function SettingsPage({
                     const file = navigator.userAgent.includes("CrOS") ? "quadchat-background-service-linux-x64.deb" : navigator.userAgent.includes("Win") ? "quadchat-background-service-windows-x64-setup.exe" : navigator.userAgent.includes("Mac") ? "quadchat-background-service-macos-arm64.pkg" : "quadchat-background-service-linux-x64.deb";
                     return `https://github.com/31415Hacker/QuadChat/releases/download/background-service-latest/${file}`;
                   })()}>Install QuadChat Service</a>
+                </section>
+                <section className="settings-section-box">
+                  <div><h3>Browser game activity <span className="tag tag-safe">Optional</span></h3><p>Link the separate Chrome extension to share Blooket, Bloxd.io, CrazyGames, or HotGames activity. It only checks your active tab on those sites. Download and unzip it, then use Chrome’s Extensions page → Developer mode → Load unpacked.</p></div>
+                  <a className="background-service-download" download href="/quadchat-browser-extension.zip">Download Chrome extension</a>
+                  <button type="button" onClick={createBrowserExtensionLink}>Generate link code</button>
+                  {browserExtensionCode ? <p>Enter this code in the extension within 10 minutes: <strong>{browserExtensionCode}</strong></p> : null}
                 </section>
                 <section className="settings-section-box">
                   <div><h3>Paired service devices</h3><p>Only these devices can receive companion alerts for your account.</p></div>

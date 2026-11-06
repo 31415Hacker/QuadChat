@@ -552,6 +552,38 @@ async function handleCompanionToken(request, env) {
   }
 }
 
+async function handleBrowserExtensionLink(request, env) {
+  const corsHeaders = getCorsHeaders(request);
+  try {
+    const userId = await verifyFirebaseIdToken(requireBearer(request));
+    const code = randomSecret(12);
+    await env.PAIRING_CODE.get(env.PAIRING_CODE.idFromName(`browser-${code}`)).createBrowserLink({ userId, expiresAt: Date.now() + 10 * 60_000 });
+    return json({ code }, 200, corsHeaders);
+  } catch { return json({ error: "authorization_required" }, 401, corsHeaders); }
+}
+
+async function handleBrowserExtensionRedeem(request, env) {
+  try {
+    const { code } = await request.json();
+    if (typeof code !== "string" || !/^[a-f0-9]{24}$/.test(code)) return json({ error: "invalid_link_code" }, 400);
+    const link = await env.PAIRING_CODE.get(env.PAIRING_CODE.idFromName(`browser-${code}`)).redeemBrowserLink();
+    if (!link) return json({ error: "invalid_link_code" }, 400);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(link.userId));
+    return json({ linked: await relay.provisionBrowserExtension() });
+  } catch { return json({ error: "invalid_link_code" }, 400); }
+}
+
+async function handleBrowserExtensionPresence(request, env) {
+  try {
+    const { userId, extensionId, token, game } = await request.json();
+    if (typeof userId !== "string" || typeof extensionId !== "string" || typeof token !== "string" || (game !== null && (!game || typeof game.name !== "string" || !["Blooket", "Bloxd.io", "CrazyGames", "HotGames"].includes(game.name) || game.logo !== "browser" || game.detail !== "Browser game"))) return json({ error: "invalid_presence" }, 400);
+    const relay = env.COMPANION_RELAY.get(env.COMPANION_RELAY.idFromName(userId));
+    if (!(await relay.validateBrowserExtension(extensionId, token))) return json({ error: "authorization_required" }, 401);
+    await env.PRESENCE.get(env.PRESENCE.idFromName("global-presence")).setRichPresence(userId, game);
+    return json({ saved: true });
+  } catch { return json({ error: "presence_failed" }, 500); }
+}
+
 async function handleCompanionRevoke(request, env) {
   const corsHeaders = getCorsHeaders(request);
   try {
@@ -908,6 +940,9 @@ export default {
     if (request.method === "POST" && url.pathname === "/companion/token") {
       return handleCompanionToken(request, env);
     }
+    if (request.method === "POST" && url.pathname === "/browser-extension/link") return handleBrowserExtensionLink(request, env);
+    if (request.method === "POST" && url.pathname === "/browser-extension/redeem") return handleBrowserExtensionRedeem(request, env);
+    if (request.method === "POST" && url.pathname === "/browser-extension/presence") return handleBrowserExtensionPresence(request, env);
     if (request.method === "POST" && url.pathname === "/companion/revoke") {
       return handleCompanionRevoke(request, env);
     }
@@ -959,6 +994,13 @@ export class PairingCode extends DurableObject {
     });
     return safeEqual(challenge, pairing.codeChallenge) ? { userId: pairing.userId } : null;
   }
+
+  async createBrowserLink(link) { await this.ctx.storage.put("browserLink", link); }
+  async redeemBrowserLink() {
+    const link = await this.ctx.storage.get("browserLink");
+    await this.ctx.storage.delete("browserLink");
+    return link?.expiresAt > Date.now() ? link : null;
+  }
 }
 
 export class CompanionRelay extends DurableObject {
@@ -971,6 +1013,21 @@ export class CompanionRelay extends DurableObject {
     const devices = (await this.ctx.storage.get("devices")) || {};
     devices[device.deviceId] = device;
     await this.ctx.storage.put("devices", devices);
+  }
+
+  async provisionBrowserExtension() {
+    const extensionId = crypto.randomUUID();
+    const token = randomSecret();
+    const extensions = (await this.ctx.storage.get("browserExtensions")) || {};
+    extensions[extensionId] = { tokenHash: await sha256Hex(token), expiresAt: Date.now() + COMPANION_TOKEN_TTL_MS };
+    await this.ctx.storage.put("browserExtensions", extensions);
+    return { userId: this.ctx.id.name, extensionId, token };
+  }
+
+  async validateBrowserExtension(extensionId, token) {
+    const extensions = (await this.ctx.storage.get("browserExtensions")) || {};
+    const extension = extensions[extensionId];
+    return Boolean(extension && extension.expiresAt > Date.now() && safeEqual(extension.tokenHash, await sha256Hex(token)));
   }
 
   async revoke(deviceId) {
