@@ -931,7 +931,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    if (request.method === "OPTIONS" && (url.pathname.startsWith("/companion/") || url.pathname.startsWith("/rich-presence/"))) {
+    if (request.method === "OPTIONS" && (url.pathname.startsWith("/companion/") || url.pathname.startsWith("/rich-presence/") || url.pathname.startsWith("/browser-extension/"))) {
       return new Response(null, { status: 204, headers: getCorsHeaders(request) });
     }
     if (request.method === "POST" && url.pathname === "/companion/authorize") {
