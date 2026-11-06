@@ -10,10 +10,14 @@ function gameForTab(tab) {
 }
 
 async function report() {
-  const { linked } = await chrome.storage.local.get("linked");
+  const { linked, lastGame } = await chrome.storage.local.get(["linked", "lastGame"]);
   if (!linked) return;
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  const game = tab ? gameForTab(tab) : null;
+  const activeGame = tab ? gameForTab(tab) : null;
+  const recentGame = lastGame?.expiresAt > Date.now() ? lastGame.game : null;
+  const game = activeGame || recentGame;
+  if (activeGame) await chrome.storage.local.set({ lastGame: { game: activeGame, expiresAt: Date.now() + 5 * 60_000 } });
+  else if (lastGame && !recentGame) await chrome.storage.local.remove("lastGame");
   await fetch(`${WORKER}/browser-extension/presence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...linked, game }) }).catch(() => {});
 }
 
