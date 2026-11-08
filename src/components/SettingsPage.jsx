@@ -633,7 +633,7 @@ export default function SettingsPage({
                 <section className="settings-section-box">
                   <div>
                     <h3>Noise suppression</h3>
-                    <p>Choose how your microphone is cleaned up before it is sent during calls. This only affects your outgoing audio.</p>
+                    <p>Choose how other callers' audio is cleaned up on this device. This never changes the audio you send.</p>
                     <p>{NOISE_MODE_HINTS[noiseMode]}</p>
                     {!isAiNoiseSupported() ? (
                       <p>AI mode needs AudioWorklet support, which this browser does not provide.</p>

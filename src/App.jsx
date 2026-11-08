@@ -557,8 +557,6 @@ export default function App() {
     screenSharedByName,
     screenShareRequest,
     remoteAudioRef,
-    remoteNoiseSuppression,
-    remoteAudioParticipants,
     screenAudioRef,
     screenVideoRef,
     groupCallStatus,
@@ -578,7 +576,6 @@ export default function App() {
     rejectCall,
     hangUp,
     toggleCallMute,
-    toggleRemoteNoiseSuppression,
     toggleCamera,
     toggleScreenShare,
     dismissScreenShareRequest,
@@ -609,8 +606,7 @@ export default function App() {
     isVoiceTemporarilyMuted,
     voiceMutedTemporaryUntil: currentProfile?.voiceMutedTemporaryUntil,
     onTemporaryVoiceUnmute: clearTemporaryVoiceMute,
-    noiseMode,
-    setNoiseMode
+    noiseMode
   });
 
   useEffect(() => {
@@ -4148,9 +4144,6 @@ export default function App() {
                   remoteMuted={remoteMuted}
                   remoteScreenStream={remoteScreenStream}
                   screenSharedByName={screenSharedByName}
-                  remoteNoiseSuppression={remoteNoiseSuppression}
-                  remoteAudioParticipants={remoteAudioParticipants}
-                  onToggleRemoteNoiseSuppression={toggleRemoteNoiseSuppression}
                 />
               ) : viewingScreen && remoteScreenStream ? (
                 <ScreenViewer

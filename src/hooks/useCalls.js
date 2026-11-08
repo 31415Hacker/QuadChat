@@ -18,8 +18,6 @@ import { applyOpusBitrate, computeCapability } from "../utils/media.js";
 import { callApi } from "../utils/callApi.js";
 import { notifyPairedCallDevice, stopPairedCallRingtone } from "../utils/companionRelay.js";
 import {
-  captureConstraintsForMode,
-  createNoiseController,
   createRemoteNoiseController,
   normalizeNoiseMode
 } from "../utils/noiseSuppression.js";
@@ -38,8 +36,7 @@ export function useCalls({
   isVoiceTemporarilyMuted,
   voiceMutedTemporaryUntil,
   onTemporaryVoiceUnmute,
-  noiseMode,
-  setNoiseMode
+  noiseMode
 }) {
   const [callStatus, setCallStatus] = useState("idle");
   const [callPartnerId, setCallPartnerId] = useState(null);
@@ -49,7 +46,6 @@ export function useCalls({
   const [incomingCall, setIncomingCall] = useState(null);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
-  const noiseControllerRef = useRef(null);
   const currentOutgoingTrackRef = useRef(null);
   const noiseModeRef = useRef(normalizeNoiseMode(noiseMode));
   const [remoteStream, setRemoteStream] = useState(null);
@@ -206,12 +202,9 @@ export function useCalls({
     setRemoteAudioParticipants({});
   }
 
-  async function toggleRemoteNoiseSuppression(participantId) {
+  async function enableRemoteNoiseSuppression(participantId, mode = noiseModeRef.current) {
     if (remoteNoiseChangingRef.current.has(participantId)) return;
-    if (remoteNoiseSuppression[participantId]) {
-      disableRemoteNoiseSuppression(participantId);
-      return;
-    }
+    if (mode === "off") return;
 
     const audio = audioElementForParticipant(participantId);
     const inputStream = remoteAudioStreamsRef.current[participantId];
@@ -221,6 +214,7 @@ export function useCalls({
     try {
       const controller = await createRemoteNoiseController({
         inputStream,
+        mode,
         onOutputStream: (outputStream) => {
           if (remoteAudioStreamsRef.current[participantId] === inputStream) {
             audio.srcObject = outputStream;
@@ -236,7 +230,7 @@ export function useCalls({
       setRemoteNoiseSuppression((prev) => ({ ...prev, [participantId]: true }));
     } catch (error) {
       console.warn("[NOISE] Remote RNNoise unavailable:", error);
-      onCallError?.("RNNoise could not filter that call member's audio.");
+      onCallError?.("The selected noise filter could not process that caller's audio.");
     } finally {
       remoteNoiseChangingRef.current.delete(participantId);
     }
@@ -384,36 +378,6 @@ export function useCalls({
   const voiceMuteActiveRef = useRef(voiceMuteActive);
   voiceMuteActiveRef.current = voiceMuteActive;
 
-  // Replace the outgoing microphone track on every active sender. Used when
-  // the noise-suppression mode swaps between the raw track and the AI output.
-  function replaceOutgoingTrack(nextTrack) {
-    if (!nextTrack) return;
-    const prevTrack = currentOutgoingTrackRef.current;
-    if (prevTrack && prevTrack !== nextTrack) {
-      // Preserve the current mute state (track.enabled) across the swap.
-      nextTrack.enabled = prevTrack.enabled;
-      const replaceOnPc = (pc) => {
-        if (!pc) return;
-        pc.getSenders().forEach((sender) => {
-          if (sender.track === prevTrack) {
-            sender.replaceTrack(nextTrack).catch((error) =>
-              console.error("[NOISE] replaceTrack failed:", error)
-            );
-          }
-        });
-      };
-      replaceOnPc(peerRef.current);
-      Object.values(p2pGroupCallConnectionsRef.current).forEach(replaceOnPc);
-      const published = groupCallPublishedTrackRef.current;
-      if (published) {
-        published.replaceTrack(nextTrack).catch((error) =>
-          console.error("[NOISE] LiveKit replaceTrack failed:", error)
-        );
-      }
-    }
-    currentOutgoingTrackRef.current = nextTrack;
-  }
-
   function removeCameraSenders(pc, cameraTrack) {
     if (!pc || !cameraTrack) return;
     pc.getSenders().forEach((sender) => {
@@ -487,45 +451,20 @@ export function useCalls({
 
   async function acquireMicStream() {
     const rawStream = await navigator.mediaDevices.getUserMedia({
-      audio: captureConstraintsForMode(noiseModeRef.current),
+      // Noise filtering is applied to received audio, not the caller's microphone.
+      audio: { echoCancellation: true, autoGainControl: true, noiseSuppression: false },
       video: false
     });
-    const outgoingStream = new MediaStream(rawStream.getAudioTracks());
-    currentOutgoingTrackRef.current = outgoingStream.getAudioTracks()[0];
-    noiseControllerRef.current?.destroy();
-    const controller = createNoiseController({
-      rawStream,
-      outgoingStream,
-      initialMode: noiseModeRef.current,
-      onOutgoingTrackChange: replaceOutgoingTrack,
-      onError: () => {
-        noiseModeRef.current = "browser";
-        setNoiseMode?.("browser");
-        pushInAppNotification({
-          type: "call",
-          channelId: null,
-          channelLabel: null,
-          senderName: "Noise suppression",
-          body: "AI mode is unavailable — switched to Standard.",
-          id: `noise-ai-fallback-${Date.now()}`
-        });
-      }
-    });
-    noiseControllerRef.current = controller;
-    // Build the AI pipeline in the background so the call connects immediately.
-    controller.setMode(noiseModeRef.current).catch((error) =>
-      console.error("[NOISE] initial mode setup failed:", error)
-    );
-    return outgoingStream;
+    currentOutgoingTrackRef.current = rawStream.getAudioTracks()[0];
+    return rawStream;
   }
 
   useEffect(() => {
     noiseModeRef.current = normalizeNoiseMode(noiseMode);
-    const controller = noiseControllerRef.current;
-    if (!controller) return;
-    controller.setMode(noiseModeRef.current).catch((error) =>
-      console.error("[NOISE] failed to switch mode:", error)
-    );
+    Object.keys(remoteAudioStreamsRef.current).forEach((participantId) => {
+      disableRemoteNoiseSuppression(participantId);
+      enableRemoteNoiseSuppression(participantId, noiseModeRef.current);
+    });
   }, [noiseMode]);
 
   const [groupCallForcedMuted, setGroupCallForcedMuted] = useState(false);
@@ -681,10 +620,6 @@ export function useCalls({
       localStreamRef.current = null;
     }
     stopCamera();
-    if (noiseControllerRef.current) {
-      noiseControllerRef.current.destroy();
-      noiseControllerRef.current = null;
-    }
     currentOutgoingTrackRef.current = null;
     const nodeRef = callNodeRef.current;
     callNodeRef.current = null;
@@ -761,6 +696,7 @@ export function useCalls({
         remoteAudioStreamsRef.current.private = stream;
         setRemoteAudioParticipants({ private: true });
         setRemoteStream(stream);
+        enableRemoteNoiseSuppression("private");
       }
     };
 
@@ -1319,10 +1255,6 @@ export function useCalls({
       groupCallLocalStreamRef.current = null;
     }
     stopCamera();
-    if (noiseControllerRef.current) {
-      noiseControllerRef.current.destroy();
-      noiseControllerRef.current = null;
-    }
     currentOutgoingTrackRef.current = null;
     groupCallPublishedTrackRef.current = null;
     if (groupCallAudioContainerRef.current) {
@@ -1378,10 +1310,6 @@ export function useCalls({
       p2pGroupCallStreamRef.current = null;
     }
     stopCamera();
-    if (noiseControllerRef.current) {
-      noiseControllerRef.current.destroy();
-      noiseControllerRef.current = null;
-    }
     currentOutgoingTrackRef.current = null;
 
     if (p2pGroupCallAudioContainerRef.current) {
@@ -1929,6 +1857,7 @@ export function useCalls({
           audio.setAttribute("data-participant", participant.identity);
           if (publication.trackSid) audio.setAttribute("data-track-sid", publication.trackSid);
           groupCallAudioContainerRef.current?.appendChild(audio);
+          enableRemoteNoiseSuppression(participant.identity);
         }
       });
 
@@ -2097,17 +2026,6 @@ export function useCalls({
       if (groupCallRoomRef.current !== room) throw new Error("Call access was revoked");
       await publishAudio();
 
-      // The AI pipeline may have finished building while we were publishing;
-      // make sure the published track matches the current outgoing track.
-      const controller = noiseControllerRef.current;
-      const desiredTrack = controller?.getOutgoingTrack?.();
-      const publishedTrack = groupCallPublishedTrackRef.current;
-      if (desiredTrack && publishedTrack && desiredTrack !== publishedTrack.mediaStreamTrack) {
-        await publishedTrack.replaceTrack(desiredTrack).catch((error) =>
-          console.error("[NOISE] LiveKit reconcile failed:", error)
-        );
-      }
-
       const participants = {};
       (room.remoteParticipants || new Map()).forEach((p) => {
         participants[p.identity] = {
@@ -2211,7 +2129,6 @@ export function useCalls({
     rejectCall,
     hangUp,
     toggleCallMute,
-    toggleRemoteNoiseSuppression,
     toggleCamera,
     toggleScreenShare,
     stopScreenShare,

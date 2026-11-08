@@ -15,10 +15,10 @@ export const NOISE_MODE_LABELS = {
 };
 
 export const NOISE_MODE_HINTS = {
-  off: "Send your microphone untouched. Best in a quiet room.",
-  browser: "Use the browser's built-in noise suppression. Low CPU and works everywhere.",
-  ai: "Run RNNoise, a neural-network denoiser, on your microphone. Best in noisy rooms, uses more battery.",
-  deepfilter: "Run DeepFilterNet locally for stronger voice cleanup. Downloads an approximately 11 MB model the first time and uses more CPU."
+  off: "Play other callers' audio without extra filtering.",
+  browser: "Use lightweight RNNoise cleanup on other callers' audio.",
+  ai: "Use RNNoise neural cleanup on other callers' audio. Best in noisy calls, uses more battery.",
+  deepfilter: "Use DeepFilterNet for stronger cleanup of other callers' audio. Downloads an approximately 11 MB model the first time and uses more CPU."
 };
 
 export function normalizeNoiseMode(mode) {
@@ -246,10 +246,10 @@ export function createNoiseController({
 }
 
 /**
- * Creates an RNNoise pipeline for received call audio. Unlike the microphone
- * controller, it never owns or stops the incoming remote stream.
+ * Creates a noise-filtering pipeline for received call audio. Unlike the
+ * microphone controller, it never owns or stops the incoming remote stream.
  */
-export async function createRemoteNoiseController({ inputStream, onOutputStream }) {
+export async function createRemoteNoiseController({ inputStream, mode = "ai", onOutputStream }) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) throw new Error("AudioContext is unavailable");
   const ctx = new AudioCtx({ sampleRate: 48000 });
@@ -257,10 +257,19 @@ export async function createRemoteNoiseController({ inputStream, onOutputStream 
   let node;
   let dest;
   try {
-    const wasmBinary = await loadRnnoiseBinary();
-    await ctx.audioWorklet.addModule(rnnoiseWorkletUrl);
     source = ctx.createMediaStreamSource(inputStream);
-    node = new RnnoiseWorkletNode(ctx, { maxChannels: 2, wasmBinary });
+    if (mode === "deepfilter") {
+      const { createDeepFilterNetAudioWorklet } = await import("@workadventure/noise-suppression/deepfilternet");
+      const deepFilter = await createDeepFilterNetAudioWorklet(ctx);
+      await deepFilter.ready;
+      node = deepFilter.node;
+      // Keep disposal alongside the node so the returned controller can clean it up.
+      node.__quadchatDispose = deepFilter.dispose;
+    } else {
+      const wasmBinary = await loadRnnoiseBinary();
+      await ctx.audioWorklet.addModule(rnnoiseWorkletUrl);
+      node = new RnnoiseWorkletNode(ctx, { maxChannels: 2, wasmBinary });
+    }
     dest = ctx.createMediaStreamDestination();
     source.connect(node);
     node.connect(dest);
@@ -270,6 +279,7 @@ export async function createRemoteNoiseController({ inputStream, onOutputStream 
     try { source?.disconnect(); } catch (_) { /* already detached */ }
     try { node?.disconnect(); } catch (_) { /* already detached */ }
     try { node?.destroy?.(); } catch (_) { /* already destroyed */ }
+    try { node?.__quadchatDispose?.(); } catch (_) { /* already disposed */ }
     await ctx.close().catch(() => {});
     throw error;
   }
@@ -279,6 +289,7 @@ export async function createRemoteNoiseController({ inputStream, onOutputStream 
       try { source.disconnect(); } catch (_) { /* already detached */ }
       try { node.disconnect(); } catch (_) { /* already detached */ }
       try { node.destroy?.(); } catch (_) { /* already destroyed */ }
+      try { node.__quadchatDispose?.(); } catch (_) { /* already disposed */ }
       dest.stream.getTracks().forEach((track) => track.stop());
       ctx.close().catch(() => {});
     }

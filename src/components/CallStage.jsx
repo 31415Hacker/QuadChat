@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { AudioLines, CameraOff, MonitorUp, Phone } from "lucide-react";
+import { CameraOff, MonitorUp, Phone } from "lucide-react";
 
 function Avatar({ src, label }) {
   if (!src) {
@@ -16,7 +16,7 @@ function Avatar({ src, label }) {
   );
 }
 
-function VideoTile({ stream, label, avatarUrl, local = false, muted = false, screen = false, speaking = false, noiseSuppressionEnabled = false, canToggleNoiseSuppression = false, onToggleNoiseSuppression }) {
+function VideoTile({ stream, label, avatarUrl, local = false, muted = false, screen = false, speaking = false }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -31,18 +31,6 @@ function VideoTile({ stream, label, avatarUrl, local = false, muted = false, scr
         <Avatar src={avatarUrl} label={label} />
       )}
       <span className="call-stage-label">{label}{muted ? " (muted)" : ""}</span>
-      {canToggleNoiseSuppression ? (
-        <button
-          aria-label={`${noiseSuppressionEnabled ? "Turn off" : "Turn on"} RNNoise for ${label}`}
-          aria-pressed={noiseSuppressionEnabled}
-          className={`call-stage-noise-button${noiseSuppressionEnabled ? " call-stage-noise-button--active" : ""}`}
-          onClick={onToggleNoiseSuppression}
-          title={noiseSuppressionEnabled ? "RNNoise is filtering this person's audio" : "Filter this person's audio with RNNoise"}
-          type="button"
-        >
-          <AudioLines size={17} />
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -64,9 +52,6 @@ export default function CallStage({
   remoteScreenStream,
   remoteMuted,
   screenSharedByName,
-  remoteNoiseSuppression,
-  remoteAudioParticipants,
-  onToggleRemoteNoiseSuppression
 }) {
   if (!active) {
     return (
@@ -113,9 +98,6 @@ export default function CallStage({
             muted={tile.muted}
             avatarUrl={tile.avatarUrl}
             speaking={tile.speaking}
-            canToggleNoiseSuppression={Boolean(remoteAudioParticipants?.[tile.id])}
-            noiseSuppressionEnabled={remoteNoiseSuppression?.[tile.id] === true}
-            onToggleNoiseSuppression={() => onToggleRemoteNoiseSuppression(tile.id)}
           />
         ))}
       </div>
