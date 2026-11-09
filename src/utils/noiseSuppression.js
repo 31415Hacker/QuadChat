@@ -273,6 +273,10 @@ export async function createRemoteNoiseController({ inputStream, mode = "ai", on
     dest = ctx.createMediaStreamDestination();
     source.connect(node);
     node.connect(dest);
+    // A MediaStreamDestination alone is not considered an audible output by
+    // every browser. Keep the processed graph connected to the speaker too;
+    // the caller mutes its replacement <audio> element to prevent duplication.
+    node.connect(ctx.destination);
     if (ctx.state === "suspended") await ctx.resume();
     onOutputStream(dest.stream);
   } catch (error) {

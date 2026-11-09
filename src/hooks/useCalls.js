@@ -189,7 +189,11 @@ export function useCalls({
     }
     const audio = audioElementForParticipant(participantId);
     const rawStream = remoteAudioStreamsRef.current[participantId];
-    if (audio && rawStream) audio.srcObject = rawStream;
+    if (audio && rawStream) {
+      audio.muted = false;
+      audio.srcObject = rawStream;
+      audio.play().catch(() => {});
+    }
     setRemoteNoiseSuppression((prev) => ({ ...prev, [participantId]: false }));
   }
 
@@ -217,8 +221,11 @@ export function useCalls({
         mode,
         onOutputStream: (outputStream) => {
           if (remoteAudioStreamsRef.current[participantId] === inputStream) {
+            // The filter graph is connected to the AudioContext destination
+            // for reliable playback. Muting this element avoids hearing both
+            // the raw and processed streams at once.
+            audio.muted = true;
             audio.srcObject = outputStream;
-            audio.play().catch(() => {});
           }
         }
       });
