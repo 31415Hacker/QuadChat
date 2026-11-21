@@ -32,7 +32,7 @@
 	},
 	"migrations": [
 		{
-			"tag": "v1",
+			"tag": "v1-companion-relay",
 			"new_sqlite_classes": [
 				"PresenceServer",
 				"PairingCode",
