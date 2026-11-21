@@ -1213,7 +1213,6 @@ export class PresenceServer extends DurableObject {
   }
 
   async fetch(request) {
-    this.ensureHealthCheck();
     const url = new URL(request.url);
 
     if (url.searchParams.get("token")) {
