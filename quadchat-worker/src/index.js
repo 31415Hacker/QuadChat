@@ -1152,6 +1152,12 @@ export class PresenceServer extends DurableObject {
     }, 15000);
   }
 
+  stopHealthCheckIfIdle() {
+    if (this.sessions.size > 0 || !this.healthCheck) return;
+    clearInterval(this.healthCheck);
+    this.healthCheck = null;
+  }
+
   async activeRichPresence() {
     const entries = (await this.ctx.storage.get("richPresence")) || {};
     const now = Date.now();
@@ -1318,6 +1324,7 @@ export class PresenceServer extends DurableObject {
 
     this.sessions.delete(webSocket);
     this.messageWindows.delete(webSocket);
+    this.stopHealthCheckIfIdle();
     const isStillConnected = Array.from(this.sessions.values()).some(
       (activeSession) => activeSession.userId === session.userId
     );
