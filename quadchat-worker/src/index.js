@@ -973,7 +973,15 @@ export default {
     if (request.headers.get("Upgrade") === "websocket") {
       const id = env.PRESENCE.idFromName("global-presence");
       const stub = env.PRESENCE.get(id);
-      return stub.fetch(request);
+      try {
+        return await stub.fetch(request);
+      } catch (error) {
+        console.error("[PRESENCE] WebSocket upgrade failed:", error);
+        if (url.searchParams.get("presenceDebug") === "1") {
+          return new Response(error instanceof Error ? error.message : "Presence upgrade failed", { status: 500 });
+        }
+        return new Response("Presence unavailable", { status: 500 });
+      }
     }
     return new Response("QuadChat Presence Server running", { status: 200 });
   }
