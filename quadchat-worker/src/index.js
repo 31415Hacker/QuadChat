@@ -977,9 +977,6 @@ export default {
         return await stub.fetch(request);
       } catch (error) {
         console.error("[PRESENCE] WebSocket upgrade failed:", error);
-        if (url.searchParams.get("presenceDebug") === "1") {
-          return new Response(error instanceof Error ? error.message : "Presence upgrade failed", { status: 500 });
-        }
         return new Response("Presence unavailable", { status: 500 });
       }
     }
@@ -1138,32 +1135,12 @@ export class PresenceServer extends DurableObject {
   constructor(state, env) {
     super(state, env);
     this.env = env;
-    this.sessions = new Map();
-    this.connectionAttempts = new Map();
-    this.messageWindows = new Map();
-    this.healthCheck = null;
   }
 
-  ensureHealthCheck() {
-    if (this.healthCheck) return;
-    this.healthCheck = setInterval(() => {
-      const now = Date.now();
-      for (const [webSocket, session] of this.sessions) {
-        if (now - session.lastPing <= 25000) continue;
-        try {
-          webSocket.close();
-        } finally {
-          this.handleDisconnect(webSocket);
-        }
-      }
-      this.pruneRichPresence();
-    }, 15000);
-  }
-
-  stopHealthCheckIfIdle() {
-    if (this.sessions.size > 0 || !this.healthCheck) return;
-    clearInterval(this.healthCheck);
-    this.healthCheck = null;
+  getSessions() {
+    return this.ctx.getWebSockets()
+      .map((webSocket) => ({ webSocket, session: webSocket.deserializeAttachment() }))
+      .filter(({ session }) => session && typeof session.userId === "string");
   }
 
   async activeRichPresence() {
@@ -1204,7 +1181,7 @@ export class PresenceServer extends DurableObject {
   }
 
   isUserOnline(userId) {
-    return Array.from(this.sessions.values()).some((session) => session.userId === userId);
+    return this.getSessions().some(({ session }) => session.userId === userId);
   }
 
   async recordMessage({ rateLimit, rateWindowMs, text, duplicateLimit, duplicateWindowMs }) {
@@ -1229,121 +1206,70 @@ export class PresenceServer extends DurableObject {
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    this.handleConnection(server);
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ openedAt: Date.now() });
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  async handleConnection(webSocket) {
-    webSocket.accept();
-    let authenticated = false;
-    let userId = null;
-
-    const timeout = setTimeout(() => {
-      if (!authenticated) {
-        try { webSocket.close(1008, "Authentication timeout"); } catch {}
-      }
-    }, 15000);
-
-    webSocket.addEventListener("message", async (event) => {
-      if (authenticated) {
-        const session = this.sessions.get(webSocket);
-        if (!session) return;
-        const now = Date.now();
-        const recentMessages = (this.messageWindows.get(webSocket) || []).filter(
-          (timestamp) => now - timestamp < 60000
-        );
-        if (recentMessages.length >= MAX_MESSAGES_PER_MINUTE) {
-          webSocket.close(1008, "Presence message rate limit exceeded");
-          this.handleDisconnect(webSocket);
-          return;
-        }
-        recentMessages.push(now);
-        this.messageWindows.set(webSocket, recentMessages);
-        session.lastPing = now;
+  async webSocketMessage(webSocket, message) {
+    const session = webSocket.deserializeAttachment();
+    if (session?.userId) {
+      const now = Date.now();
+      const recentMessages = (session.messageTimestamps || []).filter((timestamp) => now - timestamp < 60000);
+      if (recentMessages.length >= MAX_MESSAGES_PER_MINUTE) {
+        webSocket.close(1008, "Presence message rate limit exceeded");
+        await this.handleDisconnect(webSocket, session);
         return;
       }
+      recentMessages.push(now);
+      webSocket.serializeAttachment({ ...session, lastPing: now, messageTimestamps: recentMessages });
+      return;
+    }
 
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type !== "auth" || !data.token) {
-          webSocket.close(1008, "Expected auth message");
-          return;
-        }
-
-        userId = await verifyFirebaseIdToken(data.token);
-
-        const account = parseServiceAccount(this.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-        const callerDoc = await readFirestoreDoc(account, "users", userId);
-        if (!callerDoc) {
-          webSocket.close(1008, "User not found");
-          return;
-        }
-        const callerData = callerDoc.fields || {};
-        if (callerData.banned?.booleanValue === true) {
-          webSocket.close(1008, "Account banned");
-          return;
-        }
-
-        const now = Date.now();
-        const attempts = (this.connectionAttempts.get(userId) || []).filter(
-          (timestamp) => now - timestamp < 60000
-        );
-        const activeSessions = Array.from(this.sessions.values()).filter(
-          (session) => session.userId === userId
-        ).length;
-        if (
-          activeSessions >= MAX_SESSIONS_PER_USER ||
-          attempts.length >= MAX_CONNECTION_ATTEMPTS_PER_MINUTE
-        ) {
-          webSocket.close(1008, "Presence connection rate limit exceeded");
-          return;
-        }
-        attempts.push(now);
-        this.connectionAttempts.set(userId, attempts);
-
-        authenticated = true;
-        clearTimeout(timeout);
-        this.sessions.set(webSocket, { userId, lastPing: Date.now() });
-        await this.cancelPendingOffline(userId);
-        this.broadcast({ type: "presence", userId, status: "online" });
-        const onlineUsers = Array.from(
-          new Set(Array.from(this.sessions.values()).map((session) => session.userId))
-        );
-        webSocket.send(JSON.stringify({ type: "sync", onlineUsers, richPresence: await this.activeRichPresence() }));
-      } catch (err) {
-        try { webSocket.close(1008, "Authentication failed"); } catch {}
+    try {
+      const data = JSON.parse(typeof message === "string" ? message : new TextDecoder().decode(message));
+      if (data.type !== "auth" || !data.token) throw new Error("Expected auth message");
+      const userId = await verifyFirebaseIdToken(data.token);
+      const account = parseServiceAccount(this.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      const callerDoc = await readFirestoreDoc(account, "users", userId);
+      if (!callerDoc) throw new Error("User not found");
+      if (callerDoc.fields?.banned?.booleanValue === true) throw new Error("Account banned");
+      if (this.getSessions().filter(({ session: active }) => active.userId === userId).length >= MAX_SESSIONS_PER_USER) {
+        throw new Error("Presence connection rate limit exceeded");
       }
-    });
 
-    webSocket.addEventListener("close", () => {
-      clearTimeout(timeout);
-      if (authenticated) this.handleDisconnect(webSocket);
-    });
-    webSocket.addEventListener("error", () => {
-      clearTimeout(timeout);
-      if (authenticated) this.handleDisconnect(webSocket);
-    });
+      webSocket.serializeAttachment({ userId, lastPing: Date.now(), messageTimestamps: [] });
+      await this.cancelPendingOffline(userId);
+      this.broadcast({ type: "presence", userId, status: "online" });
+      const onlineUsers = Array.from(new Set(this.getSessions().map(({ session: active }) => active.userId)));
+      webSocket.send(JSON.stringify({ type: "sync", onlineUsers, richPresence: await this.activeRichPresence() }));
+    } catch {
+      try { webSocket.close(1008, "Authentication failed"); } catch {}
+    }
   }
 
-  handleDisconnect(webSocket) {
-    const session = this.sessions.get(webSocket);
-    if (!session) return;
+  async webSocketClose(webSocket) {
+    const session = webSocket.deserializeAttachment();
+    await this.handleDisconnect(webSocket, session);
+    try { webSocket.close(); } catch {}
+  }
 
-    this.sessions.delete(webSocket);
-    this.messageWindows.delete(webSocket);
-    this.stopHealthCheckIfIdle();
-    const isStillConnected = Array.from(this.sessions.values()).some(
-      (activeSession) => activeSession.userId === session.userId
+  async webSocketError(webSocket) {
+    await this.handleDisconnect(webSocket, webSocket.deserializeAttachment());
+  }
+
+  async handleDisconnect(webSocket, session) {
+    if (!session?.userId) return;
+    const isStillConnected = this.getSessions().some(
+      ({ webSocket: activeSocket, session: activeSession }) => activeSocket !== webSocket && activeSession.userId === session.userId
     );
     if (!isStillConnected) {
-      this.scheduleOffline(session.userId);
+      await this.scheduleOffline(session.userId);
     }
   }
 
   isConnected(userId) {
-    return Array.from(this.sessions.values()).some(
-      (session) => session.userId === userId
-    );
+    return this.getSessions().some(({ session }) => session.userId === userId);
   }
 
   async scheduleOffline(userId) {
@@ -1395,11 +1321,11 @@ export class PresenceServer extends DurableObject {
 
   broadcast(data) {
     const payload = JSON.stringify(data);
-    for (const [ws] of this.sessions) {
+    for (const { webSocket } of this.getSessions()) {
       try {
-        ws.send(payload);
-      } catch (err) {
-        this.handleDisconnect(ws);
+        webSocket.send(payload);
+      } catch {
+        this.handleDisconnect(webSocket, webSocket.deserializeAttachment());
       }
     }
   }
