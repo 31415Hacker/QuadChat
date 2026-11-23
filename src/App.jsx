@@ -108,6 +108,7 @@ import AvatarPreviewModal from "./components/AvatarPreviewModal.jsx";
 import UsersSidebar from "./components/UsersSidebar.jsx";
 import Composer from "./components/Composer.jsx";
 import SettingsPage from "./components/SettingsPage.jsx";
+import DeveloperDashboard, { DashboardRestricted } from "./components/DeveloperDashboard.jsx";
 import {
   StatusModal,
   NewDmModal,
@@ -144,6 +145,7 @@ function richPresenceApiUrl(path) {
 }
 
 export default function App() {
+  const isDashboardRoute = window.location.pathname.replace(/\/+$/, "") === "/dashboard";
   const [user, setUser] = useState(null);
   const [sessionUserId, setSessionUserId] = useState(readSessionUserId);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -3888,6 +3890,12 @@ export default function App() {
 
   if (!isAuthReady) {
     return <AppLoadingScreen message="Checking your session…" />;
+  }
+
+  if (isDashboardRoute) {
+    if (!user) return <DashboardRestricted />;
+    if (!isProfilesReady) return <AppLoadingScreen message="Checking developer access…" />;
+    return isCurrentUserDeveloper ? <DeveloperDashboard /> : <DashboardRestricted />;
   }
 
   if (user && (!isProfilesReady || !isInitialMessagesReady)) {

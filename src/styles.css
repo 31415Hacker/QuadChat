@@ -5250,3 +5250,158 @@ button.user-avatar--clickable:focus-visible {
 .poll-modal { width: min(480px, calc(100vw - 28px)); display: grid; gap: 13px; }.poll-modal > header { display: flex; gap: 10px; align-items: flex-start; }.poll-modal > header > span { color: #69dba3; }.poll-modal h2 { margin: 0; }.poll-modal p { margin: 3px 0 0; color: var(--muted-text); font-size: 13px; }.poll-field,.poll-modal-options { display: grid; gap: 6px; font-weight: 700; font-size: 13px; }.poll-modal input { width: 100%; box-sizing: border-box; }.poll-modal-options > span { display: flex; justify-content: space-between; }.poll-modal-options em { color: var(--muted-text); font-style: normal; font-weight: 500; }.poll-modal-options > div { display: flex; gap: 7px; }.poll-modal-options button { width: 36px; border: 0; border-radius: 8px; color: #ff9c9c; background: #402325; }.poll-settings { display: grid; gap: 10px; padding: 11px; background: rgba(255,255,255,.04); border-radius: 10px; }.poll-settings label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }.poll-settings input[type="number"] { width: 65px; }.poll-settings .poll-toggle { justify-content: flex-start; gap: 8px; }.poll-toggle input { width: auto; }
 .background-service-download { display: inline-flex; align-items: center; width: fit-content; padding: 10px 14px; border-radius: 8px; background: #287b80; color: #fff; font-weight: 700; text-decoration: none; }
 .background-service-download:hover { background: #329298; }
+
+.developer-dashboard {
+  box-sizing: border-box;
+  color: var(--text-primary);
+  margin: 0 auto;
+  max-width: 1120px;
+  min-height: 100vh;
+  padding: 48px 28px 72px;
+}
+
+.developer-dashboard--restricted {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.developer-dashboard-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.developer-dashboard-header h1,
+.developer-dashboard-section h2,
+.developer-dashboard-card h3 {
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.developer-dashboard-header p:not(.developer-dashboard-eyebrow) {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 8px 0 0;
+  max-width: 660px;
+}
+
+.developer-dashboard-eyebrow {
+  color: var(--text-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.developer-dashboard-summary,
+.developer-dashboard-services {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.developer-dashboard-summary article,
+.developer-dashboard-card,
+.developer-dashboard-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.developer-dashboard-summary article {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+}
+
+.developer-dashboard-summary span,
+.developer-dashboard-summary small,
+.developer-dashboard-card p,
+.developer-dashboard-card small {
+  color: var(--text-secondary);
+}
+
+.developer-dashboard-summary strong {
+  color: var(--text-primary);
+  font-size: 1.12rem;
+}
+
+.developer-dashboard-summary small,
+.developer-dashboard-card small {
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+.developer-dashboard-section {
+  margin-top: 22px;
+  padding: 20px;
+}
+
+.developer-dashboard-section-heading {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.developer-dashboard-section-heading a {
+  color: var(--text-accent);
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.developer-dashboard-table {
+  display: grid;
+  margin: 14px 0 0;
+}
+
+.developer-dashboard-table > div {
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(180px, .8fr) minmax(0, 1.2fr);
+  padding: 11px 0;
+}
+
+.developer-dashboard-table dt {
+  color: var(--text-secondary);
+}
+
+.developer-dashboard-table dd {
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.developer-dashboard-services {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.developer-dashboard-card {
+  display: grid;
+  gap: 9px;
+  padding: 17px;
+}
+
+.developer-dashboard-card p {
+  font-size: .9rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+@media (max-width: 780px) {
+  .developer-dashboard { padding: 28px 16px 48px; }
+  .developer-dashboard-header { flex-direction: column; }
+  .developer-dashboard-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .developer-dashboard-services { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .developer-dashboard-summary { grid-template-columns: 1fr; }
+  .developer-dashboard-table > div { gap: 4px; grid-template-columns: 1fr; }
+  .developer-dashboard-section-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
+}
