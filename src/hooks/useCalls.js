@@ -172,6 +172,7 @@ export function useCalls({
     if (remoteAudioRef.current && remoteStream) {
       console.log("[CALL] setting audio element srcObject");
       remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
     }
   }, [remoteStream, callStatus]);
 
@@ -1788,9 +1789,23 @@ export function useCalls({
       }
 
       const { Room, RoomEvent } = await import("livekit-client");
-      const { token, url, session, accessExpiresAt } = await callApi(user, "livekit-token", {
-        room: callKey, ...(password ? { password } : {})
-      });
+      // A mute or deletion briefly owns the server-side room lock. It can last
+      // longer than a single token request, so retry that explicitly instead of
+      // making a healthy call appear unavailable to the person joining.
+      let credentials;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          credentials = await callApi(user, "livekit-token", {
+            room: callKey, ...(password ? { password } : {})
+          });
+          break;
+        } catch (error) {
+          const updating = error?.status === 409 && error?.message === "Call is being updated. Please try again.";
+          if (!updating || attempt === 4) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      }
+      const { token, url, session, accessExpiresAt } = credentials;
 
       const stream = await acquireMicStream();
       groupCallLocalStreamRef.current = stream;

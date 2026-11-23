@@ -187,6 +187,13 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
       // Distributed account AND room limits apply before the expensive KDF.
       await limit(`join-user-${caller.uid}`, 10);
       await limit(`join-room-${room}`, 30);
+      // Password verification is deliberately outside the room lock. A burst of
+      // people joining a protected call otherwise serializes scrypt work and
+      // makes otherwise healthy joins look like a call update is in progress.
+      const joiningData = await directory(room, false);
+      if (joiningData.passwordVerifier && !await verifyPassword(body.password || "", joiningData.passwordVerifier)) {
+        throw failure(403, "Incorrect password");
+      }
     }
     if (action === "renew-call") {
       // Every connected participant renews every 25 seconds. Renewals do not
@@ -206,7 +213,6 @@ export function createCallService({ auth, store, database, rooms, makeToken, now
       const data = await directory(room, action === "delete-call");
       const accessRef = database.ref(`call-access/${room}/${caller.uid}`);
       if (action === "livekit-token") {
-        if (data.passwordVerifier && !await verifyPassword(body.password || "", data.passwordVerifier)) throw failure(403, "Incorrect password");
         const mute = (await database.ref(`group-calls/${room}/mutes/${caller.uid}`).get()).val();
         if (mute?.revokeBefore * 1000 > now()) throw failure(409, "Mute is being applied. Please rejoin in a moment.");
         const canPublish = publishingAllowed(caller.profile, mute, now());

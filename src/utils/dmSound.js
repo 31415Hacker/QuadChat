@@ -12,8 +12,9 @@ function getDmSoundSrc() {
 }
 
 function getMessageVolume() {
-  const stored = Number(localStorage.getItem("quadchat-message-sound-volume"));
-  return stored >= 0 && stored <= 1 ? stored : 0.2;
+  const stored = localStorage.getItem("quadchat-message-sound-volume");
+  const volume = stored === null ? NaN : Number(stored);
+  return volume >= 0 && volume <= 1 ? volume : 0.2;
 }
 
 let dmAudio = new Audio(getDmSoundSrc());

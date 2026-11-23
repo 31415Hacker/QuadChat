@@ -13,8 +13,9 @@ function getCallSoundSrc() {
 }
 
 function getRingtoneVolume() {
-  const stored = Number(localStorage.getItem("quadchat-ringtone-volume"));
-  return stored >= 0 && stored <= 1 ? stored : 0.2;
+  const stored = localStorage.getItem("quadchat-ringtone-volume");
+  const volume = stored === null ? NaN : Number(stored);
+  return volume >= 0 && volume <= 1 ? volume : 0.2;
 }
 
 let ringtoneAudio = new Audio(getCallSoundSrc());
@@ -28,7 +29,21 @@ configureRingtone();
 let ringtonePlaying = false;
 
 export function unlockCallAudio() {
+  if (ringtonePlaying) return;
   ringtoneAudio.load();
+  // Browsers only grant audible media playback from a real user gesture.
+  // Calls start after async media/signalling work, so merely calling play()
+  // there is commonly blocked. Prime this audio element silently while we are
+  // still inside the click/tap/key gesture that started the call.
+  const wasMuted = ringtoneAudio.muted;
+  ringtoneAudio.muted = true;
+  ringtoneAudio.play().then(() => {
+    ringtoneAudio.pause();
+    ringtoneAudio.currentTime = 0;
+    ringtoneAudio.muted = wasMuted;
+  }).catch(() => {
+    ringtoneAudio.muted = wasMuted;
+  });
 }
 
 export function resumeCallAudio() {
