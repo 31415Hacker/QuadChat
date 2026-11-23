@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 const QUADCHAT_STARTED_AT = new Date("2026-09-14T12:42:08.000Z");
 
 const services = [
@@ -11,7 +13,7 @@ const services = [
 ];
 
 const applicationLimits = [
-  ["Message", "500 characters"],
+  ["Message", "2,500 characters"],
   ["General / voice upload", "50 MB"],
   ["Profile image", "5 MB"],
   ["Group-call title", "50 characters"],
@@ -67,6 +69,26 @@ export function DashboardRestricted() {
 }
 
 export default function DeveloperDashboard() {
+  const [liveStats, setLiveStats] = useState(null);
+  const [liveStatsError, setLiveStatsError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { auth } = await import("../../firebase.js");
+        const token = await auth.currentUser?.getIdToken();
+        const response = await fetch("/api/dashboard-stats", { headers: { Authorization: `Bearer ${token || ""}` } });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load live statistics.");
+        if (active) setLiveStats(data);
+      } catch (error) {
+        if (active) setLiveStatsError(error.message || "Could not load live statistics.");
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
   return (
     <main className="developer-dashboard">
       <header className="developer-dashboard-header">
@@ -83,6 +105,26 @@ export default function DeveloperDashboard() {
         <article><span>App version</span><strong>2.6.10</strong><small>Current release</small></article>
         <article><span>Worker objects</span><strong>3</strong><small>Presence, pairing, companion relay</small></article>
         <article><span>Live provider telemetry</span><strong>Not connected</strong><small>Use each provider dashboard for account usage</small></article>
+      </section>
+
+      <section className="developer-dashboard-section">
+        <h2>Live service statistics</h2>
+        {liveStatsError ? <p className="developer-dashboard-note">{liveStatsError}</p> : null}
+        {!liveStats && !liveStatsError ? <p className="developer-dashboard-note">Loading live statistics…</p> : null}
+        {liveStats ? <>
+          <p className="developer-dashboard-note">Updated {new Date(liveStats.asOf).toLocaleString()}.</p>
+          <StatTable rows={[
+            ["Firebase users", String(liveStats.firebase.users)],
+            ["Firestore messages", String(liveStats.firebase.messages)],
+            ["Configured group calls", String(liveStats.firebase.configuredCalls)],
+            ["Moderation records", `${liveStats.firebase.badMessages} profanity; ${liveStats.firebase.spamIncidents} spam`],
+            ["LiveKit", liveStats.livekit.available ? `${liveStats.livekit.activeRooms} active rooms; ${liveStats.livekit.participants} participants` : liveStats.livekit.reason],
+            ["Cloudinary", liveStats.cloudinary.available ? `${liveStats.cloudinary.resources?.usage ?? 0} resources; ${liveStats.cloudinary.storage?.usage ?? 0} bytes stored` : liveStats.cloudinary.reason],
+            ["Cloudflare", liveStats.cloudflare.reason],
+            ["Vercel", liveStats.vercel.reason],
+            ["GitHub Actions", liveStats.github.reason]
+          ]} />
+        </> : null}
       </section>
 
       <section className="developer-dashboard-section">

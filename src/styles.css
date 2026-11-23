@@ -5254,10 +5254,14 @@ button.user-avatar--clickable:focus-visible {
 .developer-dashboard {
   box-sizing: border-box;
   color: var(--text-primary);
+  height: 100vh;
+  height: 100dvh;
   margin: 0 auto;
   max-width: 1120px;
-  min-height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 48px 28px 72px;
+  scrollbar-gutter: stable;
 }
 
 .developer-dashboard--restricted {
@@ -5391,6 +5395,12 @@ button.user-avatar--clickable:focus-visible {
   font-size: .9rem;
   line-height: 1.4;
   margin: 0;
+}
+
+.developer-dashboard-note {
+  color: var(--text-secondary);
+  font-size: .88rem;
+  margin: 10px 0 0;
 }
 
 @media (max-width: 780px) {
