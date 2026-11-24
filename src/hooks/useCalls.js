@@ -209,7 +209,12 @@ export function useCalls({
 
   async function enableRemoteNoiseSuppression(participantId, mode = noiseModeRef.current) {
     if (remoteNoiseChangingRef.current.has(participantId)) return;
-    if (mode === "off") return;
+    // Standard call playback must keep the media element as the audio sink.
+    // Creating an AudioContext after signaling has completed is often outside a
+    // browser user gesture, particularly for the caller, so it can remain
+    // suspended after the raw element was muted. Voice isolation is opt-in;
+    // every other mode fails open to direct remote audio.
+    if (mode !== "voice-isolation") return;
 
     const audio = audioElementForParticipant(participantId);
     const inputStream = remoteAudioStreamsRef.current[participantId];
@@ -1879,6 +1884,9 @@ export function useCalls({
           audio.setAttribute("data-participant", participant.identity);
           if (publication.trackSid) audio.setAttribute("data-track-sid", publication.trackSid);
           groupCallAudioContainerRef.current?.appendChild(audio);
+          // `autoplay` alone is not reliable for dynamically-created media
+          // elements, especially after a caller joins asynchronously.
+          audio.play().catch(() => {});
           enableRemoteNoiseSuppression(participant.identity);
         }
       });
