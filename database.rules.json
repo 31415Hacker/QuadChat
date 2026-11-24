@@ -30,7 +30,7 @@
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid",
         "$commandId": {
-          ".validate": "!newData.exists() || (newData.hasChildren(['action', 'createdAt', 'expiresAt']) && newData.numChildren() === 3 && newData.child('action').val() === 'toggle_call_mute' && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber())"
+          ".validate": "!newData.exists() || (newData.hasChildren(['action', 'createdAt', 'expiresAt']) && newData.child('action').val() === 'toggle_call_mute' && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber())"
         }
       }
     },
