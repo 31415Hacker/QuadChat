@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import appPackage from "../../package.json";
 
-const QUADCHAT_STARTED_AT = new Date("2026-09-14T12:42:08.000Z");
+const QUADCHAT_STARTED_AT = new Date("2026-06-01T10:02:08.000Z");
 
 const applicationLimits = [
   ["Message", "2,500 characters"],
@@ -119,7 +119,7 @@ export default function DeveloperDashboard() {
       </header>
 
       <section className="developer-dashboard-summary" aria-label="QuadChat summary">
-        <article><span>Age</span><strong>{ageLabel()}</strong><small>Started September 14, 2026</small></article>
+        <article><span>Age</span><strong>{ageLabel()}</strong><small>Repository created June 1, 2026</small></article>
         <article><span>App version</span><strong>{appPackage.version}</strong><small>Current release</small></article>
         <article><span>Worker objects</span><strong>3</strong><small>Presence, pairing, companion relay</small></article>
         <article><span>Provider data</span><strong>{liveStats ? "Updated" : "Loading"}</strong><small>{liveStats ? new Date(liveStats.asOf).toLocaleTimeString() : "Fetching server-side"}</small></article>
