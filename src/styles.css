@@ -865,6 +865,21 @@ button:disabled {
   padding: 16px;
 }
 
+.settings-form--admin .settings-section-box {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-form--admin .settings-section-box > :first-child {
+  flex: 1 1 220px;
+}
+
+.settings-form--admin .settings-number-row,
+.settings-form--admin .magic-link-form {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+
 .settings-section-box h3,
 .settings-section-box p {
   margin: 0;
@@ -1713,6 +1728,10 @@ button.magic-link-url {
 .app-shell--settings {
   align-items: stretch;
   padding: 0 !important;
+  /* Settings is a full-screen route. Scaling the shell shrinks its fixed-width
+     inner layout while leaving the viewport behind it, creating a blank
+     right-side wall at UI scales below 100%. */
+  transform: none;
 }
 
 .chat-panel--hidden {
