@@ -4,18 +4,25 @@ const SOUNDS = {
   iphone: "/sounds/iphone_ringtone_trap_remixbigconverter.mp3"
 };
 
+let customSoundUrl = "";
+let soundType = "default";
+let ringtoneVolume = 0.2;
+
+export function setCallSoundPreference({ kind, customUrl, volume } = {}) {
+  soundType = kind || "default";
+  customSoundUrl = customUrl || "";
+  ringtoneVolume = Number.isFinite(Number(volume)) ? Math.max(0, Math.min(1, Number(volume))) : 0.2;
+}
+
 function getCallSoundSrc() {
-  const type = localStorage.getItem("quadchat-call-sound") || "default";
-  if (type === "custom") {
-    return localStorage.getItem("quadchat-call-sound-custom") || SOUNDS.default;
+  if (soundType === "custom") {
+    return customSoundUrl || SOUNDS.default;
   }
-  return SOUNDS[type] || SOUNDS.default;
+  return SOUNDS[soundType] || SOUNDS.default;
 }
 
 function getRingtoneVolume() {
-  const stored = localStorage.getItem("quadchat-ringtone-volume");
-  const volume = stored === null ? NaN : Number(stored);
-  return volume >= 0 && volume <= 1 ? volume : 0.2;
+  return ringtoneVolume;
 }
 
 let ringtoneAudio = new Audio(getCallSoundSrc());

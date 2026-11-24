@@ -5420,6 +5420,12 @@ button.user-avatar--clickable:focus-visible {
   margin: 10px 0 0;
 }
 
+.developer-dashboard-subheading {
+  color: var(--text-primary);
+  font-size: .95rem;
+  margin: 22px 0 0;
+}
+
 @media (max-width: 780px) {
   .developer-dashboard { padding: 28px 16px 48px; }
   .developer-dashboard-header { flex-direction: column; }

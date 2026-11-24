@@ -147,8 +147,11 @@ export default function DeveloperDashboard() {
           <StatTable rows={[
             ["Project", liveStats.firebase.projectId], ["Users", String(liveStats.firebase.users)],
             ["Messages", String(liveStats.firebase.messages)], ["Configured calls", String(liveStats.firebase.configuredCalls)],
-            ["Moderation records", `${liveStats.firebase.badMessages} profanity; ${liveStats.firebase.spamIncidents} spam`]
+            ["Moderation records", `${liveStats.firebase.badMessages} profanity; ${liveStats.firebase.spamIncidents} spam`],
+            ["Settings migrated", `${liveStats.firebase.settingsMigrated} of ${liveStats.firebase.users}`]
           ]} />
+          <h3 className="developer-dashboard-subheading">Completed migrations</h3>
+          {liveStats.firebase.migrationUsers?.length ? <StatTable rows={liveStats.firebase.migrationUsers.map((member) => [member.name, `${member.uid} · ${date(member.migratedAt)}`])} /> : <p className="developer-dashboard-note">No users have completed the migration yet.</p>}
         </ProviderSection>
 
         <ProviderSection title="Cloudinary" description="Media storage, bandwidth, transformations, and credits." provider={liveStats.cloudinary}>

@@ -3,18 +3,25 @@ const SOUNDS = {
   discord: "/sounds/discord-notification.mp3"
 };
 
+let customSoundUrl = "";
+let soundType = "android";
+let messageVolume = 0.2;
+
+export function setDmSoundPreference({ kind, customUrl, volume } = {}) {
+  soundType = kind || "android";
+  customSoundUrl = customUrl || "";
+  messageVolume = Number.isFinite(Number(volume)) ? Math.max(0, Math.min(1, Number(volume))) : 0.2;
+}
+
 function getDmSoundSrc() {
-  const type = localStorage.getItem("quadchat-dm-sound") || "android";
-  if (type === "custom") {
-    return localStorage.getItem("quadchat-dm-sound-custom") || SOUNDS.android;
+  if (soundType === "custom") {
+    return customSoundUrl || SOUNDS.android;
   }
-  return SOUNDS[type] || SOUNDS.android;
+  return SOUNDS[soundType] || SOUNDS.android;
 }
 
 function getMessageVolume() {
-  const stored = localStorage.getItem("quadchat-message-sound-volume");
-  const volume = stored === null ? NaN : Number(stored);
-  return volume >= 0 && volume <= 1 ? volume : 0.2;
+  return messageVolume;
 }
 
 let dmAudio = new Audio(getDmSoundSrc());

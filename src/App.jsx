@@ -84,13 +84,13 @@ import {
   readSessionUserId,
   writeSessionUserId,
   clearSessionUserId,
-  readNotificationsEnabled,
-  writeNotificationsEnabled
+  readNotificationsEnabled
 } from "./utils/auth.js";
 import { createDefaultSchedule, normalizeSchedule } from "./utils/schedule.js";
-import { startCallRingtone, stopCallRingtone, unlockCallAudio, resumeCallAudio } from "./utils/callRingtone.js";
-import { playDmReceiveSound } from "./utils/dmSound.js";
-import { getStoredNoiseMode, storeNoiseMode, NOISE_MODES } from "./utils/noiseSuppression.js";
+import { startCallRingtone, stopCallRingtone, unlockCallAudio, resumeCallAudio, setCallSoundPreference } from "./utils/callRingtone.js";
+import { playDmReceiveSound, setDmSoundPreference } from "./utils/dmSound.js";
+import { getStoredNoiseMode, NOISE_MODES } from "./utils/noiseSuppression.js";
+import { normalizeUserSettings, readLegacyUserSettings, USER_SETTINGS_MIGRATION_VERSION } from "./utils/userSettings.js";
 
 import { usePresence } from "./hooks/usePresence.js";
 import { useNotifications } from "./hooks/useNotifications.js";
@@ -241,6 +241,9 @@ export default function App() {
     const volume = stored === null ? NaN : Number(stored);
     return volume >= 0 && volume <= 1 ? volume : 0.2;
   });
+  const [dmSoundCustomUrl, setDmSoundCustomUrl] = useState(() => localStorage.getItem("quadchat-dm-sound-custom") || "");
+  const [callSoundCustomUrl, setCallSoundCustomUrl] = useState(() => localStorage.getItem("quadchat-call-sound-custom") || "");
+  const [areUserSettingsReady, setAreUserSettingsReady] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [callsView, setCallsView] = useState(false);
   const [editStatus, setEditStatus] = useState({ mode: "active", text: "" });
@@ -983,13 +986,110 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (!user || !isProfilesReady || !currentProfile) {
+      setAreUserSettingsReady(false);
+      return undefined;
+    }
+    let active = true;
+    const settingsRef = doc(db, "user-settings", user.uid);
+
+    const uploadLegacySound = async (dataUrl, name) => {
+      if (!dataUrl?.startsWith("data:")) return dataUrl || "";
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const extension = blob.type.split("/")[1] || "audio";
+      return uploadToCloudinary(new File([blob], `${name}.${extension}`, { type: blob.type || "audio/*" }), "voice");
+    };
+    const clearLegacySettings = () => [
+      "quadchat-theme", "quadchat-reduce-motion", "quadchat-show-version", "quadchat-show-sidebar-clock",
+      "quadchat-show-sidebar-seconds", "quadchat-ui-scale", "quadchat:notificationsEnabled", "quadchat-noise-mode",
+      "quadchat-dm-sound", "quadchat-dm-sound-custom", "quadchat-call-sound", "quadchat-call-sound-custom",
+      "quadchat-dm-sound-enabled", "quadchat-group-sound-enabled", "quadchat-message-sound-volume", "quadchat-ringtone-volume"
+    ].forEach((key) => localStorage.removeItem(key));
+
+    (async () => {
+      try {
+        const snapshot = await getDoc(settingsRef);
+        if (!active) return;
+        let preferences;
+        if (snapshot.exists()) {
+          preferences = normalizeUserSettings(snapshot.data().preferences);
+        } else {
+          preferences = readLegacyUserSettings();
+          preferences.messageSound.customUrl = await uploadLegacySound(preferences.messageSound.customUrl, "quadchat-message-sound");
+          preferences.callSound.customUrl = await uploadLegacySound(preferences.callSound.customUrl, "quadchat-call-ringtone");
+          if (!active) return;
+          await setDoc(settingsRef, {
+            preferences,
+            migrationVersion: USER_SETTINGS_MIGRATION_VERSION,
+            migratedAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+        if (!active) return;
+        clearLegacySettings();
+        setIsDarkTheme(preferences.theme !== "light");
+        setReduceMotion(preferences.reduceMotion);
+        setShowVersionInHeader(preferences.showVersionInHeader);
+        setShowSidebarClock(preferences.showSidebarClock);
+        setShowSidebarSeconds(preferences.showSidebarSeconds);
+        setUiScale(preferences.uiScale);
+        setNotificationsEnabled(preferences.notificationsEnabled);
+        setNoiseMode(preferences.noiseMode);
+        setDmSoundsEnabled(preferences.dmSoundsEnabled);
+        setGroupSoundsEnabled(preferences.groupSoundsEnabled);
+        setMessageSoundVolume(preferences.messageSoundVolume);
+        setRingtoneVolume(preferences.ringtoneVolume);
+        setDmSoundType(preferences.messageSound.kind);
+        setCallSoundType(preferences.callSound.kind);
+        setDmSoundCustomUrl(preferences.messageSound.customUrl);
+        setCallSoundCustomUrl(preferences.callSound.customUrl);
+        setAreUserSettingsReady(true);
+      } catch (error) {
+        console.warn("[SETTINGS] Could not migrate user settings:", error);
+      }
+    })();
+    return () => { active = false; };
+  }, [user, isProfilesReady]);
+
+  useEffect(() => {
+    if (!user || !areUserSettingsReady) return;
+    setDoc(doc(db, "user-settings", user.uid), {
+      preferences: {
+        theme: isDarkTheme ? "dark" : "light",
+        reduceMotion,
+        showVersionInHeader,
+        showSidebarClock,
+        showSidebarSeconds,
+        uiScale,
+        notificationsEnabled,
+        noiseMode,
+        dmSoundsEnabled,
+        groupSoundsEnabled,
+        messageSoundVolume,
+        ringtoneVolume,
+        messageSound: { kind: dmSoundType, customUrl: dmSoundCustomUrl },
+        callSound: { kind: callSoundType, customUrl: callSoundCustomUrl }
+      },
+      updatedAt: serverTimestamp()
+    }, { merge: true }).catch((error) => console.warn("[SETTINGS] Could not save user settings:", error));
+  }, [user, areUserSettingsReady, isDarkTheme, reduceMotion, showVersionInHeader, showSidebarClock, showSidebarSeconds, uiScale, notificationsEnabled, noiseMode, dmSoundsEnabled, groupSoundsEnabled, messageSoundVolume, ringtoneVolume, dmSoundType, callSoundType, dmSoundCustomUrl, callSoundCustomUrl]);
+
+  useEffect(() => {
+    setDmSoundPreference({ kind: dmSoundType, customUrl: dmSoundCustomUrl, volume: messageSoundVolume });
+  }, [dmSoundType, dmSoundCustomUrl, messageSoundVolume]);
+
+  useEffect(() => {
+    setCallSoundPreference({ kind: callSoundType, customUrl: callSoundCustomUrl, volume: ringtoneVolume });
+  }, [callSoundType, callSoundCustomUrl, ringtoneVolume]);
+
+  useEffect(() => {
     const root = document.documentElement;
     if (isDarkTheme) {
       root.removeAttribute("data-theme");
     } else {
       root.setAttribute("data-theme", "light");
     }
-    localStorage.setItem("quadchat-theme", isDarkTheme ? "dark" : "light");
   }, [isDarkTheme]);
 
   useEffect(() => {
@@ -999,57 +1099,13 @@ export default function App() {
     } else {
       root.removeAttribute("data-reduce-motion");
     }
-    localStorage.setItem("quadchat-reduce-motion", reduceMotion ? "true" : "false");
   }, [reduceMotion]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-show-version", showVersionInHeader ? "true" : "false");
-  }, [showVersionInHeader]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-show-sidebar-clock", showSidebarClock ? "true" : "false");
-  }, [showSidebarClock]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-show-sidebar-seconds", showSidebarSeconds ? "true" : "false");
-  }, [showSidebarSeconds]);
 
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--ui-scale", (uiScale / 100).toFixed(4));
   }, [uiScale]);
 
-  useEffect(() => {
-    localStorage.setItem("quadchat-ui-scale", String(uiScale));
-  }, [uiScale]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-dm-sound", dmSoundType);
-  }, [dmSoundType]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-call-sound", callSoundType);
-  }, [callSoundType]);
-
-  useEffect(() => {
-    storeNoiseMode(noiseMode);
-  }, [noiseMode]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-dm-sound-enabled", dmSoundsEnabled ? "true" : "false");
-  }, [dmSoundsEnabled]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-group-sound-enabled", groupSoundsEnabled ? "true" : "false");
-  }, [groupSoundsEnabled]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-message-sound-volume", String(messageSoundVolume));
-  }, [messageSoundVolume]);
-
-  useEffect(() => {
-    localStorage.setItem("quadchat-ringtone-volume", String(ringtoneVolume));
-  }, [ringtoneVolume]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -2243,7 +2299,6 @@ export default function App() {
     }
 
     if (notificationsEnabled) {
-      writeNotificationsEnabled(false);
       setNotificationsEnabled(false);
       setIsProfileMenuOpen(false);
       return;
@@ -2257,13 +2312,22 @@ export default function App() {
     setNotificationPermission(permission);
 
     if (permission === "granted") {
-      writeNotificationsEnabled(true);
       setNotificationsEnabled(true);
       setIsProfileMenuOpen(false);
     } else {
-      writeNotificationsEnabled(false);
       setNotificationsEnabled(false);
       setError("Notifications are blocked in this browser.");
+    }
+  }
+
+  async function uploadCustomSound(file, type) {
+    const url = await uploadToCloudinary(file, "voice");
+    if (type === "message") {
+      setDmSoundCustomUrl(url);
+      setDmSoundType("custom");
+    } else {
+      setCallSoundCustomUrl(url);
+      setCallSoundType("custom");
     }
   }
 
@@ -4335,8 +4399,9 @@ export default function App() {
            setShowSidebarClock={setShowSidebarClock}
            showSidebarSeconds={showSidebarSeconds}
            setShowSidebarSeconds={setShowSidebarSeconds}
-           dmSoundType={dmSoundType}
-           setDmSoundType={setDmSoundType}
+            dmSoundType={dmSoundType}
+            setDmSoundType={setDmSoundType}
+            uploadCustomSound={uploadCustomSound}
            callSoundType={callSoundType}
            setCallSoundType={setCallSoundType}
            noiseMode={noiseMode}

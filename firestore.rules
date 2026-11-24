@@ -301,6 +301,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Per-user UI and media preferences. The document ID is the account UID,
+    // so preferences follow the member across browsers without exposing them
+    // to other members. Developers may read migration state for the dashboard.
+    match /user-settings/{userId} {
+      allow read: if signedIn() && (userId == request.auth.uid || isDeveloper());
+      allow create, update: if isActiveUser()
+        && userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(["preferences", "migrationVersion", "migratedAt", "updatedAt"])
+        && request.resource.data.preferences is map
+        && request.resource.data.migrationVersion == 1;
+      allow delete: if false;
+    }
+
     // App Settings
     match /settings/app {
       allow read: if true;

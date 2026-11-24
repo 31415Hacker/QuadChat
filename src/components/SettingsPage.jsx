@@ -100,6 +100,7 @@ export default function SettingsPage({
   setShowSidebarSeconds,
   dmSoundType,
   setDmSoundType,
+  uploadCustomSound,
   callSoundType,
   setCallSoundType,
   noiseMode,
@@ -784,15 +785,10 @@ export default function SettingsPage({
                         <input
                           accept="audio/*"
                           hidden
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              localStorage.setItem("quadchat-dm-sound-custom", reader.result);
-                              setDmSoundType("custom");
-                            };
-                            reader.readAsDataURL(file);
+                            try { await uploadCustomSound(file, "message"); } catch (_) { /* keep the existing selection on upload failure */ }
                           }}
                           type="file"
                         />
@@ -883,15 +879,10 @@ export default function SettingsPage({
                         <input
                           accept="audio/*"
                           hidden
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              localStorage.setItem("quadchat-call-sound-custom", reader.result);
-                              setCallSoundType("custom");
-                            };
-                            reader.readAsDataURL(file);
+                            try { await uploadCustomSound(file, "call"); } catch (_) { /* keep the existing selection on upload failure */ }
                           }}
                           type="file"
                         />

@@ -137,12 +137,15 @@ export default async function handler(req, res) {
     await requireDeveloper(req, app);
     const store = app.firestore();
     const database = app.database();
-    const [users, messages, badMessages, spamIncidents, directory, cloudinary, livekit, cloudflare, vercel, github] = await Promise.all([
+    const migratedSettingsQuery = store.collection("user-settings").where("migrationVersion", "==", 1);
+    const [users, messages, badMessages, spamIncidents, directory, migratedSettings, migratedSettingsDocs, cloudinary, livekit, cloudflare, vercel, github] = await Promise.all([
       store.collection("users").count().get(),
       store.collectionGroup("messages").count().get(),
       store.collection("bad-messages").count().get(),
       store.collection("spam-incidents").count().get(),
       database.ref("call-directory").get(),
+      migratedSettingsQuery.count().get(),
+      migratedSettingsQuery.get(),
       cloudinaryUsage().catch((error) => unavailable(error.message)),
       liveKitUsage().catch((error) => unavailable(error.message)),
       cloudflareUsage().catch((error) => unavailable(`Cloudflare: ${error.message}`)),
@@ -150,6 +153,16 @@ export default async function handler(req, res) {
       githubUsage().catch((error) => unavailable(`GitHub: ${error.message}`))
     ]);
     const calls = directory.val() || {};
+    const migratedUsers = await Promise.all(migratedSettingsDocs.docs.map(async (settings) => {
+      const profile = await store.doc(`users/${settings.id}`).get();
+      const data = profile.data() || {};
+      return {
+        uid: settings.id,
+        name: data.name || data.displayName || data.email || settings.id,
+        migratedAt: settings.data().migratedAt?.toDate?.().toISOString() || null
+      };
+    }));
+    migratedUsers.sort((a, b) => String(b.migratedAt || "").localeCompare(String(a.migratedAt || "")));
     return res.status(200).json({
       asOf: new Date().toISOString(),
       firebase: {
@@ -158,7 +171,9 @@ export default async function handler(req, res) {
         messages: messages.data().count,
         badMessages: badMessages.data().count,
         spamIncidents: spamIncidents.data().count,
-        configuredCalls: Object.values(calls).filter((call) => !call?.deleting).length
+        configuredCalls: Object.values(calls).filter((call) => !call?.deleting).length,
+        settingsMigrated: migratedSettings.data().count,
+        migrationUsers: migratedUsers
       },
       cloudinary,
       livekit,
