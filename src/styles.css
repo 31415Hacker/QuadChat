@@ -1750,10 +1750,11 @@ button.magic-link-url {
 }
 
 .settings-page-inner {
+  box-sizing: border-box;
   display: flex;
   flex: 1;
-  margin: 0 auto 0 0;
-  max-width: 1000px;
+  margin: 0;
+  max-width: none;
   min-height: 100vh;
   padding: 0 24px;
   position: relative;
