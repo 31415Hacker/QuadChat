@@ -38,8 +38,8 @@ function ageLabel() {
 function StatTable({ rows }) {
   return (
     <dl className="developer-dashboard-table">
-      {rows.map(([label, value]) => (
-        <div key={label}>
+      {rows.map(([label, value], index) => (
+        <div key={typeof label === "string" ? label : index}>
           <dt>{label}</dt>
           <dd>{value}</dd>
         </div>
@@ -59,6 +59,19 @@ function bytes(value) {
 
 function date(value) {
   return value ? new Date(value).toLocaleString() : "—";
+}
+
+function SensitiveValue({ value }) {
+  const [isRevealed, setIsRevealed] = useState(false);
+  if (!value) return "—";
+  return (
+    <span className="developer-dashboard-sensitive">
+      <code>{isRevealed ? value : "••••••••"}</code>
+      <button onClick={() => setIsRevealed((revealed) => !revealed)} type="button">
+        {isRevealed ? "Hide" : "Reveal"}
+      </button>
+    </span>
+  );
 }
 
 function ProviderSection({ title, description, provider, children }) {
@@ -145,18 +158,18 @@ export default function DeveloperDashboard() {
       {liveStats ? <>
         <ProviderSection title="Firebase" description="Authentication, Firestore, and Realtime Database application data." provider={{ available: true }}>
           <StatTable rows={[
-            ["Project", liveStats.firebase.projectId], ["Users", String(liveStats.firebase.users)],
+            ["Project", <SensitiveValue value={liveStats.firebase.projectId} />], ["Users", String(liveStats.firebase.users)],
             ["Messages", String(liveStats.firebase.messages)], ["Configured calls", String(liveStats.firebase.configuredCalls)],
             ["Moderation records", `${liveStats.firebase.badMessages} profanity; ${liveStats.firebase.spamIncidents} spam`],
             ["Settings migrated", `${liveStats.firebase.settingsMigrated} of ${liveStats.firebase.users}`]
           ]} />
           <h3 className="developer-dashboard-subheading">Completed migrations</h3>
-          {liveStats.firebase.migrationUsers?.length ? <StatTable rows={liveStats.firebase.migrationUsers.map((member) => [member.name, `${member.uid} · ${date(member.migratedAt)}`])} /> : <p className="developer-dashboard-note">No users have completed the migration yet.</p>}
+          {liveStats.firebase.migrationUsers?.length ? <StatTable rows={liveStats.firebase.migrationUsers.map((member) => [member.name, <><SensitiveValue value={member.uid} /> <span>· {date(member.migratedAt)}</span></>])} /> : <p className="developer-dashboard-note">No users have completed the migration yet.</p>}
         </ProviderSection>
 
         <ProviderSection title="Cloudinary" description="Media storage, bandwidth, transformations, and credits." provider={liveStats.cloudinary}>
           <StatTable rows={[
-            ["Cloud", liveStats.cloudinary.cloudName], ["Plan", liveStats.cloudinary.plan || "—"],
+            ["Cloud", <SensitiveValue value={liveStats.cloudinary.cloudName} />], ["Plan", liveStats.cloudinary.plan || "—"],
             ["Storage", `${bytes(liveStats.cloudinary.storage?.usage)} of ${bytes(liveStats.cloudinary.storage?.limit)}`],
             ["Bandwidth", `${bytes(liveStats.cloudinary.bandwidth?.usage)} of ${bytes(liveStats.cloudinary.bandwidth?.limit)}`],
             ["Requests", `${Number(liveStats.cloudinary.requests?.usage || 0).toLocaleString()} of ${Number(liveStats.cloudinary.requests?.limit || 0).toLocaleString()}`],
@@ -166,26 +179,26 @@ export default function DeveloperDashboard() {
         </ProviderSection>
 
         <ProviderSection title="LiveKit Cloud" description="Current group-call rooms and participants." provider={liveStats.livekit}>
-          <StatTable rows={[["Host", liveStats.livekit.host], ["Active rooms", String(liveStats.livekit.activeRooms)], ["Participants", String(liveStats.livekit.participants)]]} />
-          {liveStats.livekit.rooms?.length ? <StatTable rows={liveStats.livekit.rooms.map((room) => [room.name, `${room.participants} participants · created ${date(room.createdAt)}`])} /> : <p className="developer-dashboard-note">No active rooms.</p>}
+          <StatTable rows={[["Host", <SensitiveValue value={liveStats.livekit.host} />], ["Active rooms", String(liveStats.livekit.activeRooms)], ["Participants", String(liveStats.livekit.participants)]]} />
+          {liveStats.livekit.rooms?.length ? <StatTable rows={liveStats.livekit.rooms.map((room) => [<SensitiveValue value={room.name} />, `${room.participants} participants · created ${date(room.createdAt)}`])} /> : <p className="developer-dashboard-note">No active rooms.</p>}
         </ProviderSection>
 
         <ProviderSection title="Cloudflare" description="Worker scripts and Turnstile configuration." provider={liveStats.cloudflare}>
-          <StatTable rows={[["Account", liveStats.cloudflare.accountName], ["Worker scripts", String(liveStats.cloudflare.workerScriptCount)], ["Turnstile", liveStats.cloudflare.turnstileConfigured ? "Configured" : "Not configured"]]} />
-          {liveStats.cloudflare.workerScripts?.length ? <StatTable rows={liveStats.cloudflare.workerScripts.map((script) => [script.name, `Last modified ${date(script.modifiedAt)}`])} /> : null}
+          <StatTable rows={[["Account", <SensitiveValue value={liveStats.cloudflare.accountName} />], ["Worker scripts", String(liveStats.cloudflare.workerScriptCount)], ["Turnstile", liveStats.cloudflare.turnstileConfigured ? "Configured" : "Not configured"]]} />
+          {liveStats.cloudflare.workerScripts?.length ? <StatTable rows={liveStats.cloudflare.workerScripts.map((script) => [<SensitiveValue value={script.name} />, `Last modified ${date(script.modifiedAt)}`])} /> : null}
         </ProviderSection>
 
         <ProviderSection title="Vercel" description="Project details and five most recent deployments." provider={liveStats.vercel}>
-          <StatTable rows={[["Project", liveStats.vercel.project], ["Framework", liveStats.vercel.framework || "—"]]} />
-          {liveStats.vercel.latestDeployments?.length ? <StatTable rows={liveStats.vercel.latestDeployments.map((deployment) => [deployment.url, `${deployment.target} · ${deployment.state} · ${date(deployment.createdAt)}`])} /> : null}
+          <StatTable rows={[["Project", <SensitiveValue value={liveStats.vercel.project} />], ["Framework", liveStats.vercel.framework || "—"]]} />
+          {liveStats.vercel.latestDeployments?.length ? <StatTable rows={liveStats.vercel.latestDeployments.map((deployment) => [<SensitiveValue value={deployment.url} />, `${deployment.target} · ${deployment.state} · ${date(deployment.createdAt)}`])} /> : null}
         </ProviderSection>
 
         <ProviderSection title="GitHub Actions" description="Deployment workflow state and latest workflow run." provider={liveStats.github}>
-          <StatTable rows={[["Repository", liveStats.github.repository], ...(liveStats.github.workflows || []).map((workflow) => [workflow.name, workflow.lastRun ? `${workflow.lastRun.conclusion || workflow.lastRun.status} · ${date(workflow.lastRun.createdAt)}` : workflow.state])]} />
+          <StatTable rows={[["Repository", <SensitiveValue value={liveStats.github.repository} />], ...(liveStats.github.workflows || []).map((workflow) => [workflow.name, workflow.lastRun ? `${workflow.lastRun.conclusion || workflow.lastRun.status} · ${date(workflow.lastRun.createdAt)}` : workflow.state])]} />
         </ProviderSection>
 
         <ProviderSection title="PurgoMalum" description="Profanity moderation service." provider={liveStats.purgomalum}>
-          <StatTable rows={[["Endpoint", liveStats.purgomalum.endpoint], ["Usage telemetry", liveStats.purgomalum.telemetry]]} />
+          <StatTable rows={[["Endpoint", <SensitiveValue value={liveStats.purgomalum.endpoint} />], ["Usage telemetry", liveStats.purgomalum.telemetry]]} />
         </ProviderSection>
       </> : null}
 

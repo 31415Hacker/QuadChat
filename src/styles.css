@@ -5465,6 +5465,32 @@ button.user-avatar--clickable:focus-visible {
   margin: 22px 0 0;
 }
 
+.developer-dashboard-sensitive {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.developer-dashboard-sensitive code {
+  max-width: min(430px, 52vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-dashboard-sensitive button {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 700;
+  padding: 3px 7px;
+}
+
 @media (max-width: 780px) {
   .developer-dashboard { padding: 28px 16px 48px; }
   .developer-dashboard-header { flex-direction: column; }
