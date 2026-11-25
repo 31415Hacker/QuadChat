@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import appPackage from "../../package.json";
 
 const QUADCHAT_STARTED_AT = new Date("2026-06-01T10:02:08.000Z");
@@ -67,8 +68,13 @@ function SensitiveValue({ value }) {
   return (
     <span className="developer-dashboard-sensitive">
       <code>{isRevealed ? value : "••••••••"}</code>
-      <button onClick={() => setIsRevealed((revealed) => !revealed)} type="button">
-        {isRevealed ? "Hide" : "Reveal"}
+      <button
+        aria-label={isRevealed ? "Hide sensitive value" : "Reveal sensitive value"}
+        onClick={() => setIsRevealed((revealed) => !revealed)}
+        title={isRevealed ? "Hide" : "Reveal"}
+        type="button"
+      >
+        {isRevealed ? <EyeOff size={15} /> : <Eye size={15} />}
       </button>
     </span>
   );
