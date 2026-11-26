@@ -472,6 +472,24 @@ export function useCalls({
     return rawStream;
   }
 
+  function optimizeScreenShareSender(sender) {
+    if (!sender || sender.track?.kind !== "video") return;
+    const parameters = sender.getParameters();
+    if (!parameters.encodings?.length) parameters.encodings = [{}];
+    parameters.encodings = parameters.encodings.map((encoding) => ({
+      ...encoding,
+      // A bounded desktop stream avoids a 4K/60fps capture overwhelming the
+      // connection and building seconds of latency behind the live screen.
+      maxBitrate: 3_000_000,
+      maxFramerate: 30,
+      priority: "high",
+      networkPriority: "high"
+    }));
+    sender.setParameters(parameters).catch((error) => {
+      console.warn("[SCREEN] Could not tune screen-share sender:", error);
+    });
+  }
+
   useEffect(() => {
     noiseModeRef.current = normalizeNoiseMode(noiseMode);
     Object.keys(remoteAudioStreamsRef.current).forEach((participantId) => {
@@ -1175,11 +1193,19 @@ export function useCalls({
     try {
       // `audio: true` makes browsers offer the "share this tab's audio"
       // checkbox when the caller selects a browser tab.
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
+          frameRate: { ideal: 30, max: 30 }
+        },
+        audio: true
+      });
       screenStreamRef.current = stream;
       setLocalScreenStream(stream);
       const track = stream.getVideoTracks()[0];
       if (!track) return;
+      try { track.contentHint = "detail"; } catch (_) { /* not supported by every browser */ }
 
       track.onended = () => stopScreenShare();
 
@@ -1200,14 +1226,17 @@ export function useCalls({
 
       stream.getTracks().forEach((shareTrack) => {
         if (callStatus !== "idle" && peerRef.current) {
-          peerRef.current.addTrack(shareTrack, stream);
+          optimizeScreenShareSender(peerRef.current.addTrack(shareTrack, stream));
         }
         Object.values(p2pGroupCallConnectionsRef.current).forEach((pc) => {
-          try { pc.addTrack(shareTrack, stream); } catch (_) {}
+          try { optimizeScreenShareSender(pc.addTrack(shareTrack, stream)); } catch (_) {}
         });
         if (groupCallRoomRef.current) {
           groupCallRoomRef.current.localParticipant.publishTrack(shareTrack, {
             source: shareTrack.kind === "audio" ? "screen_share_audio" : "screen_share",
+            ...(shareTrack.kind === "video" ? {
+              videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 }
+            } : {})
           }).catch((e) => console.error("[SCREEN] publish to LiveKit failed:", e));
         }
       });
@@ -1360,7 +1389,9 @@ export function useCalls({
       localCameraStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localCameraStreamRef.current));
     }
     if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, screenStreamRef.current));
+      screenStreamRef.current.getTracks().forEach((track) => {
+        optimizeScreenShareSender(pc.addTrack(track, screenStreamRef.current));
+      });
     }
 
     pc.onicecandidate = (e) => {
