@@ -1,6 +1,48 @@
 import { randomBytes } from "node:crypto";
 import admin from "firebase-admin";
-import { deleteProviderConnection, getProviderConnection, publicConnection, saveProviderConnection } from "../server/dashboard/provider-connections.js";
+import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
+
+const CONNECTION_COLLECTION = "dashboard-provider-connections";
+
+function credentialKey() {
+  const secret = process.env.DASHBOARD_CREDENTIAL_ENCRYPTION_KEY;
+  if (!secret) throw new Error("DASHBOARD_CREDENTIAL_ENCRYPTION_KEY is not configured.");
+  return createHash("sha256").update(secret).digest();
+}
+
+function encryptCredential(secret) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", credentialKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
+  return { ciphertext: ciphertext.toString("base64"), iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64") };
+}
+
+function decryptCredential(secret) {
+  if (!secret?.ciphertext || !secret?.iv || !secret?.tag) return null;
+  const decipher = createDecipheriv("aes-256-gcm", credentialKey(), Buffer.from(secret.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(secret.tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(secret.ciphertext, "base64")), decipher.final()]).toString("utf8");
+}
+
+async function getProviderConnection(store, provider) {
+  const snapshot = await store.doc(`${CONNECTION_COLLECTION}/${provider}`).get();
+  if (!snapshot.exists) return null;
+  const connection = snapshot.data();
+  try { return { ...connection, secret: decryptCredential(connection.secret) }; } catch { return { ...connection, secret: null, corrupted: true }; }
+}
+
+async function saveProviderConnection(store, provider, { secret, metadata = {} }) {
+  await store.doc(`${CONNECTION_COLLECTION}/${provider}`).set({ provider, secret: encryptCredential(secret), metadata, connectedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+}
+
+async function deleteProviderConnection(store, provider) {
+  await store.doc(`${CONNECTION_COLLECTION}/${provider}`).delete();
+}
+
+function publicConnection(connection) {
+  if (!connection) return { connected: false };
+  return { connected: Boolean(connection.secret) && !connection.corrupted, connectedAt: connection.connectedAt || null, metadata: connection.metadata || {}, error: connection.corrupted ? "Stored credential could not be decrypted. Reconnect this provider." : null };
+}
 
 function getApp() {
   const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "null");
