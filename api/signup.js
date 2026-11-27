@@ -1,8 +1,9 @@
 import admin from "firebase-admin";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
-if (!admin.getApps().length) admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+if (!getApps().length) initializeApp({ credential: cert(serviceAccount) });
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });

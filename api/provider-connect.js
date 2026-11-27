@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import admin from "firebase-admin";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 
 const CONNECTION_COLLECTION = "dashboard-provider-connections";
@@ -47,7 +48,7 @@ function publicConnection(connection) {
 function getApp() {
   const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "null");
   if (!account) throw new Error("Firebase service account is not configured");
-  return admin.getApps().find((app) => app.name === "quadchat-dashboard") || admin.initializeApp({ credential: admin.credential.cert(account) }, "quadchat-dashboard");
+  return getApps().find((app) => app.name === "quadchat-dashboard") || initializeApp({ credential: cert(account) }, "quadchat-dashboard");
 }
 
 function body(req) {

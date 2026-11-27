@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
@@ -44,8 +45,8 @@ function publicConnection(connection) {
 function getApp() {
   const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "null");
   if (!account) throw new Error("Firebase service account is not configured");
-  return admin.getApps().find((app) => app.name === "quadchat-dashboard") || admin.initializeApp({
-    credential: admin.credential.cert(account),
+  return getApps().find((app) => app.name === "quadchat-dashboard") || initializeApp({
+    credential: cert(account),
     databaseURL: `https://${account.project_id}-default-rtdb.firebaseio.com`
   }, "quadchat-dashboard");
 }

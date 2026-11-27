@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { createCallService, failure } from "./service.js";
 
@@ -13,8 +14,8 @@ function getService() {
   // dedicated named app so we never inherit another function's default app
   // (Vercel may share the module isolate across functions in a region).
   const databaseURL = `https://${account.project_id}-default-rtdb.firebaseio.com`;
-  const app = admin.getApps().find((candidate) => candidate.name === CALLS_APP_NAME)
-    || admin.initializeApp({ credential: admin.credential.cert(account), databaseURL }, CALLS_APP_NAME);
+  const app = getApps().find((candidate) => candidate.name === CALLS_APP_NAME)
+    || initializeApp({ credential: cert(account), databaseURL }, CALLS_APP_NAME);
   if (!service) {
     const url = process.env.LIVEKIT_URL;
     if (!url) throw failure(503, "Call service is not configured: LIVEKIT_URL is missing");
