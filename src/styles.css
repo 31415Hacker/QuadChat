@@ -5492,6 +5492,12 @@ button.user-avatar--clickable:focus-visible {
   padding: 4px;
 }
 
+.developer-dashboard-header > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+.developer-dashboard-connection { border-top: 1px solid var(--border-color); margin-top: 14px; padding-top: 2px; }
+.developer-dashboard-connect-form { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.developer-dashboard-connect-form input { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 7px; color: var(--text-primary); min-height: 34px; padding: 0 9px; }
+.developer-dashboard-connection .text-button { margin-top: 8px; }
+
 @media (max-width: 780px) {
   .developer-dashboard { padding: 28px 16px 48px; }
   .developer-dashboard-header { flex-direction: column; }

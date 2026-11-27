@@ -355,6 +355,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Provider credentials and OAuth state are written and read only by
+    // server-side dashboard endpoints using the Admin SDK. Tokens are also
+    // encrypted before storage; they are never exposed to clients.
+    match /dashboard-provider-connections/{provider} {
+      allow read, write: if false;
+    }
+
+    match /dashboard-oauth-states/{state} {
+      allow read, write: if false;
+    }
+
     // Blocked-by-the-swear-filter messages. Written only by the Cloudflare
     // worker (Admin SDK-style REST calls bypass rules); admins may read them to
     // review what was caught. Clients can never read or write this collection.

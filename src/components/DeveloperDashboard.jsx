@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import appPackage from "../../package.json";
 
@@ -80,7 +80,7 @@ function SensitiveValue({ value }) {
   );
 }
 
-function ProviderSection({ title, description, provider, children }) {
+function ProviderSection({ title, description, provider, connectionControls, children }) {
   return (
     <section className="developer-dashboard-section">
       <div className="developer-dashboard-section-heading">
@@ -89,8 +89,95 @@ function ProviderSection({ title, description, provider, children }) {
           {provider?.available ? "Connected" : "Not connected"}
         </span>
       </div>
+      {connectionControls}
       {provider?.available ? children : <p className="developer-dashboard-note">{provider?.reason || "No data is available."}</p>}
     </section>
+  );
+}
+
+function ProviderConnectionControls({ provider, connection, onChanged }) {
+  const [token, setToken] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const connected = connection?.connected === true;
+  const isGithub = provider === "github";
+  const identifierLabel = provider === "cloudflare" ? "Cloudflare account ID" : "Vercel project ID";
+
+  async function request(url, options = {}) {
+    const { auth } = await import("../../firebase.js");
+    const idToken = await auth.currentUser?.getIdToken();
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...(options.headers || {}), Authorization: `Bearer ${idToken || ""}` }
+    });
+    const data = response.status === 204 ? null : await response.json();
+    if (!response.ok) throw new Error(data?.error || "Could not update provider connection.");
+    return data;
+  }
+
+  async function startGithub() {
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const data = await request("/api/provider-connect?action=github", { method: "POST" });
+      window.location.assign(data.authorizeUrl);
+    } catch (error) {
+      setMessage(error.message);
+      setIsBusy(false);
+    }
+  }
+
+  async function connectToken(event) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+    try {
+      await request(`/api/provider-connect?action=${provider}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(provider === "cloudflare" ? { token, accountId: identifier } : { token, projectId: identifier })
+      });
+      setToken("");
+      setIdentifier("");
+      setMessage("Connected securely.");
+      onChanged();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setIsBusy(true);
+    setMessage("");
+    try {
+      await request(`/api/provider-connect?provider=${provider}`, { method: "DELETE" });
+      setMessage("Disconnected.");
+      onChanged();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  return (
+    <div className="developer-dashboard-connection">
+      <p className="developer-dashboard-note">
+        {connected ? `Connected${connection.metadata?.login ? ` as ${connection.metadata.login}` : ""}${connection.connectedAt ? ` on ${date(connection.connectedAt)}` : ""}.` : connection?.error || "Not connected with the dashboard connection manager."}
+      </p>
+      {isGithub ? <button className="ghost-button" disabled={isBusy} onClick={startGithub} type="button">{isBusy ? "Opening GitHub…" : connected ? "Reconnect GitHub" : "Connect GitHub"}</button> : (
+        <form className="developer-dashboard-connect-form" onSubmit={connectToken}>
+          <input autoComplete="off" onChange={(event) => setIdentifier(event.target.value)} placeholder={identifierLabel} required value={identifier} />
+          <input autoComplete="off" onChange={(event) => setToken(event.target.value)} placeholder={`${provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token`} required type="password" value={token} />
+          <button className="ghost-button" disabled={isBusy} type="submit">{isBusy ? "Connecting…" : connected ? "Replace connection" : "Connect"}</button>
+        </form>
+      )}
+      {connected ? <button className="text-button" disabled={isBusy} onClick={disconnect} type="button">Disconnect</button> : null}
+      {message ? <p className="developer-dashboard-note">{message}</p> : null}
+    </div>
   );
 }
 
@@ -109,22 +196,23 @@ export default function DeveloperDashboard() {
   const [liveStats, setLiveStats] = useState(null);
   const [liveStatsError, setLiveStatsError] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const { auth } = await import("../../firebase.js");
-        const token = await auth.currentUser?.getIdToken();
-        const response = await fetch("/api/dashboard-stats", { headers: { Authorization: `Bearer ${token || ""}` } });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Could not load live statistics.");
-        if (active) setLiveStats(data);
-      } catch (error) {
-        if (active) setLiveStatsError(error.message || "Could not load live statistics.");
-      }
-    })();
-    return () => { active = false; };
+  const loadStats = useCallback(async () => {
+    try {
+      const { auth } = await import("../../firebase.js");
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/dashboard-stats", { headers: { Authorization: `Bearer ${token || ""}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load live statistics.");
+      setLiveStats(data);
+      setLiveStatsError("");
+    } catch (error) {
+      setLiveStatsError(error.message || "Could not load live statistics.");
+    }
   }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   return (
     <main className="developer-dashboard">
@@ -134,7 +222,10 @@ export default function DeveloperDashboard() {
           <h1>QuadChat service overview</h1>
           <p>Live application and provider data. Provider credentials stay server-side and are never returned to the browser.</p>
         </div>
-        <button className="ghost-button" onClick={() => { window.location.href = "/"; }} type="button">Back to QuadChat</button>
+        <div>
+          <button className="ghost-button" onClick={loadStats} type="button">Refresh</button>
+          <button className="ghost-button" onClick={() => { window.location.href = "/"; }} type="button">Back to QuadChat</button>
+        </div>
       </header>
 
       <section className="developer-dashboard-summary" aria-label="QuadChat summary">
@@ -189,17 +280,17 @@ export default function DeveloperDashboard() {
           {liveStats.livekit.rooms?.length ? <StatTable rows={liveStats.livekit.rooms.map((room) => [<SensitiveValue value={room.name} />, `${room.participants} participants · created ${date(room.createdAt)}`])} /> : <p className="developer-dashboard-note">No active rooms.</p>}
         </ProviderSection>
 
-        <ProviderSection title="Cloudflare" description="Worker scripts and Turnstile configuration." provider={liveStats.cloudflare}>
+        <ProviderSection connectionControls={<ProviderConnectionControls connection={liveStats.connections?.cloudflare} onChanged={loadStats} provider="cloudflare" />} title="Cloudflare" description="Worker scripts and Turnstile configuration." provider={liveStats.cloudflare}>
           <StatTable rows={[["Account", <SensitiveValue value={liveStats.cloudflare.accountName} />], ["Worker scripts", String(liveStats.cloudflare.workerScriptCount)], ["Turnstile", liveStats.cloudflare.turnstileConfigured ? "Configured" : "Not configured"]]} />
           {liveStats.cloudflare.workerScripts?.length ? <StatTable rows={liveStats.cloudflare.workerScripts.map((script) => [<SensitiveValue value={script.name} />, `Last modified ${date(script.modifiedAt)}`])} /> : null}
         </ProviderSection>
 
-        <ProviderSection title="Vercel" description="Project details and five most recent deployments." provider={liveStats.vercel}>
+        <ProviderSection connectionControls={<ProviderConnectionControls connection={liveStats.connections?.vercel} onChanged={loadStats} provider="vercel" />} title="Vercel" description="Project details and five most recent deployments." provider={liveStats.vercel}>
           <StatTable rows={[["Project", <SensitiveValue value={liveStats.vercel.project} />], ["Framework", liveStats.vercel.framework || "—"]]} />
           {liveStats.vercel.latestDeployments?.length ? <StatTable rows={liveStats.vercel.latestDeployments.map((deployment) => [<SensitiveValue value={deployment.url} />, `${deployment.target} · ${deployment.state} · ${date(deployment.createdAt)}`])} /> : null}
         </ProviderSection>
 
-        <ProviderSection title="GitHub Actions" description="Deployment workflow state and latest workflow run." provider={liveStats.github}>
+        <ProviderSection connectionControls={<ProviderConnectionControls connection={liveStats.connections?.github} onChanged={loadStats} provider="github" />} title="GitHub Actions" description="Deployment workflow state and latest workflow run." provider={liveStats.github}>
           <StatTable rows={[["Repository", <SensitiveValue value={liveStats.github.repository} />], ...(liveStats.github.workflows || []).map((workflow) => [workflow.name, workflow.lastRun ? `${workflow.lastRun.conclusion || workflow.lastRun.status} · ${date(workflow.lastRun.createdAt)}` : workflow.state])]} />
         </ProviderSection>
 

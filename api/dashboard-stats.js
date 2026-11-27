@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import { RoomServiceClient } from "livekit-server-sdk";
+import { getProviderConnection, publicConnection, saveProviderConnection } from "../server/dashboard/provider-connections.js";
 
 const PROJECT_ID = "quadchat-cf697";
 
@@ -76,9 +77,9 @@ async function liveKitUsage() {
   };
 }
 
-async function cloudflareUsage() {
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+async function cloudflareUsage(connection) {
+  const token = connection?.secret || process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = connection?.metadata?.accountId || process.env.CLOUDFLARE_ACCOUNT_ID;
   if (!token || !accountId) return unavailable("Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in Vercel to view Cloudflare data.");
   const headers = { Authorization: `Bearer ${token}` };
   const [accountResponse, scriptsResponse] = await Promise.all([
@@ -99,9 +100,9 @@ async function cloudflareUsage() {
   };
 }
 
-async function vercelUsage() {
-  const token = process.env.VERCEL_TOKEN;
-  const projectId = process.env.VERCEL_PROJECT_ID;
+async function vercelUsage(connection) {
+  const token = connection?.secret || process.env.VERCEL_TOKEN;
+  const projectId = connection?.metadata?.projectId || process.env.VERCEL_PROJECT_ID;
   if (!token || !projectId) return unavailable("Set VERCEL_TOKEN and VERCEL_PROJECT_ID in Vercel to view project and deployment data.");
   const headers = { Authorization: `Bearer ${token}` };
   const [project, deployments] = await Promise.all([
@@ -121,8 +122,36 @@ async function vercelUsage() {
   };
 }
 
-async function githubUsage() {
-  const token = process.env.GITHUB_TOKEN;
+async function githubUsage(store, connection) {
+  let token = process.env.GITHUB_TOKEN;
+  if (connection?.secret) {
+    try {
+      const credential = JSON.parse(connection.secret);
+      token = credential.access_token;
+      if (credential.refresh_token && credential.expires_in && connection.connectedAt) {
+        const expiresAt = new Date(connection.connectedAt).getTime() + Number(credential.expires_in) * 1000;
+        if (Date.now() >= expiresAt - 60_000) {
+          const refresh = await fetch("https://github.com/login/oauth/access_token", {
+            method: "POST",
+            headers: { Accept: "application/json", "Content-Type": "application/json" },
+            body: JSON.stringify({
+              client_id: process.env.GITHUB_OAUTH_CLIENT_ID,
+              client_secret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+              grant_type: "refresh_token",
+              refresh_token: credential.refresh_token
+            })
+          });
+          const refreshed = await refresh.json();
+          if (!refresh.ok || !refreshed.access_token) throw new Error("GitHub authorization expired. Reconnect GitHub.");
+          const updated = { ...credential, ...refreshed };
+          await saveProviderConnection(store, "github", { secret: JSON.stringify(updated), metadata: connection.metadata });
+          token = updated.access_token;
+        }
+      }
+    } catch (error) {
+      throw new Error(error.message || "GitHub authorization is invalid. Reconnect GitHub.");
+    }
+  }
   const repository = process.env.GITHUB_REPOSITORY || (process.env.VERCEL_GIT_REPO_OWNER && process.env.VERCEL_GIT_REPO_SLUG
     ? `${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}` : "");
   if (!token || !repository) return unavailable("Set GITHUB_TOKEN and GITHUB_REPOSITORY in Vercel to view Actions data.");
@@ -144,6 +173,11 @@ export default async function handler(req, res) {
     const store = app.firestore();
     const database = app.database();
     const migratedSettingsQuery = store.collection("user-settings").where("migrationVersion", "==", 1);
+    const [cloudflareConnection, vercelConnection, githubConnection] = await Promise.all([
+      getProviderConnection(store, "cloudflare"),
+      getProviderConnection(store, "vercel"),
+      getProviderConnection(store, "github")
+    ]);
     const [users, messages, badMessages, spamIncidents, directory, migratedSettings, migratedSettingsDocs, cloudinary, livekit, cloudflare, vercel, github] = await Promise.all([
       store.collection("users").count().get(),
       store.collectionGroup("messages").count().get(),
@@ -154,9 +188,9 @@ export default async function handler(req, res) {
       migratedSettingsQuery.get(),
       cloudinaryUsage().catch((error) => unavailable(error.message)),
       liveKitUsage().catch((error) => unavailable(error.message)),
-      cloudflareUsage().catch((error) => unavailable(`Cloudflare: ${error.message}`)),
-      vercelUsage().catch((error) => unavailable(`Vercel: ${error.message}`)),
-      githubUsage().catch((error) => unavailable(`GitHub: ${error.message}`))
+      cloudflareUsage(cloudflareConnection).catch((error) => unavailable(`Cloudflare: ${error.message}`)),
+      vercelUsage(vercelConnection).catch((error) => unavailable(`Vercel: ${error.message}`)),
+      githubUsage(store, githubConnection).catch((error) => unavailable(`GitHub: ${error.message}`))
     ]);
     const calls = directory.val() || {};
     const migratedUsers = await Promise.all(migratedSettingsDocs.docs.map(async (settings) => {
@@ -186,6 +220,11 @@ export default async function handler(req, res) {
       cloudflare,
       vercel,
       github,
+      connections: {
+        cloudflare: publicConnection(cloudflareConnection),
+        vercel: publicConnection(vercelConnection),
+        github: publicConnection(githubConnection)
+      },
       purgomalum: { available: true, endpoint: "www.purgomalum.com/service/json", telemetry: "The provider does not expose account usage telemetry." }
     });
   } catch (error) {
