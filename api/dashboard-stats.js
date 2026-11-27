@@ -66,7 +66,13 @@ async function liveKitUsage() {
     host: new URL(url).host,
     activeRooms: rooms.length,
     participants: rooms.reduce((total, room) => total + Number(room.numParticipants || 0), 0),
-    rooms: rooms.map((room) => ({ name: room.name, participants: Number(room.numParticipants || 0), createdAt: room.creationTime || null }))
+    // LiveKit exposes proto int64 timestamps as BigInt. Convert them before
+    // sending JSON; JSON.stringify cannot serialize a BigInt value.
+    rooms: rooms.map((room) => ({
+      name: room.name,
+      participants: Number(room.numParticipants || 0),
+      createdAt: room.creationTime ? new Date(Number(room.creationTime) * 1000).toISOString() : null
+    }))
   };
 }
 
