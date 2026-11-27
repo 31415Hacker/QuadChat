@@ -1,8 +1,11 @@
 {
   "name": "quadchat",
-  "version": "2.6.29",
+  "version": "2.7.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "start": "node server.js",
     "server": "node server.js",
