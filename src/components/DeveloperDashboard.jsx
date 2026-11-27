@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import appPackage from "../../package.json";
 
@@ -210,8 +210,11 @@ export function DashboardRestricted() {
 export default function DeveloperDashboard() {
   const [liveStats, setLiveStats] = useState(null);
   const [liveStatsError, setLiveStatsError] = useState("");
+  const isLoadingStatsRef = useRef(false);
 
   const loadStats = useCallback(async () => {
+    if (isLoadingStatsRef.current) return;
+    isLoadingStatsRef.current = true;
     try {
       const { auth } = await import("../../firebase.js");
       const token = await auth.currentUser?.getIdToken();
@@ -222,11 +225,15 @@ export default function DeveloperDashboard() {
       setLiveStatsError("");
     } catch (error) {
       setLiveStatsError(error.message || "Could not load live statistics.");
+    } finally {
+      isLoadingStatsRef.current = false;
     }
   }, []);
 
   useEffect(() => {
     loadStats();
+    const refreshInterval = window.setInterval(loadStats, 30_000);
+    return () => window.clearInterval(refreshInterval);
   }, [loadStats]);
 
   return (
@@ -235,7 +242,7 @@ export default function DeveloperDashboard() {
         <div>
           <p className="developer-dashboard-eyebrow">Developer dashboard</p>
           <h1>QuadChat service overview</h1>
-          <p>Live application and provider data. Provider credentials stay server-side and are never returned to the browser.</p>
+          <p>Live application and provider data, refreshed every 30 seconds. Provider credentials stay server-side and are never returned to the browser.</p>
         </div>
         <div>
           <button className="ghost-button" onClick={loadStats} type="button">Refresh</button>
