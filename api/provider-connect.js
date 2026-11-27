@@ -7,9 +7,13 @@ import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 
 const CONNECTION_COLLECTION = "dashboard-provider-connections";
 
+function configurationError(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
 function credentialKey() {
   const secret = process.env.DASHBOARD_CREDENTIAL_ENCRYPTION_KEY;
-  if (!secret) throw new Error("DASHBOARD_CREDENTIAL_ENCRYPTION_KEY is not configured.");
+  if (!secret) throw configurationError("DASHBOARD_CREDENTIAL_ENCRYPTION_KEY is not configured.");
   return createHash("sha256").update(secret).digest();
 }
 
@@ -69,13 +73,13 @@ async function requireDeveloper(req, app) {
 
 function callbackUrl() {
   const url = process.env.DASHBOARD_OAUTH_CALLBACK_URL;
-  if (!url) throw new Error("DASHBOARD_OAUTH_CALLBACK_URL is not configured.");
+  if (!url) throw configurationError("DASHBOARD_OAUTH_CALLBACK_URL is not configured.");
   return url;
 }
 
 function githubConfig() {
   if (!process.env.GITHUB_OAUTH_CLIENT_ID || !process.env.GITHUB_OAUTH_CLIENT_SECRET) {
-    throw new Error("GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET.");
+    throw configurationError("GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET.");
   }
   return { clientId: process.env.GITHUB_OAUTH_CLIENT_ID, clientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET };
 }
