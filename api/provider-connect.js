@@ -47,7 +47,7 @@ function publicConnection(connection) {
 function getApp() {
   const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "null");
   if (!account) throw new Error("Firebase service account is not configured");
-  return admin.apps.find((app) => app.name === "quadchat-dashboard") || admin.initializeApp({ credential: admin.credential.cert(account) }, "quadchat-dashboard");
+  return admin.getApps().find((app) => app.name === "quadchat-dashboard") || admin.initializeApp({ credential: admin.credential.cert(account) }, "quadchat-dashboard");
 }
 
 function body(req) {

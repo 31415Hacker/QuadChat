@@ -5,7 +5,7 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
 // api/[action] also serves call endpoints, which initialize a named Admin app.
 // A named app must not prevent us from creating the default app used below.
-if (!admin.apps.some((app) => app.name === "[DEFAULT]")) {
+if (!admin.getApps().some((app) => app.name === "[DEFAULT]")) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });

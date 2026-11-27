@@ -13,7 +13,7 @@ function getService() {
   // dedicated named app so we never inherit another function's default app
   // (Vercel may share the module isolate across functions in a region).
   const databaseURL = `https://${account.project_id}-default-rtdb.firebaseio.com`;
-  const app = admin.apps.find((candidate) => candidate.name === CALLS_APP_NAME)
+  const app = admin.getApps().find((candidate) => candidate.name === CALLS_APP_NAME)
     || admin.initializeApp({ credential: admin.credential.cert(account), databaseURL }, CALLS_APP_NAME);
   if (!service) {
     const url = process.env.LIVEKIT_URL;
