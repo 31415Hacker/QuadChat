@@ -87,6 +87,7 @@ export async function saveUserProfile(
     profileData.role = "member";
     profileData.isAdmin = false;
     profileData.isDeveloper = false;
+    profileData.doNotDisturb = false;
     profileData.bio = "";
     profileData.schedule = createDefaultSchedule();
     profileData.status = { mode: "active", text: "", scheduledBusy: [] };

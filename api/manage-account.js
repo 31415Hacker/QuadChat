@@ -109,7 +109,7 @@ export default async function handler(req, res) {
 
   try {
     const caller = await requireAdmin(req);
-    const { action, uid, password, spamMuteLevel } = parseBody(req);
+    const { action, uid, password, spamMuteLevel, doNotDisturb } = parseBody(req);
     if (!uid || typeof uid !== "string") {
       return res.status(400).json({ error: "Account ID is required." });
     }
@@ -186,6 +186,21 @@ export default async function handler(req, res) {
         spamMuteLevelSetBy: caller.uid
       }, { merge: true });
       return res.status(200).json({ message: `Spam penalty level set to ${level}.`, spamMuteLevel: level });
+    }
+
+    if (action === "doNotDisturb") {
+      if (typeof doNotDisturb !== "boolean") {
+        return res.status(400).json({ error: "Do not disturb must be true or false." });
+      }
+      await admin.firestore().doc(`users/${uid}`).set({
+        doNotDisturb,
+        doNotDisturbUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        doNotDisturbUpdatedBy: caller.uid
+      }, { merge: true });
+      return res.status(200).json({
+        message: `Do not disturb ${doNotDisturb ? "enabled" : "disabled"}.`,
+        doNotDisturb
+      });
     }
 
     if (action === "delete") {

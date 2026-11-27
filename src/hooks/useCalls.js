@@ -36,6 +36,8 @@ export function useCalls({
   isVoiceTemporarilyMuted,
   voiceMutedTemporaryUntil,
   onTemporaryVoiceUnmute,
+  doNotDisturb,
+  isUserDoNotDisturb,
   noiseMode
 }) {
   const [callStatus, setCallStatus] = useState("idle");
@@ -587,6 +589,12 @@ export function useCalls({
         return;
       }
 
+      if (doNotDisturb) {
+        await update(rtdbRef(rtdb, `calls/${callKey}`), { status: "do-not-disturb" }).catch(() => {});
+        clearRing(sessionUserId, callKey);
+        return;
+      }
+
       const statusRef = rtdbRef(rtdb, `calls/${callKey}/status`);
       statusUnsubs[callKey] = onValue(statusRef, (statusSnap) => {
         const currentStatus = statusSnap.exists() ? statusSnap.val() : null;
@@ -627,7 +635,7 @@ export function useCalls({
       off(ringsRef);
       Object.values(statusUnsubs).forEach(fn => fn());
     };
-  }, [sessionUserId, callStatus]);
+  }, [sessionUserId, callStatus, doNotDisturb]);
 
   function cleanupCall() {
     console.log("[CALL-CLEANUP] start");
@@ -772,6 +780,18 @@ export function useCalls({
       console.log(`[CALL-START] blocked: callStatus=${callStatus} lock=${startCallLockRef.current}`);
       return;
     }
+    if (isUserDoNotDisturb?.(calleeId)) {
+      pushInAppNotification({
+        type: "call",
+        channelId: null,
+        channelLabel: null,
+        senderName: calleeName,
+        body: "has enabled do not disturb",
+        id: `call-dnd-${calleeId}-${Date.now()}`
+      });
+      onCallError?.("This user has enabled do not disturb.");
+      return;
+    }
     startCallLockRef.current = true;
 
     try {
@@ -888,13 +908,16 @@ export function useCalls({
         const s = snap.exists() ? snap.val() : null;
         console.log(`[CALL-START] cancel listener: status=${s} cleaningUp=${cleaningUp} nodeRef=${!!callNodeRef.current}`);
         if (cleaningUp) return;
-        if ((!snap.exists() || snap.val() === "ended" || snap.val() === "declined") && callNodeRef.current) {
+        if ((!snap.exists() || snap.val() === "ended" || snap.val() === "declined" || snap.val() === "do-not-disturb") && callNodeRef.current) {
           cleaningUp = true;
           const wasDeclined = snap.val() === "declined";
+          const wasDoNotDisturb = snap.val() === "do-not-disturb";
           if (typeof Notification !== "undefined") {
             try {
               new Notification("QuadChat", {
-                body: wasDeclined
+                body: wasDoNotDisturb
+                  ? "This user has enabled do not disturb."
+                  : wasDeclined
                   ? `${calleeName} declined your call.`
                   : `${calleeName} has ended the call.`
               });
@@ -905,9 +928,10 @@ export function useCalls({
             channelId: null,
             channelLabel: null,
             senderName: calleeName,
-            body: wasDeclined ? "declined your call" : "has ended the call",
-            id: `call-${wasDeclined ? "declined" : "end"}-${callRef.key}`
+            body: wasDoNotDisturb ? "has enabled do not disturb" : wasDeclined ? "declined your call" : "has ended the call",
+            id: `call-${wasDoNotDisturb ? "dnd" : wasDeclined ? "declined" : "end"}-${callRef.key}`
           });
+          if (wasDoNotDisturb) onCallError?.("This user has enabled do not disturb.");
           console.log("[CALL-START] cancel listener → cleanupCall");
           cleanupCall();
         }

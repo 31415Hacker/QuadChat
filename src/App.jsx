@@ -613,6 +613,8 @@ export default function App() {
     isVoiceTemporarilyMuted,
     voiceMutedTemporaryUntil: currentProfile?.voiceMutedTemporaryUntil,
     onTemporaryVoiceUnmute: clearTemporaryVoiceMute,
+    doNotDisturb: currentProfile?.doNotDisturb === true,
+    isUserDoNotDisturb: (uid) => profilesRef.current[uid]?.doNotDisturb === true,
     noiseMode
   });
 
@@ -2858,6 +2860,26 @@ export default function App() {
     }
   }
 
+  async function setDoNotDisturb(enabled) {
+    if (!sessionUserId) return;
+    try {
+      await setDoc(doc(db, "users", sessionUserId), { doNotDisturb: Boolean(enabled) }, { merge: true });
+    } catch (error) {
+      setSettingsMessage(error.message || "Could not update do not disturb.");
+    }
+  }
+
+  async function setAdminDoNotDisturb(enabled) {
+    const result = await manageAccount("doNotDisturb", adminAccountId, "", { doNotDisturb: Boolean(enabled) });
+    if (result) {
+      setAdminAccountDetails((details) => details ? {
+        ...details,
+        profile: { ...details.profile, doNotDisturb: result.doNotDisturb }
+      } : details);
+      setAdminAccountMessage(result.message);
+    }
+  }
+
   function copyMagicLink() {
     navigator.clipboard.writeText(magicLinkUrl);
   }
@@ -4071,8 +4093,10 @@ export default function App() {
               openSettings={openSettings}
               isDarkTheme={isDarkTheme}
               setIsDarkTheme={setIsDarkTheme}
-              toggleNotifications={toggleNotifications}
-              notificationsEnabled={notificationsEnabled}
+           toggleNotifications={toggleNotifications}
+           notificationsEnabled={notificationsEnabled}
+           doNotDisturb={currentProfile?.doNotDisturb === true}
+           setDoNotDisturb={setDoNotDisturb}
             />
 
             {error ? (
@@ -4447,6 +4471,7 @@ export default function App() {
             banAdminAccount={banAdminAccount}
             unbanAdminAccount={unbanAdminAccount}
             setAdminSpamMuteLevel={setAdminSpamMuteLevel}
+            setAdminDoNotDisturb={setAdminDoNotDisturb}
            signupRequests={signupRequests}
            inviteCodes={inviteCodes}
            refreshSignupRequests={refreshSignupRequests}

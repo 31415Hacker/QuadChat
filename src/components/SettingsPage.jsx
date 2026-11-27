@@ -92,6 +92,8 @@ export default function SettingsPage({
   setReduceMotion,
   toggleNotifications,
   notificationsEnabled,
+  doNotDisturb,
+  setDoNotDisturb,
   showVersionInHeader,
   setShowVersionInHeader,
   showSidebarClock,
@@ -141,6 +143,7 @@ export default function SettingsPage({
   banAdminAccount,
   unbanAdminAccount,
   setAdminSpamMuteLevel,
+  setAdminDoNotDisturb,
   signupRequests,
   inviteCodes,
   refreshSignupRequests,
@@ -699,6 +702,16 @@ export default function SettingsPage({
                 </section>
                 <section className="settings-section-box">
                   <div>
+                    <h3>Do not disturb</h3>
+                    <p>Friends who call you will be told that you have enabled do not disturb. You will not receive an incoming-call alert.</p>
+                  </div>
+                  <label className="toggle-row">
+                    <input checked={doNotDisturb} onChange={(event) => setDoNotDisturb(event.target.checked)} type="checkbox" />
+                    <span>{doNotDisturb ? "On" : "Off"}</span>
+                  </label>
+                </section>
+                <section className="settings-section-box">
+                  <div>
                     <h3>Sidebar date and time</h3>
                     <p>Show your local weekday, date, and time beneath the user list.</p>
                   </div>
@@ -1240,6 +1253,15 @@ export default function SettingsPage({
                             </select>
                             <button disabled={isManagingAccount} onClick={() => setAdminSpamMuteLevel(0)} type="button">Reset to lowest</button>
                             <button disabled={isManagingAccount} onClick={() => setAdminSpamMuteLevel(12)} type="button">Set highest</button>
+                          </div>
+                        </div>
+                        <div className="admin-password-action">
+                          <label htmlFor="admin-do-not-disturb">Do not disturb</label>
+                          <div>
+                            <label className="toggle-row" htmlFor="admin-do-not-disturb">
+                              <input id="admin-do-not-disturb" checked={adminAccountDetails.profile?.doNotDisturb === true} disabled={isManagingAccount} onChange={(event) => setAdminDoNotDisturb(event.target.checked)} type="checkbox" />
+                              <span>{adminAccountDetails.profile?.doNotDisturb === true ? "Enabled" : "Disabled"}</span>
+                            </label>
                           </div>
                         </div>
                       </>}
