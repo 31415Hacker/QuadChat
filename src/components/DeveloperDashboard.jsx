@@ -62,6 +62,21 @@ function date(value) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
+async function responseData(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const requestId = response.headers.get("x-vercel-id");
+    return {
+      error: response.status >= 500
+        ? `The dashboard service returned a server error${requestId ? ` (Vercel request ${requestId})` : ""}.`
+        : `The dashboard service returned an unexpected response (${response.status}).`
+    };
+  }
+}
+
 function SensitiveValue({ value }) {
   const [isRevealed, setIsRevealed] = useState(false);
   if (!value) return "—";
@@ -111,7 +126,7 @@ function ProviderConnectionControls({ provider, connection, onChanged }) {
       ...options,
       headers: { ...(options.headers || {}), Authorization: `Bearer ${idToken || ""}` }
     });
-    const data = response.status === 204 ? null : await response.json();
+    const data = await responseData(response);
     if (!response.ok) throw new Error(data?.error || "Could not update provider connection.");
     return data;
   }
@@ -201,7 +216,7 @@ export default function DeveloperDashboard() {
       const { auth } = await import("../../firebase.js");
       const token = await auth.currentUser?.getIdToken();
       const response = await fetch("/api/dashboard-stats", { headers: { Authorization: `Bearer ${token || ""}` } });
-      const data = await response.json();
+      const data = await responseData(response);
       if (!response.ok) throw new Error(data.error || "Could not load live statistics.");
       setLiveStats(data);
       setLiveStatsError("");

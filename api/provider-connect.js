@@ -118,6 +118,7 @@ export default async function handler(req, res) {
     }
     return res.status(405).json({ error: "Method not allowed" });
   } catch (error) {
+    console.error("[DASHBOARD-PROVIDER-CONNECT]", error);
     return res.status(error.status || 500).json({ error: error.message || "Could not update provider connection." });
   }
 }
