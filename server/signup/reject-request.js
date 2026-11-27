@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -29,8 +31,8 @@ async function requireAdmin(req) {
     error.status = 401;
     throw error;
   }
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
-  const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
+  const decodedToken = await getAuth().verifyIdToken(authHeader.slice(7), true);
+  const callerDoc = await getFirestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || (callerDoc.data().isAdmin !== true && callerDoc.data().isDeveloper !== true)) {
     const error = new Error("Only admins or developers can reject requests.");
     error.status = 403;
@@ -51,7 +53,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Request ID is required." });
     }
 
-    const requestRef = admin.firestore().doc(`signup-requests/${requestId}`);
+    const requestRef = getFirestore().doc(`signup-requests/${requestId}`);
     const requestSnap = await requestRef.get();
     if (!requestSnap.exists) {
       return res.status(404).json({ error: "That signup request no longer exists." });

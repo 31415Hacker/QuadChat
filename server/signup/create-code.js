@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 import crypto from "crypto";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -30,8 +32,8 @@ async function requireAdmin(req) {
     error.status = 401;
     throw error;
   }
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
-  const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
+  const decodedToken = await getAuth().verifyIdToken(authHeader.slice(7), true);
+  const callerDoc = await getFirestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || (callerDoc.data().isAdmin !== true && callerDoc.data().isDeveloper !== true)) {
     const error = new Error("Only admins or developers can create invite codes.");
     error.status = 403;
@@ -52,10 +54,10 @@ export default async function handler(req, res) {
 
     const code = crypto.randomBytes(5).toString("base64url").toUpperCase();
 
-    await admin.firestore().doc(`signup-codes/${code}`).set({
+    await getFirestore().doc(`signup-codes/${code}`).set({
       email: cleanEmail,
       used: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       createdBy: caller.uid
     });
 

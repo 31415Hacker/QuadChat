@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -41,7 +43,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Email is required." });
     }
 
-    const verifiedUser = await admin.auth().getUser(uid).catch(() => null);
+    const verifiedUser = await getAuth().getUser(uid).catch(() => null);
     if (!verifiedUser || String(verifiedUser.email || "").toLowerCase() !== cleanEmail) {
       return res.status(400).json({ error: "That account doesn't match the Google email you signed in with." });
     }
@@ -49,12 +51,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "That's not a Google account. Sign in with Google to redeem this code." });
     }
 
-    const settingsSnapshot = await admin.firestore().doc("settings/app").get();
+    const settingsSnapshot = await getFirestore().doc("settings/app").get();
     if (settingsSnapshot.exists && settingsSnapshot.data().signupEnabled === false) {
       return res.status(403).json({ error: "Signup is currently disabled." });
     }
 
-    const db = admin.firestore();
+    const db = getFirestore();
 
     const attemptsRef = db.collection("signup-rate-limits").doc(cleanEmail);
     await db.runTransaction(async (tx) => {
@@ -80,7 +82,7 @@ export default async function handler(req, res) {
         if (data.email && String(data.email).toLowerCase() !== cleanEmail) {
           throw Object.assign(new Error("That invite code is not valid for this email."), { status: 400 });
         }
-        tx.update(codeRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail });
+        tx.update(codeRef, { used: true, usedAt: FieldValue.serverTimestamp(), usedBy: cleanEmail });
       });
     } catch (txError) {
       return res.status(txError.status || 400).json({ error: txError.message || "Invite code validation failed." });
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
       email: cleanEmail,
       uid,
       provider: "google",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       source: "invite-code"
     });
 

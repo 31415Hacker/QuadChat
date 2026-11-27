@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 
 const CONNECTION_COLLECTION = "dashboard-provider-connections";
@@ -59,8 +61,8 @@ function body(req) {
 async function requireDeveloper(req, app) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) throw Object.assign(new Error("Not authenticated"), { status: 401 });
-  const token = await app.auth().verifyIdToken(header.slice(7), true);
-  const profile = await app.firestore().doc(`users/${token.uid}`).get();
+  const token = await getAuth(app).verifyIdToken(header.slice(7), true);
+  const profile = await getFirestore(app).doc(`users/${token.uid}`).get();
   if (!profile.exists || profile.data().isDeveloper !== true) throw Object.assign(new Error("Access restricted to a developer account."), { status: 403 });
   return token;
 }
@@ -89,7 +91,7 @@ async function connectGithub(req, res, app) {
   const developer = await requireDeveloper(req, app);
   const { clientId } = githubConfig();
   const state = randomBytes(32).toString("base64url");
-  await app.firestore().doc(`dashboard-oauth-states/${state}`).set({ uid: developer.uid, provider: "github", expiresAt: Date.now() + 10 * 60 * 1000 });
+  await getFirestore(app).doc(`dashboard-oauth-states/${state}`).set({ uid: developer.uid, provider: "github", expiresAt: Date.now() + 10 * 60 * 1000 });
   const authorize = new URL("https://github.com/login/oauth/authorize");
   authorize.searchParams.set("client_id", clientId);
   authorize.searchParams.set("redirect_uri", callbackUrl());
@@ -102,7 +104,7 @@ async function connectGithub(req, res, app) {
 async function githubCallback(req, res, app) {
   const { code, state, error } = req.query || {};
   if (error || !code || !state) return res.redirect(302, callbackRedirect("cancelled"));
-  const stateRef = app.firestore().doc(`dashboard-oauth-states/${state}`);
+  const stateRef = getFirestore(app).doc(`dashboard-oauth-states/${state}`);
   const stateSnapshot = await stateRef.get();
   const stateData = stateSnapshot.data();
   await stateRef.delete().catch(() => {});
@@ -119,7 +121,7 @@ async function githubCallback(req, res, app) {
   const identityResponse = await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${token.access_token}`, Accept: "application/vnd.github+json" } });
   const identity = await identityResponse.json();
   if (!identityResponse.ok || !identity.login) return res.redirect(302, callbackRedirect("failed"));
-  await saveProviderConnection(app.firestore(), "github", {
+  await saveProviderConnection(getFirestore(app), "github", {
     secret: JSON.stringify(token),
     metadata: { login: identity.login, id: identity.id, scopes: token.scope || "", connectedBy: stateData.uid }
   });
@@ -144,8 +146,8 @@ async function connectToken(req, res, app, provider) {
     if (!response.ok) return res.status(400).json({ error: "Vercel rejected this token or project ID." });
     metadata = { projectId, projectName: data.name || projectId };
   }
-  await saveProviderConnection(app.firestore(), provider, { secret: token, metadata });
-  return res.status(200).json({ connection: publicConnection(await getProviderConnection(app.firestore(), provider)) });
+  await saveProviderConnection(getFirestore(app), provider, { secret: token, metadata });
+  return res.status(200).json({ connection: publicConnection(await getProviderConnection(getFirestore(app), provider)) });
 }
 
 export default async function handler(req, res) {
@@ -156,7 +158,7 @@ export default async function handler(req, res) {
     if (req.method === "POST" && ["cloudflare", "vercel"].includes(req.query?.action)) return connectToken(req, res, app, req.query.action);
     if (req.method === "DELETE" && ["github", "cloudflare", "vercel"].includes(req.query?.provider)) {
       await requireDeveloper(req, app);
-      await deleteProviderConnection(app.firestore(), req.query.provider);
+      await deleteProviderConnection(getFirestore(app), req.query.provider);
       return res.status(204).end();
     }
     return res.status(405).json({ error: "Method not allowed" });

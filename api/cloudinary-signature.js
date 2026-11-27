@@ -1,6 +1,8 @@
 import crypto from "crypto";
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -95,7 +97,7 @@ export default async function handler(req, res) {
 
   try {
     const idToken = authHeader.split("Bearer ")[1];
-    await admin.auth().verifyIdToken(idToken, true);
+    await getAuth().verifyIdToken(idToken, true);
 
     const validationError = validateUpload(parseBody(req));
     if (validationError) {

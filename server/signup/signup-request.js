@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -39,17 +41,17 @@ export default async function handler(req, res) {
       if (!captcha.success) return res.status(400).json({ error: "CAPTCHA verification failed. Try again." });
     }
 
-    const settingsSnapshot = await admin.firestore().doc("settings/app").get();
+    const settingsSnapshot = await getFirestore().doc("settings/app").get();
     if (settingsSnapshot.exists && settingsSnapshot.data().signupEnabled === false) {
       return res.status(403).json({ error: "Signup is currently disabled." });
     }
 
-    const db = admin.firestore();
+    const db = getFirestore();
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanName = String(displayName).trim();
 
     if (kind === "google") {
-      const googleUser = await admin.auth().getUser(uid).catch(() => null);
+      const googleUser = await getAuth().getUser(uid).catch(() => null);
       if (
         !googleUser ||
         String(googleUser.email || "").toLowerCase() !== cleanEmail ||
@@ -74,7 +76,7 @@ export default async function handler(req, res) {
     });
 
     if (kind === "password") {
-      const existing = await admin.auth().getUserByEmail(cleanEmail).catch((error) => {
+      const existing = await getAuth().getUserByEmail(cleanEmail).catch((error) => {
         if (error.code === "auth/user-not-found") return null;
         throw error;
       });
@@ -94,7 +96,7 @@ export default async function handler(req, res) {
       displayName: cleanName,
       provider: kind,
       status: "pending",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+      createdAt: FieldValue.serverTimestamp()
     };
     if (kind === "google") {
       requestData.uid = uid;

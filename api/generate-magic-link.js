@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -21,7 +23,7 @@ export default async function handler(req, res) {
 
   try {
     const idToken = authHeader.split("Bearer ")[1];
-    const decodedToken = await admin.auth().verifyIdToken(idToken, true);
+    const decodedToken = await getAuth().verifyIdToken(idToken, true);
 
     const callerDoc = await admin
       .firestore()
@@ -36,7 +38,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Email is required." });
     }
 
-    const link = await admin.auth().generateSignInWithEmailLink(email, {
+    const link = await getAuth().generateSignInWithEmailLink(email, {
       url: redirectUrl || "https://quadchat-cf697.firebaseapp.com",
       handleCodeInApp: true
     });

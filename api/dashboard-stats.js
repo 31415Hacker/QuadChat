@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
@@ -66,8 +68,8 @@ async function fetchJson(url, options = {}) {
 async function requireDeveloper(req, app) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) throw Object.assign(new Error("Not authenticated"), { status: 401 });
-  const token = await app.auth().verifyIdToken(header.slice(7), true);
-  const profile = await app.firestore().doc(`users/${token.uid}`).get();
+  const token = await getAuth(app).verifyIdToken(header.slice(7), true);
+  const profile = await getFirestore(app).doc(`users/${token.uid}`).get();
   if (!profile.exists || profile.data().isDeveloper !== true) {
     throw Object.assign(new Error("Access restricted to a developer account."), { status: 403 });
   }
@@ -208,8 +210,8 @@ export default async function handler(req, res) {
   try {
     const app = getApp();
     await requireDeveloper(req, app);
-    const store = app.firestore();
-    const database = app.database();
+    const store = getFirestore(app);
+    const database = getDatabase(app);
     const migratedSettingsQuery = store.collection("user-settings").where("migrationVersion", "==", 1);
     const [cloudflareConnection, vercelConnection, githubConnection] = await Promise.all([
       getProviderConnection(store, "cloudflare"),

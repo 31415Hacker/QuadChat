@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { createCallService, failure } from "./service.js";
 
@@ -31,8 +33,8 @@ function getService() {
       throw failure(503, "Call service is not configured: LIVEKIT_URL must be a LiveKit Cloud URL");
     }
     service = createCallService({
-      auth: app.auth(), store: app.firestore(),
-      database: app.database(),
+      auth: getAuth(app), store: getFirestore(app),
+      database: getDatabase(app),
       rooms: new RoomServiceClient(url.replace(/^ws/, "http"), process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET),
       makeToken: async ({ identity, name, room, canPublish, ttl }) => {
         const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, ttl });

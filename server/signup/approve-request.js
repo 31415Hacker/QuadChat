@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 import crypto from "crypto";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -30,8 +32,8 @@ async function requireAdmin(req) {
     error.status = 401;
     throw error;
   }
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
-  const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
+  const decodedToken = await getAuth().verifyIdToken(authHeader.slice(7), true);
+  const callerDoc = await getFirestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || (callerDoc.data().isAdmin !== true && callerDoc.data().isDeveloper !== true)) {
     const error = new Error("Only admins or developers can approve requests.");
     error.status = 403;
@@ -58,7 +60,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Request ID is required." });
     }
 
-    const db = admin.firestore();
+    const db = getFirestore();
     const requestRef = db.doc(`signup-requests/${requestId}`);
     const requestSnap = await requestRef.get();
     if (!requestSnap.exists) {
@@ -86,7 +88,7 @@ export default async function handler(req, res) {
           ? request.password
           : crypto.randomBytes(16).toString("hex");
 
-      const existing = await admin.auth().getUserByEmail(email).catch((error) => {
+      const existing = await getAuth().getUserByEmail(email).catch((error) => {
         if (error.code === "auth/user-not-found") return null;
         throw error;
       });
@@ -94,7 +96,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "That email already has an account. They can sign in instead." });
       }
 
-      const created = await admin.auth().createUser({
+      const created = await getAuth().createUser({
         email,
         password: submittedPassword,
         displayName
@@ -114,8 +116,8 @@ export default async function handler(req, res) {
           overrides: []
         },
         status: { mode: "active", text: "", scheduledBusy: [] },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        approvedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp(),
+        approvedAt: FieldValue.serverTimestamp()
       };
 
       await Promise.all([
@@ -125,10 +127,10 @@ export default async function handler(req, res) {
           displayName,
           uid: created.uid,
           provider: "password",
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
           approvedBy: caller.uid
         }),
-        requestRef.update({ status: "approved", reviewedAt: admin.firestore.FieldValue.serverTimestamp(), reviewedBy: caller.uid, password: admin.firestore.FieldValue.delete() })
+        requestRef.update({ status: "approved", reviewedAt: FieldValue.serverTimestamp(), reviewedBy: caller.uid, password: FieldValue.delete() })
       ]);
 
       return res.status(200).json({
@@ -141,7 +143,7 @@ export default async function handler(req, res) {
       if (typeof request.uid !== "string" || !request.uid) {
         return res.status(400).json({ error: "They must sign in with Google first so this approval can be bound to their account." });
       }
-      const verifiedGoogleUser = await admin.auth().getUser(request.uid).catch(() => null);
+      const verifiedGoogleUser = await getAuth().getUser(request.uid).catch(() => null);
       if (!verifiedGoogleUser || String(verifiedGoogleUser.email || "").toLowerCase() !== email) {
         return res.status(400).json({ error: "The Google account ID doesn't match the email on this request." });
       }
@@ -154,10 +156,10 @@ export default async function handler(req, res) {
           displayName,
           uid: request.uid,
           provider: "google",
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
           approvedBy: caller.uid
         }),
-        requestRef.update({ status: "approved", reviewedAt: admin.firestore.FieldValue.serverTimestamp(), reviewedBy: caller.uid })
+        requestRef.update({ status: "approved", reviewedAt: FieldValue.serverTimestamp(), reviewedBy: caller.uid })
       ]);
 
       return res.status(200).json({

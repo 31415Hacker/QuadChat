@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -14,7 +16,7 @@ export default async function handler(req, res) {
   if (!process.env.TURNSTILE_SECRET_KEY) return res.status(500).json({ error: "CAPTCHA is not configured." });
 
   try {
-    const settingsSnapshot = await admin.firestore().doc("settings/app").get();
+    const settingsSnapshot = await getFirestore().doc("settings/app").get();
     if (settingsSnapshot.exists && settingsSnapshot.data().signupEnabled === false) {
       return res.status(403).json({ error: "Signup is currently disabled." });
     }
@@ -26,7 +28,7 @@ export default async function handler(req, res) {
     }).then((response) => response.json());
     if (!captcha.success) return res.status(400).json({ error: "CAPTCHA verification failed. Try again." });
 
-    const db = admin.firestore();
+    const db = getFirestore();
     const cleanEmail = String(email).trim().toLowerCase();
 
     const codeRef = db.doc(`signup-codes/${code}`);
@@ -40,21 +42,21 @@ export default async function handler(req, res) {
         if (data.email && String(data.email).toLowerCase() !== cleanEmail) {
           throw Object.assign(new Error("That invite code is not valid for this email."), { status: 400 });
         }
-        tx.update(codeRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: cleanEmail });
+        tx.update(codeRef, { used: true, usedAt: FieldValue.serverTimestamp(), usedBy: cleanEmail });
         return data;
       });
     } catch (txError) {
       return res.status(txError.status || 400).json({ error: txError.message || "Invite code validation failed." });
     }
 
-    const created = await admin.auth().createUser({ email: cleanEmail, password: String(password), displayName: String(displayName).trim() });
+    const created = await getAuth().createUser({ email: cleanEmail, password: String(password), displayName: String(displayName).trim() });
 
     await db.doc(`approved-users/${cleanEmail}`).set({
       email: cleanEmail,
       displayName: String(displayName).trim(),
       uid: created.uid,
       provider: "password",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       source: "invite-code"
     });
 

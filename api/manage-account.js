@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getDatabase } from "firebase-admin/database";
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
@@ -29,8 +31,8 @@ async function requireAdmin(req) {
     throw error;
   }
 
-  const decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7), true);
-  const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
+  const decodedToken = await getAuth().verifyIdToken(authHeader.slice(7), true);
+  const callerDoc = await getFirestore().doc(`users/${decodedToken.uid}`).get();
   if (!callerDoc.exists || callerDoc.data().isAdmin !== true) {
     const error = new Error("Only admins can manage accounts.");
     error.status = 403;
@@ -57,7 +59,7 @@ function serializeValue(value) {
 }
 
 async function getRawAuthMetadata(uid) {
-  const accessToken = await admin.app().options.credential.getAccessToken();
+  const accessToken = await getApps()[0].options.credential.getAccessToken();
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/projects/${serviceAccount.project_id}/accounts:lookup`,
     {
@@ -116,18 +118,18 @@ export default async function handler(req, res) {
     }
 
     const [account, profileDoc] = await Promise.all([
-      admin.auth().getUser(uid).catch((error) => {
+      getAuth().getUser(uid).catch((error) => {
         if (error.code === "auth/user-not-found") return null;
         throw error;
       }),
-      admin.firestore().doc(`users/${uid}`).get()
+      getFirestore().doc(`users/${uid}`).get()
     ]);
     const profile = profileDoc.exists ? profileDoc.data() : null;
     const rawMetadata = await getRawAuthMetadata(uid).catch(() => ({}));
     const details = accountDetails(account, profile, rawMetadata);
 
     if (action === "details") {
-      const sessions = await admin.firestore().doc(`users/${uid}`).collection("sessions").get();
+      const sessions = await getFirestore().doc(`users/${uid}`).collection("sessions").get();
       return res.status(200).json({
         account: {
           ...details,
@@ -151,26 +153,26 @@ export default async function handler(req, res) {
       if (typeof password !== "string" || password.length < 6 || password.length > 64) {
         return res.status(400).json({ error: "Password must be between 6 and 64 characters." });
       }
-      await admin.auth().updateUser(uid, { password });
+      await getAuth().updateUser(uid, { password });
       return res.status(200).json({ message: "Password updated." });
     }
 
     if (action === "ban") {
-      await admin.auth().updateUser(uid, { disabled: true });
-      await admin.auth().revokeRefreshTokens(uid);
-      await admin.firestore().doc(`users/${uid}`).set({
+      await getAuth().updateUser(uid, { disabled: true });
+      await getAuth().revokeRefreshTokens(uid);
+      await getFirestore().doc(`users/${uid}`).set({
         banned: true,
-        bannedAt: admin.firestore.FieldValue.serverTimestamp(),
+        bannedAt: FieldValue.serverTimestamp(),
         bannedBy: caller.uid
       }, { merge: true });
       return res.status(200).json({ message: "Account banned. It can no longer sign in or register again." });
     }
 
     if (action === "unban") {
-      await admin.auth().updateUser(uid, { disabled: false });
-      await admin.firestore().doc(`users/${uid}`).set({
+      await getAuth().updateUser(uid, { disabled: false });
+      await getFirestore().doc(`users/${uid}`).set({
         banned: false,
-        unbannedAt: admin.firestore.FieldValue.serverTimestamp(),
+        unbannedAt: FieldValue.serverTimestamp(),
         unbannedBy: caller.uid
       }, { merge: true });
       return res.status(200).json({ message: "Account unbanned. It can sign in again." });
@@ -181,9 +183,9 @@ export default async function handler(req, res) {
       if (!Number.isInteger(level) || level < 0 || level > 12) {
         return res.status(400).json({ error: "Spam penalty level must be between 0 and 12." });
       }
-      await admin.firestore().doc(`users/${uid}`).set({
+      await getFirestore().doc(`users/${uid}`).set({
         spamMuteLevel: level,
-        spamMuteLevelUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        spamMuteLevelUpdatedAt: FieldValue.serverTimestamp(),
         spamMuteLevelSetBy: caller.uid
       }, { merge: true });
       return res.status(200).json({ message: `Spam penalty level set to ${level}.`, spamMuteLevel: level });
@@ -193,9 +195,9 @@ export default async function handler(req, res) {
       if (typeof doNotDisturb !== "boolean") {
         return res.status(400).json({ error: "Do not disturb must be true or false." });
       }
-      await admin.firestore().doc(`users/${uid}`).set({
+      await getFirestore().doc(`users/${uid}`).set({
         doNotDisturb,
-        doNotDisturbUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        doNotDisturbUpdatedAt: FieldValue.serverTimestamp(),
         doNotDisturbUpdatedBy: caller.uid
       }, { merge: true });
       return res.status(200).json({
@@ -206,13 +208,13 @@ export default async function handler(req, res) {
 
     if (action === "delete") {
       await Promise.all([
-        account ? admin.auth().deleteUser(uid) : Promise.resolve(),
-        admin.firestore().doc(`users/${uid}`).delete()
+        account ? getAuth().deleteUser(uid) : Promise.resolve(),
+        getFirestore().doc(`users/${uid}`).delete()
       ]);
       // Tombstone blocks the deleted session from recreating its profile
       // while its ID token is still valid (checked by Firestore rules).
-      await admin.firestore().doc(`deleted-users/${uid}`).set({
-        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      await getFirestore().doc(`deleted-users/${uid}`).set({
+        deletedAt: FieldValue.serverTimestamp(),
         deletedBy: caller.uid
       });
       return res.status(200).json({
