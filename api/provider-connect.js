@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import { randomBytes } from "node:crypto";
 import admin from "firebase-admin";
 import { deleteProviderConnection, getProviderConnection, publicConnection, saveProviderConnection } from "../server/dashboard/provider-connections.js";
 
@@ -45,7 +45,7 @@ function callbackRedirect(status) {
 async function connectGithub(req, res, app) {
   const developer = await requireDeveloper(req, app);
   const { clientId } = githubConfig();
-  const state = crypto.randomBytes(32).toString("base64url");
+  const state = randomBytes(32).toString("base64url");
   await app.firestore().doc(`dashboard-oauth-states/${state}`).set({ uid: developer.uid, provider: "github", expiresAt: Date.now() + 10 * 60 * 1000 });
   const authorize = new URL("https://github.com/login/oauth/authorize");
   authorize.searchParams.set("client_id", clientId);

@@ -1,16 +1,16 @@
-import crypto from "crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const COLLECTION = "dashboard-provider-connections";
 
 function encryptionKey() {
   const secret = process.env.DASHBOARD_CREDENTIAL_ENCRYPTION_KEY;
   if (!secret) throw new Error("DASHBOARD_CREDENTIAL_ENCRYPTION_KEY is not configured.");
-  return crypto.createHash("sha256").update(secret).digest();
+  return createHash("sha256").update(secret).digest();
 }
 
 function encrypt(value) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
   return {
     ciphertext: ciphertext.toString("base64"),
@@ -21,7 +21,7 @@ function encrypt(value) {
 
 function decrypt(value) {
   if (!value?.ciphertext || !value?.iv || !value?.tag) return null;
-  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(value.iv, "base64"));
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(value.iv, "base64"));
   decipher.setAuthTag(Buffer.from(value.tag, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(value.ciphertext, "base64")), decipher.final()]).toString("utf8");
 }
