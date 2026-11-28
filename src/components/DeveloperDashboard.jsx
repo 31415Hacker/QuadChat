@@ -21,16 +21,6 @@ const applicationLimits = [
   ["Spam mute escalation", "10 seconds through 24 hours"]
 ];
 
-const cloudflareLimits = [
-  ["Worker request quota", "Free: 100,000/day; Paid: unlimited"],
-  ["Worker CPU", "Free: 10 ms/request; Paid: 30 sec default, configurable to 5 min"],
-  ["Worker memory", "128 MB/isolate"],
-  ["Worker subrequests", "Free: 50/request; Paid: 10,000/request"],
-  ["Durable Object storage", "Free: 5 GB/account; SQLite object: 10 GB"],
-  ["Durable Object WebSocket message", "32 MiB"],
-  ["Durable Object throughput", "Soft limit of ~1,000 requests/second/object"]
-];
-
 function ageLabel() {
   const days = Math.max(0, Math.floor((Date.now() - QUADCHAT_STARTED_AT.getTime()) / 86_400_000));
   return `${days} day${days === 1 ? "" : "s"}`;
@@ -210,11 +200,13 @@ export function DashboardRestricted() {
 export default function DeveloperDashboard() {
   const [liveStats, setLiveStats] = useState(null);
   const [liveStatsError, setLiveStatsError] = useState("");
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   const isLoadingStatsRef = useRef(false);
 
   const loadStats = useCallback(async () => {
     if (isLoadingStatsRef.current) return;
     isLoadingStatsRef.current = true;
+    setIsLoadingStats(true);
     try {
       const { auth } = await import("../../firebase.js");
       const token = await auth.currentUser?.getIdToken();
@@ -227,6 +219,7 @@ export default function DeveloperDashboard() {
       setLiveStatsError(error.message || "Could not load live statistics.");
     } finally {
       isLoadingStatsRef.current = false;
+      setIsLoadingStats(false);
     }
   }, []);
 
@@ -245,7 +238,7 @@ export default function DeveloperDashboard() {
           <p>Live application and provider data, refreshed every 30 seconds. Provider credentials stay server-side and are never returned to the browser.</p>
         </div>
         <div>
-          <button className="ghost-button" onClick={loadStats} type="button">Refresh</button>
+          <button className="ghost-button" disabled={isLoadingStats} onClick={loadStats} type="button">{isLoadingStats ? "Refreshing…" : "Refresh"}</button>
           <button className="ghost-button" onClick={() => { window.location.href = "/"; }} type="button">Back to QuadChat</button>
         </div>
       </header>
@@ -324,14 +317,6 @@ export default function DeveloperDashboard() {
       <section className="developer-dashboard-section">
         <h2>Application limits</h2>
         <StatTable rows={applicationLimits} />
-      </section>
-
-      <section className="developer-dashboard-section">
-        <div className="developer-dashboard-section-heading">
-          <h2>Cloudflare platform limits</h2>
-          <a href="https://developers.cloudflare.com/workers/platform/limits/" rel="noreferrer" target="_blank">Current documentation</a>
-        </div>
-        <StatTable rows={cloudflareLimits} />
       </section>
 
     </main>

@@ -485,12 +485,16 @@ export function GamingPostModal({
   const [newCallName, setNewCallName] = useState("");
   const [creatingCall, setCreatingCall] = useState(false);
   const [callError, setCallError] = useState("");
+  const [isPosting, setIsPosting] = useState(false);
+  const [postError, setPostError] = useState("");
 
   useEffect(() => {
     if (!showGamingPost) return;
     setShowCreateCall(false);
     setNewCallName("");
     setCallError("");
+    setIsPosting(false);
+    setPostError("");
   }, [showGamingPost]);
 
   if (!showGamingPost || !gamingPostCard) return null;
@@ -522,6 +526,18 @@ export function GamingPostModal({
       setCallError(error?.message || "Could not create the call.");
     } finally {
       setCreatingCall(false);
+    }
+  }
+
+  async function sendPost() {
+    if (isPosting || !gamingPostCard.groupCallKey) return;
+    setIsPosting(true);
+    setPostError("");
+    try {
+      await onSend();
+    } catch (error) {
+      setPostError(error?.message || "Could not post the gaming session.");
+      setIsPosting(false);
     }
   }
 
@@ -612,10 +628,10 @@ export function GamingPostModal({
         <div className="settings-actions">
           <button
             type="button"
-            disabled={!gamingPostCard.groupCallKey}
-            onClick={onSend}
+            disabled={isPosting || !gamingPostCard.groupCallKey}
+            onClick={sendPost}
           >
-            Send
+            {isPosting ? "Posting…" : "Send"}
           </button>
           <button
             type="button"
@@ -625,6 +641,7 @@ export function GamingPostModal({
             Cancel
           </button>
         </div>
+        {postError ? <p className="call-row-error">{postError}</p> : null}
     </Dialog>
   );
 }
