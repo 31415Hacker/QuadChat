@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getInitials, getProfileName } from "../utils/names.js";
-import { NOISE_MODES, NOISE_MODE_LABELS, NOISE_MODE_HINTS, isAiNoiseSupported } from "../utils/noiseSuppression.js";
+import { NOISE_MODES, NOISE_MODE_LABELS, NOISE_MODE_HINTS } from "../utils/noiseSuppression.js";
 import Dialog from "./Dialog.jsx";
 import ScheduleEditor from "./ScheduleEditor.jsx";
 
@@ -158,6 +158,7 @@ export default function SettingsPage({
   revokeInviteCode
 }) {
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+  const [isSpamProtectionOpen, setIsSpamProtectionOpen] = useState(false);
   const [copiedInviteCode, setCopiedInviteCode] = useState("");
   const [companionDevices, setCompanionDevices] = useState([]);
   const [companionDeviceError, setCompanionDeviceError] = useState("");
@@ -636,21 +637,16 @@ export default function SettingsPage({
 
                 <section className="settings-section-box">
                   <div>
-                    <h3>Noise suppression</h3>
+                      <h3>Call voice filtering</h3>
                     <p>Choose how other callers' audio is cleaned up on this device. This never changes the audio you send.</p>
                     <p>{NOISE_MODE_HINTS[noiseMode]}</p>
-                    {!isAiNoiseSupported() ? (
-                      <p>AI mode needs AudioWorklet support, which this browser does not provide.</p>
-                    ) : null}
                   </div>
                   <div className="dm-sound-options">
                     {NOISE_MODES.map((mode) => {
-                      const aiUnavailable = (mode === "ai" || mode === "deepfilter") && !isAiNoiseSupported();
                       return (
                         <label className="dm-sound-option" key={mode}>
                           <input
                             checked={noiseMode === mode}
-                            disabled={aiUnavailable}
                             name="noise-mode"
                             onChange={() => setNoiseMode(mode)}
                             type="radio"
@@ -987,33 +983,12 @@ export default function SettingsPage({
                     <span>Allow sign up</span>
                   </label>
                 </section>
-                <section className="settings-section-box settings-section-box--spam">
-                  <div className="spam-protection-intro">
+                <section className="settings-section-box settings-section-box--compact">
+                  <div>
                     <h3>Spam protection</h3>
                     <p>Automatically mute members who exceed this message rate. Admins and developers are exempt.</p>
                   </div>
-                  <div className="spam-protection-fields">
-                    <label className="settings-number-row" htmlFor="spam-message-limit">
-                      <span>Messages</span>
-                      <input id="spam-message-limit" min="1" max="100" onChange={(event) => setSpamMessageLimit(event.target.value)} type="number" value={appSettings.spamMessageLimit} />
-                    </label>
-                    <label className="settings-number-row" htmlFor="spam-window-seconds">
-                      <span>Window (seconds)</span>
-                      <input id="spam-window-seconds" min="1" max="3600" onChange={(event) => setSpamWindowSeconds(event.target.value)} type="number" value={appSettings.spamWindowSeconds} />
-                    </label>
-                    <label className="settings-number-row" htmlFor="spam-reset-hours">
-                      <span>Reset after (hours)</span>
-                      <input id="spam-reset-hours" min="1" max="720" onChange={(event) => setSpamMuteLevelResetHours(event.target.value)} type="number" value={appSettings.spamMuteLevelResetHours} />
-                    </label>
-                    <label className="settings-number-row" htmlFor="duplicate-message-limit">
-                      <span>Same-message limit</span>
-                      <input id="duplicate-message-limit" min="2" max="100" onChange={(event) => setDuplicateMessageLimit(event.target.value)} type="number" value={appSettings.duplicateMessageLimit} />
-                    </label>
-                    <label className="settings-number-row" htmlFor="duplicate-message-window">
-                      <span>Same-message window (seconds)</span>
-                      <input id="duplicate-message-window" min="1" max="3600" onChange={(event) => setDuplicateMessageWindowSeconds(event.target.value)} type="number" value={appSettings.duplicateMessageWindowSeconds} />
-                    </label>
-                  </div>
+                  <button type="button" onClick={() => setIsSpamProtectionOpen(true)}>Configure spam protection</button>
                 </section>
                 <section className="settings-section-box">
                   <div>
@@ -1291,6 +1266,45 @@ export default function SettingsPage({
           </div>
           <div className="schedule-modal-content">
             <ScheduleEditor schedule={settingsSchedule} setSchedule={setSettingsSchedule} />
+          </div>
+        </Dialog>
+      ) : null}
+      {isSpamProtectionOpen ? (
+        <Dialog
+          ariaLabel="Configure spam protection"
+          className="settings-modal spam-protection-modal"
+          onClose={() => setIsSpamProtectionOpen(false)}
+        >
+          <header className="settings-header">
+            <div>
+              <h2>Spam protection</h2>
+              <p>Automatically mute members who exceed these limits. Changes save immediately.</p>
+            </div>
+            <button className="modal-close" type="button" onClick={() => setIsSpamProtectionOpen(false)} aria-label="Close spam protection">
+              <X size={18} />
+            </button>
+          </header>
+          <div className="spam-protection-fields">
+            <label className="settings-number-row" htmlFor="spam-message-limit">
+              <span>Messages</span>
+              <input id="spam-message-limit" min="1" max="100" onChange={(event) => setSpamMessageLimit(event.target.value)} type="number" value={appSettings.spamMessageLimit} />
+            </label>
+            <label className="settings-number-row" htmlFor="spam-window-seconds">
+              <span>Window (seconds)</span>
+              <input id="spam-window-seconds" min="1" max="3600" onChange={(event) => setSpamWindowSeconds(event.target.value)} type="number" value={appSettings.spamWindowSeconds} />
+            </label>
+            <label className="settings-number-row" htmlFor="spam-reset-hours">
+              <span>Reset after (hours)</span>
+              <input id="spam-reset-hours" min="1" max="720" onChange={(event) => setSpamMuteLevelResetHours(event.target.value)} type="number" value={appSettings.spamMuteLevelResetHours} />
+            </label>
+            <label className="settings-number-row" htmlFor="duplicate-message-limit">
+              <span>Same-message limit</span>
+              <input id="duplicate-message-limit" min="2" max="100" onChange={(event) => setDuplicateMessageLimit(event.target.value)} type="number" value={appSettings.duplicateMessageLimit} />
+            </label>
+            <label className="settings-number-row" htmlFor="duplicate-message-window">
+              <span>Same-message window (seconds)</span>
+              <input id="duplicate-message-window" min="1" max="3600" onChange={(event) => setDuplicateMessageWindowSeconds(event.target.value)} type="number" value={appSettings.duplicateMessageWindowSeconds} />
+            </label>
           </div>
         </Dialog>
       ) : null}
