@@ -17,6 +17,8 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
   const [newDetail, setNewDetail] = useState("");
   const [customRsvp, setCustomRsvp] = useState("");
   const [callPassword, setCallPassword] = useState("");
+  const [isJoiningCall, setIsJoiningCall] = useState(false);
+  const [joinCallError, setJoinCallError] = useState("");
 
   const rsvps = card.rsvps || {};
   const myRsvp = sessionUserId ? rsvps[sessionUserId] : null;
@@ -34,6 +36,19 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
     if (!onRsvp || !customRsvp.trim()) return;
     onRsvp("custom", customRsvp.trim());
     setCustomRsvp("");
+  }
+
+  async function handleJoinGroupCall() {
+    if (!card.groupCallKey || !onJoinGroupCall || isJoiningCall) return;
+    setIsJoiningCall(true);
+    setJoinCallError("");
+    try {
+      await onJoinGroupCall(card.groupCallKey, card.groupCallIsProtected ? callPassword : undefined);
+    } catch (error) {
+      setJoinCallError(error?.message || "Could not join the call.");
+    } finally {
+      setIsJoiningCall(false);
+    }
   }
 
   function update(field, value) {
@@ -88,8 +103,8 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
         ) : null}
         <button
           type="button"
-          disabled={!onJoinGroupCall || (needsPassword && !callPassword)}
-          onClick={() => onJoinGroupCall?.(card.groupCallKey, needsPassword ? callPassword : undefined)}
+          disabled={!onJoinGroupCall || isJoiningCall || (needsPassword && !callPassword)}
+          onClick={handleJoinGroupCall}
           className={
             "inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl font-bold text-base " +
             "bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none " +
@@ -98,8 +113,9 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
           }
         >
           <ExternalLink size={18} />
-          Join {card.groupCallTitle || "group call"}
+          {isJoiningCall ? "Joining call…" : `Join ${card.groupCallTitle || "group call"}`}
         </button>
+        {joinCallError ? <p className="text-center text-sm text-red-400">{joinCallError}</p> : null}
       </div>
     );
   }
