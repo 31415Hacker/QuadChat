@@ -16,6 +16,7 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
   const [newLabel, setNewLabel] = useState("");
   const [newDetail, setNewDetail] = useState("");
   const [customRsvp, setCustomRsvp] = useState("");
+  const [callPassword, setCallPassword] = useState("");
 
   const rsvps = card.rsvps || {};
   const myRsvp = sessionUserId ? rsvps[sessionUserId] : null;
@@ -65,20 +66,41 @@ export default function GameSessionCard({ data, isEditingMode, onChange, session
   }
 
   function renderGroupCallButton() {
+    if (!card.groupCallKey) {
+      return (
+        <p className="text-center text-sm text-slate-400">
+          No call was selected for this gaming post.
+        </p>
+      );
+    }
+
+    const needsPassword = card.groupCallIsProtected === true;
     return (
-      <button
-        type="button"
-        onClick={onJoinGroupCall}
-        className={
-          "inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl font-bold text-base " +
-          "bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] " +
-          "text-white transition-all duration-150 " +
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-800"
-        }
-      >
-        <ExternalLink size={18} />
-        Join group call
-      </button>
+      <div className="space-y-2">
+        {needsPassword ? (
+          <input
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            type="password"
+            placeholder="Call password"
+            value={callPassword}
+            onChange={(event) => setCallPassword(event.target.value)}
+          />
+        ) : null}
+        <button
+          type="button"
+          disabled={!onJoinGroupCall || (needsPassword && !callPassword)}
+          onClick={() => onJoinGroupCall?.(card.groupCallKey, needsPassword ? callPassword : undefined)}
+          className={
+            "inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl font-bold text-base " +
+            "bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none " +
+            "text-white transition-all duration-150 " +
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-800"
+          }
+        >
+          <ExternalLink size={18} />
+          Join {card.groupCallTitle || "group call"}
+        </button>
+      </div>
     );
   }
 

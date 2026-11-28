@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, Clock, MessageCircle, Phone, PhoneIncoming, PhoneOff, UserPlus, UserRound, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Clock, MessageCircle, Phone, PhoneIncoming, PhoneOff, Plus, UserPlus, UserRound, X } from "lucide-react";
 import GameSessionCard from "../GameSessionCard.jsx";
 import Dialog from "./Dialog.jsx";
 import { getInitials, getProfileName } from "../utils/names.js";
@@ -476,9 +476,54 @@ export function GamingPostModal({
   setShowGamingPost,
   gamingPostCard,
   setGamingPostCard,
+  calls,
+  sessionUserId,
+  onCreateCall,
   onSend
 }) {
+  const [showCreateCall, setShowCreateCall] = useState(false);
+  const [newCallName, setNewCallName] = useState("");
+  const [creatingCall, setCreatingCall] = useState(false);
+  const [callError, setCallError] = useState("");
+
+  useEffect(() => {
+    if (!showGamingPost) return;
+    setShowCreateCall(false);
+    setNewCallName("");
+    setCallError("");
+  }, [showGamingPost]);
+
   if (!showGamingPost || !gamingPostCard) return null;
+
+  const availableCalls = calls.filter(
+    (call) => call.ownerId === sessionUserId && !call.needsRecreation
+  );
+
+  function selectCall(call) {
+    setGamingPostCard((card) => ({
+      ...card,
+      groupCallKey: call.callKey,
+      groupCallTitle: call.title || "Group call",
+      groupCallIsProtected: call.isProtected === true
+    }));
+  }
+
+  async function createCall() {
+    const title = newCallName.trim();
+    if (!title || creatingCall) return;
+    setCreatingCall(true);
+    setCallError("");
+    try {
+      const callKey = await onCreateCall({ title, password: "" });
+      selectCall({ callKey, title, isProtected: false });
+      setShowCreateCall(false);
+      setNewCallName("");
+    } catch (error) {
+      setCallError(error?.message || "Could not create the call.");
+    } finally {
+      setCreatingCall(false);
+    }
+  }
 
   return (
     <Dialog
@@ -506,9 +551,68 @@ export function GamingPostModal({
           onChange={setGamingPostCard}
         />
 
+        <section className="calls-create-box" aria-label="Gaming post call">
+          <div className="dm-section-heading">Call to join</div>
+          <p className="settings-section-description">
+            Choose one of your existing calls. People who open this post will join that call.
+          </p>
+          {availableCalls.length ? (
+            <div className="calls-list">
+              {availableCalls.map((call) => (
+                <button
+                  className={`call-row ${gamingPostCard.groupCallKey === call.callKey ? "call-row--selected" : ""}`}
+                  key={call.callKey}
+                  type="button"
+                  onClick={() => selectCall(call)}
+                >
+                  <span className="call-row-title">{call.title || "Group call"}</span>
+                  <span className="call-row-meta">
+                    {call.isProtected ? "Private — password required" : "Public"} · {call.participantCount || 0} in call
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="settings-section-description">You have not created any calls yet.</p>
+          )}
+
+          {!showCreateCall ? (
+            <button className="calls-create-button" type="button" onClick={() => setShowCreateCall(true)}>
+              <Plus size={16} />
+              Create a new call
+            </button>
+          ) : (
+            <div className="calls-create-form">
+              <label className="calls-field">
+                <span>New call name</span>
+                <input
+                  autoFocus
+                  maxLength={50}
+                  placeholder="e.g. Friday game night"
+                  value={newCallName}
+                  onChange={(event) => setNewCallName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") createCall();
+                  }}
+                />
+              </label>
+              <div className="calls-create-actions">
+                <button className="calls-submit" type="button" disabled={creatingCall || !newCallName.trim()} onClick={createCall}>
+                  {creatingCall ? "Creating…" : "Create call"}
+                </button>
+                <button className="calls-cancel" type="button" onClick={() => setShowCreateCall(false)}>
+                  Cancel
+                </button>
+              </div>
+              {callError ? <span className="call-row-error">{callError}</span> : null}
+            </div>
+          )}
+        </section>
+
         <div className="settings-actions">
           <button
             type="button"
+            disabled={!gamingPostCard.groupCallKey}
             onClick={onSend}
           >
             Send

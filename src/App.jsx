@@ -713,6 +713,10 @@ export default function App() {
 
   const createGroupCallRef = useRef(createGroupCall);
   createGroupCallRef.current = createGroupCall;
+  const createCallStable = useCallback(
+    ({ title, password = "" }) => createGroupCallRef.current?.({ title, password }),
+    []
+  );
   const createAndJoinCallStable = useCallback(
     async ({ title, password }) => {
       const callKey = await createGroupCallRef.current?.({ title, password });
@@ -3945,7 +3949,9 @@ export default function App() {
     setGamingPostCard({
       type: "game_session_card",
       title: "Bloxd.io Session",
-      googleMeetLink: "",
+      groupCallKey: "",
+      groupCallTitle: "",
+      groupCallIsProtected: false,
       note: "Grab your snacks. We're launching the custom lobby code directly inside the Meet chat as soon as everyone drops in. Don't be late! 🚀",
       tableData: {
         headers: ["Details", "Information"],
@@ -4282,7 +4288,7 @@ export default function App() {
                     handlePollVote={handlePollVote}
                     handleToggleReaction={handleToggleReaction}
                     handleTogglePin={handleTogglePin}
-                    joinGroupCall={joinSessionGroupCallStable}
+                    joinGroupCall={joinGroupCallStable}
                     onJumpToMessage={jumpToReply}
                     onPreviewFile={setFilePreview}
                     dmPartnerName={dmPartnerName}
@@ -4514,6 +4520,9 @@ export default function App() {
         setShowGamingPost={setShowGamingPost}
         gamingPostCard={gamingPostCard}
         setGamingPostCard={setGamingPostCard}
+        calls={activeCalls}
+        sessionUserId={sessionUserId}
+        onCreateCall={createCallStable}
         onSend={async () => {
           await addMessageWithOptimisticState({
             ...gamingPostCard,
