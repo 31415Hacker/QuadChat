@@ -132,7 +132,7 @@ service cloud.firestore {
           "text", "userId", "createdAt", "adminCommand", "command",
           "commandTarget", "notificationText", "targetUserId", "replyTo",
           "attachments", "isFile", "fileName", "fileType", "duration", "type",
-          "title", "googleMeetLink", "note", "tableData", "name", "pollQuestion", "pollOptions", "pollMaxChoices", "pollAllowCustom", "pollVotes", "pollCustomVotes"
+          "title", "googleMeetLink", "note", "tableData", "name", "groupCallKey", "groupCallTitle", "groupCallIsProtected", "pollQuestion", "pollOptions", "pollMaxChoices", "pollAllowCustom", "pollVotes", "pollCustomVotes"
         ])
         && (!request.resource.data.keys().hasAny(["adminCommand", "command", "commandTarget", "notificationText", "targetUserId"]) || isAdmin() || isDeveloper())
         && (!("text" in request.resource.data) || request.resource.data.text is string)
@@ -147,6 +147,9 @@ service cloud.firestore {
         && (!("pollOptions" in request.resource.data) || (request.resource.data.pollOptions is list && request.resource.data.pollOptions.size() >= 2 && request.resource.data.pollOptions.size() <= 20))
         && (!("note" in request.resource.data) || request.resource.data.note is string)
         && (!("googleMeetLink" in request.resource.data) || request.resource.data.googleMeetLink is string)
+        && (!("groupCallKey" in request.resource.data) || request.resource.data.groupCallKey is string)
+        && (!("groupCallTitle" in request.resource.data) || request.resource.data.groupCallTitle is string)
+        && (!("groupCallIsProtected" in request.resource.data) || request.resource.data.groupCallIsProtected is bool)
         && (channel != "updates" || isDeveloper())
         && (!isDmChannel(channel) || isDmParticipant(channel));
 
