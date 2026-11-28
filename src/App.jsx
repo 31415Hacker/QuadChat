@@ -1615,27 +1615,47 @@ export default function App() {
   }, [user, activeChannel, channelReloadKey]);
 
   useEffect(() => {
-    if (!user || !activeChannel || !isDmChannelId(activeChannel)) {
+    if (!user || !activeChannel || !sessionUserId) {
       setTypingUsers({});
       return;
     }
 
-    const typingRef = doc(db, "dms", activeChannel, "typing", sessionUserId);
-    const collectionRef = collection(db, "dms", activeChannel, "typing");
+    if (isDmChannelId(activeChannel)) {
+      const typingRef = doc(db, "dms", activeChannel, "typing", sessionUserId);
+      const collectionRef = collection(db, "dms", activeChannel, "typing");
 
-    const unsub = onSnapshot(collectionRef, (snap) => {
+      const unsub = onSnapshot(collectionRef, (snap) => {
+        const others = {};
+        snap.docs.forEach((d) => {
+          if (d.id !== sessionUserId && d.data()?.name) {
+            others[d.id] = d.data().name;
+          }
+        });
+        setTypingUsers(others);
+      });
+
+      return () => {
+        unsub();
+        deleteDoc(typingRef).catch(() => {});
+        setTypingUsers({});
+      };
+    }
+
+    const typingRef = rtdbRef(rtdb, `typing/${activeChannel}`);
+    const unsubscribe = onValue(typingRef, (snapshot) => {
       const others = {};
-      snap.docs.forEach((d) => {
-        if (d.id !== sessionUserId && d.data()?.name) {
-          others[d.id] = d.data().name;
+      snapshot.forEach((child) => {
+        const status = child.val();
+        if (child.key !== sessionUserId && status?.isTyping === true && status?.name) {
+          others[child.key] = status.name;
         }
       });
       setTypingUsers(others);
     });
 
     return () => {
-      unsub();
-      deleteDoc(typingRef).catch(() => {});
+      unsubscribe();
+      remove(rtdbRef(rtdb, `typing/${activeChannel}/${sessionUserId}`)).catch(() => {});
       setTypingUsers({});
     };
   }, [user, activeChannel, sessionUserId]);
